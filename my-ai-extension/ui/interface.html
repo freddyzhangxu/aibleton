@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIbleton</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    * { margin: 0; }
+    input, button, textarea { font: inherit; }
+
+    :root {
+      --c-bg: hsl(0, 0%, 21%);
+      --c-panel: hsl(0, 0%, 16%);
+      --c-input-bg: hsl(0, 0%, 12%);
+      --c-text: hsl(0, 0%, 78%);
+      --c-text-dim: hsl(0, 0%, 45%);
+      --c-border: hsl(0, 0%, 7%);
+      --c-accent: hsl(31, 100%, 67%);
+    }
+
+    html, body { height: 100%; }
+    body {
+      background: var(--c-bg);
+      color: var(--c-text);
+      font-family: "AbletonSansSmall", "PingFang SC", sans-serif;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      padding: 8px 12px;
+      background: var(--c-panel);
+      border-bottom: 1px solid var(--c-border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    header .row { display: flex; gap: 6px; align-items: center; }
+    header .title { font-weight: 700; color: var(--c-accent); margin-right: auto; }
+
+    /* macOS traffic lights */
+    .lights { display: flex; gap: 8px; padding: 0 2px; }
+    .light {
+      width: 12px; height: 12px; border-radius: 50%;
+      border: 1px solid rgba(0,0,0,0.25);
+      cursor: pointer; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; line-height: 1; color: rgba(0,0,0,0.55);
+    }
+    .light span { opacity: 0; transition: opacity 0.1s; pointer-events: none; }
+    .lights:hover .light:not(.disabled) span { opacity: 1; }
+    .light.close { background: #FF5F57; }
+    .light.close:active { background: #d94b44; }
+    .light.min { background: #FEBC2E; }
+    .light.min:active { background: #d89e24; }
+    .light.max { background: #28C840; }
+    .light.disabled {
+      background: hsl(0, 0%, 30%);
+      cursor: not-allowed;
+    }
+
+    .hdr-btn {
+      background: none;
+      border: none;
+      color: var(--c-text-dim);
+      cursor: pointer;
+      font-size: 13px;
+      width: 26px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0;
+      border-radius: 5px;
+      transition: color 0.15s ease, background-color 0.15s ease;
+    }
+    .hdr-btn:hover {
+      color: var(--c-accent);
+      background: var(--c-input-bg);
+    }
+    .hdr-btn:active { transform: scale(0.92); }
+    .hdr-group { display: flex; gap: 1px; align-items: center; }
+    .hdr-group .hdr-btn { width: 22px; }
+
+    /* History dropdown */
+    header { position: relative; }
+    #historyPanel {
+      position: absolute;
+      top: 100%; right: 8px;
+      width: 260px;
+      max-height: 320px;
+      overflow-y: auto;
+      background: var(--c-panel);
+      border: 1px solid var(--c-border);
+      border-radius: 6px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+      z-index: 10;
+      padding: 4px;
+    }
+    #historyPanel.hidden { display: none; }
+    .session-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .session-row:hover { background: var(--c-input-bg); }
+    .session-row.current { outline: 1px solid var(--c-text-dim); }
+    .session-row .meta { flex: 1; min-width: 0; }
+    .session-row .name {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--c-text);
+    }
+    .session-row .time { font-size: 10px; color: var(--c-text-dim); }
+    .session-row .del {
+      background: none; border: none; color: var(--c-text-dim);
+      cursor: pointer; font-size: 12px; padding: 2px 4px;
+      visibility: hidden;
+    }
+    .session-row:hover .del { visibility: visible; }
+    .session-row .del:hover { color: #FF5F57; }
+    #historyPanel .empty { padding: 12px; text-align: center; color: var(--c-text-dim); }
+    header input {
+      flex: 1;
+      min-width: 0;
+      background: var(--c-input-bg);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      height: 22px;
+      padding: 0 6px;
+    }
+    header input::placeholder { color: var(--c-text-dim); }
+    #keyRow.hidden { display: none; }
+
+    #log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .msg {
+      max-width: 92%;
+      padding: 6px 10px;
+      border-radius: 8px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: var(--c-accent);
+      color: hsl(0, 0%, 10%);
+    }
+    .msg.ai { align-self: flex-start; background: var(--c-panel); border: 1px solid var(--c-border); }
+    .msg.error { align-self: stretch; background: hsl(0, 60%, 25%); color: #fff; }
+    .msg.thinking { align-self: flex-start; color: var(--c-text-dim); font-style: italic; }
+    .action {
+      align-self: flex-start;
+      font-size: 11px;
+      color: var(--c-text-dim);
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-border);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-family: ui-monospace, monospace;
+      max-width: 92%;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    footer {
+      display: flex;
+      gap: 6px;
+      padding: 8px 12px;
+      background: var(--c-panel);
+      border-top: 1px solid var(--c-border);
+    }
+    #input {
+      flex: 1;
+      background: var(--c-input-bg);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      resize: none;
+      height: 34px;
+    }
+    #input:focus { outline: 2px solid var(--c-text-dim); }
+    #send {
+      background: var(--c-accent);
+      color: hsl(0, 0%, 10%);
+      border: none;
+      border-radius: 17px;
+      padding: 0 18px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #send:disabled { opacity: 0.4; cursor: default; }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="row">
+      <div class="lights">
+        <button class="light close" id="btnClose" title="关闭"><span>×</span></button>
+        <button class="light min" id="btnMin" title="收起（对话记录会保留，随时重开）"><span>–</span></button>
+      </div>
+      <span class="title">🎛 AIbleton</span>
+      <span id="status" style="color:var(--c-text-dim);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">…</span>
+      <input id="model" placeholder="模型" style="max-width:130px" title="留空则跟随本机 Claude Code 设置">
+      <div class="hdr-group">
+        <button id="newChat" class="hdr-btn" title="新建对话">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M12 8v6M9 11h6"/></svg>
+        </button>
+        <button id="showHistory" class="hdr-btn" title="历史对话">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+        </button>
+        <button id="toggleAdvanced" class="hdr-btn" style="font-size:11px;width:auto;padding:0 4px">高级</button>
+      </div>
+    </div>
+    <div class="row hidden" id="keyRow">
+      <input id="apiKey" type="password" placeholder="API Key（可选，覆盖本机配置）">
+      <input id="baseUrl" placeholder="API 地址（可选，覆盖本机配置）">
+    </div>
+    <div id="historyPanel" class="hidden"></div>
+  </header>
+
+  <div id="log">
+    <div class="msg ai">你好！我是 Live 里的 AI 助手。
+可以直接问我制作问题，也可以让我操作当前 Set，例如：
+· 「把速度改成 128」
+· 「新建一条 MIDI 轨道叫 Bass，加个 Operator」
+· 「现在有哪些轨道？把第 2 条静音」</div>
+  </div>
+
+  <footer>
+    <textarea id="input" placeholder="输入消息，Enter 发送（Shift+Enter 换行）"></textarea>
+    <button id="send">发送</button>
+  </footer>
+
+  <script>
+    const log = document.getElementById('log');
+    const input = document.getElementById('input');
+    const sendBtn = document.getElementById('send');
+    const apiKeyInput = document.getElementById('apiKey');
+    const baseUrlInput = document.getElementById('baseUrl');
+    const modelInput = document.getElementById('model');
+
+    // Settings persist across dialog openings (same webview origin = same localStorage)
+    apiKeyInput.value = localStorage.getItem('ai.apiKey') || '';
+    baseUrlInput.value = localStorage.getItem('ai.baseUrl') || '';
+    modelInput.value = localStorage.getItem('ai.model') || '';
+    apiKeyInput.addEventListener('change', () => localStorage.setItem('ai.apiKey', apiKeyInput.value));
+    baseUrlInput.addEventListener('change', () => localStorage.setItem('ai.baseUrl', baseUrlInput.value));
+    modelInput.addEventListener('change', () => localStorage.setItem('ai.model', modelInput.value));
+    document.getElementById('toggleAdvanced').addEventListener('click', () =>
+      document.getElementById('keyRow').classList.toggle('hidden'));
+
+    // Report which config the extension resolved (Claude Code local settings by default)
+    fetch('/api/health').then(r => r.json()).then(h => {
+      const status = document.getElementById('status');
+      if (h.hasAuth) {
+        status.textContent = '已加载本机 Claude Code 配置';
+        status.title = h.baseUrl;
+        if (!modelInput.value) modelInput.placeholder = h.model || '模型';
+      } else {
+        status.textContent = '未找到本机配置，请在「高级」里填 API Key';
+        document.getElementById('keyRow').classList.remove('hidden');
+      }
+    }).catch(() => {});
+
+    // Conversation history lives on the extension server (persisted to disk),
+    // so it survives closing/reopening this window or using a browser instead.
+    function addMsg(cls, text) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + cls;
+      div.textContent = text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+      return div;
+    }
+
+    function addAction(tool, input, result) {
+      const div = document.createElement('div');
+      div.className = 'action';
+      div.textContent = '⚙ ' + tool + ' ' + JSON.stringify(input) + ' → ' + JSON.stringify(result);
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Traffic-light buttons: post close_and_send to the Live host to dismiss the dialog.
+    // Works only inside Live's webview; in a regular browser the buttons just hide.
+    function closeDialog() {
+      const msg = { method: 'close_and_send', params: [JSON.stringify({ closed: true })] };
+      if (window.webkit?.messageHandlers?.live) {
+        window.webkit.messageHandlers.live.postMessage(msg);
+      } else if (window.chrome?.webview) {
+        window.chrome.webview.postMessage(msg);
+      }
+    }
+    const inLive = !!(window.webkit?.messageHandlers?.live || window.chrome?.webview);
+    if (!inLive) document.querySelector('.lights').style.display = 'none';
+    document.getElementById('btnClose').addEventListener('click', closeDialog);
+    // No real minimize for modal windows: history is server-side now, so
+    // "minimize" = close and reopen anytime without losing anything.
+    document.getElementById('btnMin').addEventListener('click', closeDialog);
+
+    // macOS window shortcuts: ⌘W close, ⌘M minimize (same as the traffic lights)
+    document.addEventListener('keydown', (e) => {
+      if (!inLive || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key === 'w' || key === 'm') {
+        e.preventDefault();
+        closeDialog();
+      }
+    });
+
+    const welcome = log.querySelector('.msg.ai');
+
+    function scrollToBottom() {
+      log.scrollTop = log.scrollHeight;
+      // The webview re-layouts after first paint (window sizing, fonts), which
+      // can reset the scroll position — scroll again to land on the latest message.
+      setTimeout(() => { log.scrollTop = log.scrollHeight; }, 60);
+      setTimeout(() => { log.scrollTop = log.scrollHeight; }, 200);
+    }
+
+    function renderMessages(messages) {
+      log.querySelectorAll('.msg, .action').forEach(el => el.remove());
+      if (!messages || !messages.length) {
+        log.appendChild(welcome);
+        return;
+      }
+      messages.forEach(m => {
+        if (m.role === 'assistant' && Array.isArray(m.actions)) {
+          m.actions.forEach(a => addAction(a.tool, a.input, a.result));
+        }
+        addMsg(m.role === 'user' ? 'user' : 'ai', m.content);
+      });
+      scrollToBottom();
+    }
+
+    fetch('/api/history').then(r => r.json()).then(h => renderMessages(h.messages)).catch(() => {});
+
+    // ----- background task tracking -----
+    // Chat tasks run on the extension server, independent of this window's
+    // lifetime: closing the dialog does not stop them. While a task runs we
+    // poll /api/status; any (re)opened window picks the task up.
+    let thinkingEl = null;
+
+    function setThinking(on) {
+      if (on && !thinkingEl) {
+        thinkingEl = addMsg('thinking', '思考中…（可关闭窗口，任务在后台继续）');
+      } else if (!on && thinkingEl) {
+        thinkingEl.remove();
+        thinkingEl = null;
+      }
+    }
+
+    async function pollStatus() {
+      const s = await fetch('/api/status').then(r => r.json()).catch(() => null);
+      if (!s) return;
+      if (s.busy) {
+        setThinking(true);
+        setTimeout(pollStatus, 900);
+        return;
+      }
+      setThinking(false);
+      sendBtn.disabled = false;
+      const h = await fetch('/api/history').then(r => r.json()).catch(() => null);
+      if (h) renderMessages(h.messages);
+      if (s.error) addMsg('error', '出错：' + s.error);
+    }
+
+    // Pick up a task that is still running from before this window opened.
+    fetch('/api/status').then(r => r.json()).then(s => {
+      if (s && s.busy) {
+        sendBtn.disabled = true;
+        setThinking(true);
+        setTimeout(pollStatus, 700);
+      }
+    }).catch(() => {});
+
+    // ----- new chat -----
+    document.getElementById('newChat').addEventListener('click', async () => {
+      await fetch('/api/new', { method: 'POST' }).catch(() => {});
+      renderMessages([]);
+      historyPanel.classList.add('hidden');
+    });
+
+    // ----- history panel -----
+    const historyPanel = document.getElementById('historyPanel');
+
+    function fmtTime(ts) {
+      return new Date(ts).toLocaleString('zh-CN', {
+        month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+    }
+
+    async function loadSessions() {
+      const h = await fetch('/api/sessions').then(r => r.json()).catch(() => null);
+      historyPanel.innerHTML = '';
+      if (!h || !h.sessions || !h.sessions.length) {
+        historyPanel.innerHTML = '<div class="empty">暂无历史对话</div>';
+        return;
+      }
+      h.sessions.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'session-row' + (s.id === h.currentId ? ' current' : '');
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = s.title || '新对话';
+        const time = document.createElement('div');
+        time.className = 'time';
+        time.textContent = fmtTime(s.updatedAt) + ' · ' + s.messageCount + ' 条';
+        meta.appendChild(name);
+        meta.appendChild(time);
+        const del = document.createElement('button');
+        del.className = 'del';
+        del.textContent = '✕';
+        del.title = '删除此对话';
+        del.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const r = await fetch('/api/delete', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: s.id }),
+          }).then(r => r.json()).catch(() => null);
+          if (r && s.id === h.currentId) renderMessages(r.messages);
+          loadSessions();
+        });
+        row.appendChild(meta);
+        row.appendChild(del);
+        row.addEventListener('click', async () => {
+          const r = await fetch('/api/switch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: s.id }),
+          }).then(r => r.json()).catch(() => null);
+          if (r) renderMessages(r.messages);
+          historyPanel.classList.add('hidden');
+        });
+        historyPanel.appendChild(row);
+      });
+    }
+
+    document.getElementById('showHistory').addEventListener('click', (e) => {
+      e.stopPropagation();
+      historyPanel.classList.toggle('hidden');
+      if (!historyPanel.classList.contains('hidden')) loadSessions();
+    });
+    document.addEventListener('click', (e) => {
+      if (!historyPanel.contains(e.target)) historyPanel.classList.add('hidden');
+    });
+
+    async function send() {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      if (welcome.parentNode) welcome.remove();
+      addMsg('user', text);
+
+      sendBtn.disabled = true;
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            apiKey: apiKeyInput.value || undefined,
+            baseUrl: baseUrlInput.value || undefined,
+            model: modelInput.value || undefined,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '请求失败');
+        // Task accepted (202) — it runs server-side even if this window closes.
+        setThinking(true);
+        setTimeout(pollStatus, 700);
+      } catch (err) {
+        addMsg('error', '出错：' + err.message);
+        sendBtn.disabled = false;
+      } finally {
+        input.focus();
+      }
+    }
+
+    sendBtn.addEventListener('click', send);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+    input.focus();
+  </script>
+</body>
+
+</html>
