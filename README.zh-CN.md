@@ -31,6 +31,12 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 | **[AIbleton/](AIbleton/)** | Live 12 扩展本体：聊天界面 + 本地助手服务，内置约 20 个读写 Live Set 的工具 |
 | **[AIbletonBar/](AIbletonBar/)** | 原生 macOS 悬浮侧边栏，把同一个聊天界面挂在 Live 旁边，IDE 式体验，**⌥⌘A** 呼出 |
 
+## 截图
+
+| Live 内置 AI 助手对话框 | AIbletonBar 悬浮侧边栏 |
+|:---:|:---:|
+| ![Ableton Live 中的 AIbleton 对话框](docs/screenshots/aibleton-dialog.png) | ![停靠在 Ableton Live 旁的 AIbletonBar 侧边栏](docs/screenshots/aibletonbar-sidebar.png) |
+
 ## 功能
 
 - **在 Live 里聊天** —— 右键任意轨道 / 场景 / Clip → `打开…`，在模态对话框中与助手对话；

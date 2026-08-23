@@ -33,6 +33,12 @@ The project has two parts:
 | **[AIbleton/](AIbleton/)** | The Live 12 extension: chat UI + a local assistant server with ~20 tools that read and control the Live Set |
 | **[AIbletonBar/](AIbletonBar/)** | A native macOS floating sidebar that hosts the same chat UI next to Live — IDE-style, toggled with **⌥⌘A** |
 
+## Screenshots
+
+| AI assistant dialog inside Live | AIbletonBar floating sidebar |
+|:---:|:---:|
+| ![AIbleton chat dialog inside Ableton Live](docs/screenshots/aibleton-dialog.png) | ![AIbletonBar sidebar docked next to Ableton Live](docs/screenshots/aibletonbar-sidebar.png) |
+
 ## Features
 
 - **Chat inside Live** — right-click any track / scene / clip → `打开…` opens the assistant
