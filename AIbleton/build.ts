@@ -15,4 +15,6 @@ await esbuild.build({
   minify: production,
   sourcemap: !production,
   loader: { ".html": "text" },
+  // Stamp each build so AIbletonBar can detect a reload and refresh its webview.
+  define: { __BUILD_ID__: JSON.stringify(Date.now().toString(36)) },
 });

@@ -8,7 +8,7 @@
             "type": "editor-browser",
             "request": "launch",
             "name": "Open interface.html",
-            "url": "file:///Users/freddy/VIBE/ableton/my-ai-extension/ui/interface.html"
+            "url": "file:///Users/freddy/VIBE/AIbleton/AIbleton/ui/interface.html"
         }
     ]
 }

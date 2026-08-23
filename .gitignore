@@ -2,3 +2,12 @@
 node_modules/
 dist/
 .env
+
+# Ableton beta SDK（12.4.5 正式版发布前不可公开）
+extensions-sdk-*/
+
+# 调试日志
+.playwright-mcp/
+
+# AIbletonBar 构建产物
+*.app

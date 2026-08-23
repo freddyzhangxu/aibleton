@@ -866,6 +866,16 @@ interface HistoryMessage {
 let busy = false;
 let lastError: string | null = null;
 
+// ---------- AIbletonBar (native sidebar) window commands ----------
+// The modal dialog inside Live can't reach the companion app directly, so its
+// "minimize" button queues a command here; AIbletonBar polls and applies it.
+let panelCommand: { mode: "bar" | "show"; at: number } | null = null;
+
+// Stamped by esbuild at bundle time (see build.ts); lets AIbletonBar notice
+// when the extension has been rebuilt + reloaded and refresh its webview.
+declare const __BUILD_ID__: string | undefined;
+const BUILD_ID = typeof __BUILD_ID__ === "string" ? __BUILD_ID__ : "dev";
+
 /** Append a line to ai-debug.log next to chats.json — for diagnosing background tasks. */
 function debugLog(context: Ctx, line: string) {
   try {
@@ -891,7 +901,7 @@ let currentId: string | null = null;
 let storeFileOverride: string | null = null;
 
 function fallbackStorePath(): string {
-  return path.join(os.homedir(), "Library", "Application Support", "my-ai-extension", "chats.json");
+  return path.join(os.homedir(), "Library", "Application Support", "AIbleton", "chats.json");
 }
 
 function storeFilePath(context: Ctx): string {
@@ -1182,6 +1192,22 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     }
     if (req.method === "GET" && req.url === "/api/status") {
       send(200, JSON.stringify({ busy, error: lastError }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/panel") {
+      readBody((parsed) => {
+        const mode = parsed.mode === "bar" || parsed.mode === "show" ? parsed.mode : null;
+        panelCommand = mode ? { mode, at: Date.now() } : null;
+        send(mode ? 200 : 400, JSON.stringify({ ok: Boolean(mode) }));
+      });
+      return;
+    }
+    if (req.method === "GET" && req.url === "/api/panel") {
+      // Commands expire quickly — a stale "bar" from hours ago shouldn't
+      // pop the mini bar the next time AIbletonBar launches.
+      const fresh = panelCommand && Date.now() - panelCommand.at < 60_000 ? panelCommand : null;
+      panelCommand = null;
+      send(200, JSON.stringify({ mode: fresh?.mode ?? null, build: BUILD_ID }));
       return;
     }
     if (req.method === "POST" && req.url === "/api/chat") {

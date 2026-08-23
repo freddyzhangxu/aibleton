@@ -42,6 +42,15 @@
     header .row { display: flex; gap: 6px; align-items: center; }
     header .title { font-weight: 700; color: var(--c-accent); margin-right: auto; }
 
+    /* Inside AIbletonBar (native window): the first header row sits beside
+       macOS's real traffic-light buttons. Measured on macOS 26: lights end
+       at x=46, center 16px from the top — so a 32px-tall header band puts
+       them dead center. header's own 12px left padding + 43px here puts the
+       title at x=55, i.e. a 9px gap after the yellow button (same as the
+       red→yellow gap). */
+    body.native-bar header { padding-top: 4px; padding-bottom: 4px; }
+    body.native-bar header .row:first-child { padding-left: 43px; }
+
     /* macOS traffic lights */
     .lights { display: flex; gap: 8px; padding: 0 2px; }
     .light {
@@ -207,11 +216,10 @@
     <div class="row">
       <div class="lights">
         <button class="light close" id="btnClose" title="关闭"><span>×</span></button>
-        <button class="light min" id="btnMin" title="收起（对话记录会保留，随时重开）"><span>–</span></button>
+        <button class="light min" id="btnMin" title="最小化为右下角小条（需 AIbletonBar 运行中）"><span>–</span></button>
       </div>
       <span class="title">🎛 AIbleton</span>
       <span id="status" style="color:var(--c-text-dim);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">…</span>
-      <input id="model" placeholder="模型" style="max-width:130px" title="留空则跟随本机 Claude Code 设置">
       <div class="hdr-group">
         <button id="newChat" class="hdr-btn" title="新建对话">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M12 8v6M9 11h6"/></svg>
@@ -223,6 +231,7 @@
       </div>
     </div>
     <div class="row hidden" id="keyRow">
+      <input id="model" placeholder="模型（可选，留空跟随本机配置）" style="max-width:150px">
       <input id="apiKey" type="password" placeholder="API Key（可选，覆盖本机配置）">
       <input id="baseUrl" placeholder="API 地址（可选，覆盖本机配置）">
     </div>
@@ -304,10 +313,23 @@
     }
     const inLive = !!(window.webkit?.messageHandlers?.live || window.chrome?.webview);
     if (!inLive) document.querySelector('.lights').style.display = 'none';
+    // AIbletonBar (native macOS sidebar) identifies itself via its user agent;
+    // its real traffic-light buttons overlay the header's top-left corner.
+    if (navigator.userAgent.includes('AIbletonBar')) document.body.classList.add('native-bar');
     document.getElementById('btnClose').addEventListener('click', closeDialog);
-    // No real minimize for modal windows: history is server-side now, so
-    // "minimize" = close and reopen anytime without losing anything.
-    document.getElementById('btnMin').addEventListener('click', closeDialog);
+    // Minimize: close the modal and hand off to AIbletonBar's mini bar at the
+    // screen's bottom-right corner (queued via the extension server; the
+    // companion app polls it). If AIbletonBar isn't running this just closes.
+    document.getElementById('btnMin').addEventListener('click', async () => {
+      try {
+        await fetch('/api/panel', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'bar' }),
+        });
+      } catch {}
+      closeDialog();
+    });
 
     // macOS window shortcuts: ⌘W close, ⌘M minimize (same as the traffic lights)
     document.addEventListener('keydown', (e) => {
