@@ -81,11 +81,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         container.addSubview(web)
 
         // Bar-mode overlay: click anywhere right of the traffic lights to expand.
-        let bar = NSButton(title: "🎛  AIbleton", target: self, action: #selector(restorePanel))
+        let bar = NSButton(title: "AIbleton", target: self, action: #selector(restorePanel))
         bar.isBordered = false
         bar.font = .systemFont(ofSize: 12, weight: .medium)
         bar.contentTintColor = .secondaryLabelColor
         bar.alignment = .left
+        if let logo = Self.loadLogo() {
+            logo.size = NSSize(width: 24, height: 12)
+            bar.image = logo
+            bar.imagePosition = .imageLeft
+        }
         bar.frame = NSRect(x: 78, y: 0, width: BAR_WIDTH - 78, height: BAR_HEIGHT)
         bar.autoresizingMask = [.width]
         bar.isHidden = true
@@ -109,10 +114,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     // MARK: - Menu bar
 
+    /// Brand logo from the app bundle (Resources/AIbleton.png, 2:1 stripes).
+    private static func loadLogo() -> NSImage? {
+        guard let url = Bundle.main.url(forResource: "AIbleton", withExtension: "png") else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
     private func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform.badge.mic", accessibilityDescription: "AIbleton")
+            if let logo = Self.loadLogo() {
+                logo.size = NSSize(width: 26, height: 13)
+                logo.isTemplate = true // silhouette; adapts to light/dark menu bar
+                button.image = logo
+            } else {
+                button.image = NSImage(systemSymbolName: "waveform.badge.mic", accessibilityDescription: "AIbleton")
+            }
         }
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "显示 / 隐藏　⌥⌘A", action: #selector(toggle), keyEquivalent: ""))
@@ -288,7 +305,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         <html><body style="margin:0;height:100vh;display:flex;flex-direction:column;gap:12px;\
         align-items:center;justify-content:center;background:#1c1c1e;color:#98989d;\
         font:13px -apple-system;text-align:center;padding:24px">
-        <div style="font-size:32px">🎛</div>
+        <svg width='76' height='38' viewBox='42.666667 298.666667 938.666666 469.333333'>\
+        <defs><mask id='m' maskUnits='userSpaceOnUse' x='42.666667' y='298.666667' width='426.666666' height='469.333333'>\
+        <rect x='42.666667' y='298.666667' width='426.666666' height='469.333333' fill='#fff'/>\
+        <path fill='#000' fill-rule='evenodd' d='M61 768 199.72 298.67H308.74L451 768H358.61L327.27 659.01H183.1L152.84 768Z\
+        M203.81 583.73H305.74L293.47 541.52Q283.66 505.61 273.85 463.72Q264.04 421.83 253.41 373.95\
+        Q243.33 422.46 234.06 464.35Q224.79 506.24 215.53 541.52Z M203.81 583.73L305.74 583.73L327.27 659.01L183.1 659.01Z'/>\
+        <path fill='#000' d='M241.41 363.95h24v21.05h-24z'/></mask></defs>\
+        <g mask='url(#m)'><path fill='#797F7E' d='M42.67 298.67h426.67v85.33H42.67z M42.67 426.67h426.67v85.33H42.67z \
+        M42.67 554.67h426.67v85.33H42.67z M42.67 682.67h426.67v85.33H42.67z'/></g>\
+        <path fill='#797F7E' d='M512 298.67h85.33v469.33H512z M640 298.67h85.33v469.33H640z M768 298.67h85.33v469.33H768z M896 298.67h85.33v469.33H896z'/>\
+        </svg>
         <div><b style="color:#fff">连不上 AIbleton 服务</b></div>
         <div>请在 Ableton Live 12 中加载 AIbleton 扩展<br>（localhost:17666），连上后会自动恢复</div>
         </body></html>

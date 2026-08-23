@@ -40,7 +40,8 @@
       gap: 6px;
     }
     header .row { display: flex; gap: 6px; align-items: center; }
-    header .title { font-weight: 700; color: var(--c-accent); margin-right: auto; }
+    header .title { font-weight: 700; color: var(--c-accent); margin-right: auto; display: flex; align-items: center; gap: 6px; }
+    header .title .logo { height: 13px; width: auto; display: block; }
 
     /* Inside AIbletonBar (native window): the first header row sits beside
        macOS's real traffic-light buttons. Measured on macOS 26: lights end
@@ -218,7 +219,7 @@
         <button class="light close" id="btnClose" title="关闭"><span>×</span></button>
         <button class="light min" id="btnMin" title="最小化为右下角小条（需 AIbletonBar 运行中）"><span>–</span></button>
       </div>
-      <span class="title">🎛 AIbleton</span>
+      <span class="title"><svg class="logo" viewBox="42.666667 298.666667 938.666666 469.333333" xmlns="http://www.w3.org/2000/svg" aria-label="AIbleton"><defs><mask id="logoMaskA" maskUnits="userSpaceOnUse" x="42.666667" y="298.666667" width="426.666666" height="469.333333"><rect x="42.666667" y="298.666667" width="426.666666" height="469.333333" fill="#fff"/><path fill="#000" fill-rule="evenodd" d="M61.0 768.0 199.72117400419287 298.666667H308.73584905660374L450.99999999999994 768.0H358.61006289308176L327.2683438155136 659.01387032349H183.0964360587002L152.84486373165618 768.0ZM203.80922431865827 583.7315437550335H305.73794549266245L293.47379454926624 541.523042666443Q283.6624737945492 505.61431785973156 273.85115303983224 463.72080558523487Q264.03983228511527 421.82729331073824 253.41090146750523 373.9489935684564Q243.32704402515722 422.4572709389262 234.06079664570228 464.3507832134228Q224.79454926624737 506.2442954879195 215.52830188679243 541.523042666443Z M203.8092 583.7315 L305.7379 583.7315 L327.2683 659.0139 L183.0964 659.0139Z"/><path fill="#000" d="M241.4109 363.9490h24v21.0510h-24z"/></mask></defs><g mask="url(#logoMaskA)"><path fill="#797F7E" d="M42.666667 298.666667h426.666666v85.333333H42.666667z M42.666667 426.666667h426.666666v85.333333H42.666667z M42.666667 554.666667h426.666666v85.333333H42.666667z M42.666667 682.666667h426.666666v85.333333H42.666667z"/></g><path fill="#797F7E" d="M512 298.666667h85.333333v469.333333H512z M640 298.666667h85.333333v469.333333H640z M768 298.666667h85.333333v469.333333H768z M896 298.666667h85.333333v469.333333H896z"/></svg>AIbleton</span>
       <span id="status" style="color:var(--c-text-dim);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">…</span>
       <div class="hdr-group">
         <button id="newChat" class="hdr-btn" title="新建对话">

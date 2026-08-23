@@ -13,6 +13,11 @@ swiftc -O -swift-version 5 main.swift \
 
 cp Info.plist "$APP/Contents/Info.plist"
 
+# Brand assets (logo used by the collapsed bar button and the menu-bar icon)
+mkdir -p "$APP/Contents/Resources"
+cp Resources/AIbleton.png "$APP/Contents/Resources/"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+
 # Ad-hoc sign so Gatekeeper lets it run on Apple Silicon.
 codesign --force --sign - "$APP"
 

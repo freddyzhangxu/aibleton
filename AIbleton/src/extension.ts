@@ -19,7 +19,7 @@ export function activate(activation: ActivationContext) {
 
   context.commands.registerCommand("ai-assistant.open", () => {
     serverReady
-      .then((url) => context.ui.showModalDialog(url, 560, 680))
+      .then((url) => context.ui.showModalDialog(url, 520, 600))
       .catch(() => {});
   });
 
