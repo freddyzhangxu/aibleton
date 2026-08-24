@@ -13,7 +13,25 @@
   <a href="README.md">English</a> · <b>中文</b>
 </p>
 
+<p align="center">
+  <a href="https://github.com/freddyzhangxu/aibleton/releases"><img src="https://img.shields.io/github/v/release/freddyzhangxu/aibleton?include_prereleases&label=%E7%89%88%E6%9C%AC" alt="版本"></a>
+  <a href="https://github.com/freddyzhangxu/aibleton/releases"><img src="https://img.shields.io/github/downloads/freddyzhangxu/aibleton/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F" alt="下载量"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
+</p>
+
 ---
+
+## 下载
+
+**当前版本：v0.8.0-beta**（预发布）—— 前往
+[**Releases 页面**](https://github.com/freddyzhangxu/aibleton/releases) 下载：
+
+| 文件 | 说明 |
+|---|---|
+| [AIbleton-0.8.0-beta.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.0-beta/AIbleton-0.8.0-beta.ablx) | Live 扩展本体 —— **必装**。拖进 Live 的 **设置 → Extensions** 页面即可。 |
+| [AIbletonBar-0.8.0-beta-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.0-beta/AIbletonBar-0.8.0-beta-macOS.zip) | 可选的 macOS 悬浮侧边栏。 |
+
+用户无需安装 Node.js —— 扩展运行在 Live 自带的 Extension Host 中。
 
 ## 简介
 

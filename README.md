@@ -14,7 +14,25 @@
   <b>English</b> · <a href="README.zh-CN.md">中文</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/freddyzhangxu/aibleton/releases"><img src="https://img.shields.io/github/v/release/freddyzhangxu/aibleton?include_prereleases&label=version" alt="Version"></a>
+  <a href="https://github.com/freddyzhangxu/aibleton/releases"><img src="https://img.shields.io/github/downloads/freddyzhangxu/aibleton/total" alt="Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
+</p>
+
 ---
+
+## Download
+
+**Current version: v0.8.0-beta** (pre-release) — get it from the
+[**Releases page**](https://github.com/freddyzhangxu/aibleton/releases):
+
+| File | What it is |
+|---|---|
+| [AIbleton-0.8.0-beta.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.0-beta/AIbleton-0.8.0-beta.ablx) | The Live extension — **required**. Drop it onto Live's **Settings → Extensions** page. |
+| [AIbletonBar-0.8.0-beta-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.0-beta/AIbletonBar-0.8.0-beta-macOS.zip) | Optional macOS floating sidebar app. |
+
+No Node.js needed for end users — the extension runs inside Live's own Extension Host.
 
 ## Overview
 
