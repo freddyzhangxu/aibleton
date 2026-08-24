@@ -1,7 +1,17 @@
 import * as http from "node:http";
+import * as https from "node:https";
+import * as tls from "node:tls";
+import * as net from "node:net";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+// The Live extension sandbox does NOT expose Node's usual globals — URL and
+// Buffer must be imported explicitly (a bare `new URL()` crashes the process
+// with ReferenceError inside request handlers).
+import { URL } from "node:url";
+import { Buffer } from "node:buffer";
+import { describeBinaryAttachment } from "./fileparsers.js";
 import {
   AudioTrack,
   DrumChain,
@@ -91,19 +101,32 @@ const KIT_808 = [
 ];
 import chatInterface from "../ui/interface.html";
 
-// ---------- Local Claude Code config (~/.claude/settings.json) ----------
+// ---------- Local CLI configs (Claude Code / Codex / Gemini) ----------
+
+type Provider = "claude" | "codex" | "gemini";
+
+const PROVIDER_NAMES: Record<Provider, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  gemini: "Gemini",
+};
 
 interface LocalConfig {
   baseUrl?: string;
   authToken?: string;
   apiKey?: string;
   model?: string;
+  /** Codex ChatGPT-account mode: JWT for chatgpt.com/backend-api/codex. */
+  accountId?: string;
+  refreshToken?: string;
+  chatgpt?: boolean;
+  reasoningEffort?: string;
 }
 
-let cachedConfig: LocalConfig | null | undefined;
+const configCache: Partial<Record<Provider, LocalConfig | null>> = {};
 
 function loadClaudeCodeConfig(): LocalConfig | null {
-  if (cachedConfig !== undefined) return cachedConfig;
+  if ("claude" in configCache) return configCache.claude ?? null;
   try {
     const settingsPath = path.join(os.homedir(), ".claude", "settings.json");
     const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
@@ -111,16 +134,93 @@ function loadClaudeCodeConfig(): LocalConfig | null {
       model?: string;
     };
     const env = settings.env ?? {};
-    cachedConfig = {
+    configCache.claude = {
       baseUrl: env.ANTHROPIC_BASE_URL,
       authToken: env.ANTHROPIC_AUTH_TOKEN,
       apiKey: env.ANTHROPIC_API_KEY,
       model: env.ANTHROPIC_MODEL || settings.model,
     };
   } catch {
-    cachedConfig = null;
+    configCache.claude = null;
   }
-  return cachedConfig;
+  return configCache.claude ?? null;
+}
+
+/**
+ * Codex CLI: ~/.codex/auth.json holds either OPENAI_API_KEY (API-key mode) or
+ * ChatGPT OAuth tokens (subscription mode — access_token is a JWT for the
+ * chatgpt.com backend, refreshable via refresh_token). Model and reasoning
+ * effort come from ~/.codex/config.toml.
+ */
+function loadCodexConfig(): LocalConfig | null {
+  if ("codex" in configCache) return configCache.codex ?? null;
+  let apiKey: string | undefined;
+  let accessToken: string | undefined;
+  let accountId: string | undefined;
+  let refreshToken: string | undefined;
+  let model: string | undefined;
+  let reasoningEffort: string | undefined;
+  try {
+    const auth = JSON.parse(
+      fs.readFileSync(path.join(os.homedir(), ".codex", "auth.json"), "utf8"),
+    ) as {
+      OPENAI_API_KEY?: string | null;
+      tokens?: { access_token?: string; account_id?: string; refresh_token?: string };
+    };
+    if (typeof auth.OPENAI_API_KEY === "string" && auth.OPENAI_API_KEY) {
+      apiKey = auth.OPENAI_API_KEY;
+    }
+    accessToken = auth.tokens?.access_token || undefined;
+    accountId = auth.tokens?.account_id || undefined;
+    refreshToken = auth.tokens?.refresh_token || undefined;
+  } catch {
+    // No auth.json — fall through to env vars at resolve time.
+  }
+  try {
+    const toml = fs.readFileSync(path.join(os.homedir(), ".codex", "config.toml"), "utf8");
+    const m = /^model\s*=\s*"([^"]+)"/m.exec(toml);
+    if (m) model = m[1];
+    const effort = /^model_reasoning_effort\s*=\s*"([^"]+)"/m.exec(toml);
+    if (effort) reasoningEffort = effort[1];
+  } catch {
+    // No config.toml — the default model applies.
+  }
+  const hasAuth = Boolean(apiKey || accessToken || refreshToken);
+  configCache.codex = hasAuth || model
+    ? {
+        apiKey,
+        authToken: accessToken,
+        accountId,
+        refreshToken,
+        model,
+        reasoningEffort,
+        chatgpt: !apiKey && Boolean(accessToken || refreshToken),
+      }
+    : null;
+  return configCache.codex;
+}
+
+/** Gemini CLI: API key in ~/.gemini/.env (GEMINI_API_KEY=…), env vars win. */
+function loadGeminiConfig(): LocalConfig | null {
+  if ("gemini" in configCache) return configCache.gemini ?? null;
+  let apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || undefined;
+  if (!apiKey) {
+    try {
+      const envFile = fs.readFileSync(path.join(os.homedir(), ".gemini", ".env"), "utf8");
+      const m = /^(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*"?([^"\r\n]+)"?/m.exec(envFile);
+      if (m) apiKey = m[1].trim();
+    } catch {
+      // No .env file.
+    }
+  }
+  configCache.gemini = apiKey ? { apiKey } : null;
+  return configCache.gemini;
+}
+
+function loadLocalConfig(provider: Provider): LocalConfig | null {
+  if (provider === "codex") return loadCodexConfig();
+  if (provider === "gemini") return loadGeminiConfig();
+  return loadClaudeCodeConfig();
 }
 
 type Ctx = ExtensionContext<"1.0.0">;
@@ -412,6 +512,7 @@ Rules:
 - You CAN adjust device parameters (Operator, Reverb, Auto Filter, …) and track volume/pan — see the device-control section below.
 - You cannot delete anything, load third-party plugins, or do realtime audio/MIDI processing. Say so if asked.
 - After tools run, confirm what changed in one short sentence.
+- NEVER claim you changed the Live Set unless a tool actually performed the change in THIS turn. If you did not call a tool, nothing changed — do not pretend otherwise.
 
 Making music that actually produces sound:
 - A MIDI track without an instrument is SILENT, and a bare "Drum Rack" is EMPTY and silent too.
@@ -848,10 +949,90 @@ async function runTool(
 
 // ---------- Claude API with tool-use loop ----------
 
+/**
+ * A file the user attached in the UI: text content (text), base64 image
+ * (data), or a binary music file (kind + data) that gets parsed into a text
+ * summary before reaching the model.
+ */
+interface Attachment {
+  name: string;
+  mime: string;
+  text?: string;
+  data?: string;
+  /** "midi" | "als" — binary music files parsed by fileparsers.ts. */
+  kind?: string;
+}
+
 interface ChatRequest {
+  provider?: string;
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  language?: string;
+  /** Reasoning effort override: "low" | "medium" | "high" (empty = provider default). */
+  effort?: string;
+  /** false = ask the user before any Set-modifying tool call (default true = run freely). */
+  yolo?: boolean;
+  attachments?: Attachment[];
+}
+
+interface ResolvedConfig {
+  provider: Provider;
+  baseUrl: string;
+  authToken: string;
+  model: string;
+  fromLocal: boolean;
+  /** Codex ChatGPT-account mode. */
+  accountId?: string;
+  refreshToken?: string;
+  chatgpt?: boolean;
+  reasoningEffort?: string;
+  /** UI-selected effort, mapped per provider (claude: thinking budget; gemini: thinkingBudget). */
+  effort?: string;
+}
+
+/** UI language → reply language injected into the system prompt. */
+const LANG_NAMES: Record<string, string> = {
+  zh: "Chinese",
+  en: "English",
+  de: "German",
+  fr: "French",
+  ja: "Japanese",
+  es: "Spanish",
+  it: "Italian",
+};
+
+function systemPromptFor(language?: string): string {
+  const name = LANG_NAMES[language ?? ""] ?? "Chinese";
+  return (
+    SYSTEM_PROMPT +
+    `\n\nThe user's UI language is ${name} — use it as the default reply language unless they write in a different language.`
+  );
+}
+
+const NO_AUTH_HINT: Record<string, string> = {
+  zh: "未找到 {p} 认证信息：请在设置（齿轮图标）里填 API Key，或配置本机 CLI",
+  en: "No {p} credentials found: add an API Key in Settings (gear icon) or set up the local CLI",
+  de: "Keine {p}-Zugangsdaten gefunden: API-Schlüssel in den Einstellungen (Zahnrad) eintragen oder lokale CLI konfigurieren",
+  fr: "Aucun identifiant {p} : ajoutez une clé API dans les paramètres (icône engrenage) ou configurez la CLI locale",
+  ja: "{p} の認証情報がありません：設定（歯車アイコン）で API キーを入力するか、ローカル CLI を設定してください",
+  es: "Sin credenciales de {p}: añade una API Key en Ajustes (icono de engranaje) o configura la CLI local",
+  it: "Nessuna credenziale {p}: aggiungi una API Key nelle Impostazioni (icona ingranaggio) o configura la CLI locale",
+};
+
+/** Assistant note recorded when the user stops a task from the UI. */
+const STOP_NOTE: Record<string, string> = {
+  zh: "⏹ 已手动停止",
+  en: "⏹ Stopped manually",
+  de: "⏹ Manuell gestoppt",
+  fr: "⏹ Arrêté manuellement",
+  ja: "⏹ 手動で停止しました",
+  es: "⏹ Detenido manualmente",
+  it: "⏹ Interrotto manualmente",
+};
+
+function stopNote(language?: string): string {
+  return STOP_NOTE[language ?? ""] ?? STOP_NOTE.zh;
 }
 
 // ---------- Chat sessions (server-side, persisted) ----------
@@ -865,6 +1046,10 @@ interface HistoryMessage {
 /** Whether a chat task is currently running in the background. */
 let busy = false;
 let lastError: string | null = null;
+
+/** Set by /api/stop: the running task aborts its in-flight request and exits. */
+let stopRequested = false;
+let abortCtl: AbortController | null = null;
 
 // ---------- AIbletonBar (native sidebar) window commands ----------
 // The modal dialog inside Live can't reach the companion app directly, so its
@@ -996,27 +1181,315 @@ function saveStore(context: Ctx) {
   }
 }
 
-function resolveConfig(req: ChatRequest) {
-  const local = loadClaudeCodeConfig() ?? {};
-  const baseUrl = (
-    req.baseUrl || local.baseUrl || process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"
-  ).replace(/\/$/, "");
-  const authToken = req.apiKey || local.authToken || local.apiKey || process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || "";
-  const model = req.model || local.model || "claude-sonnet-5";
-  return { baseUrl, authToken, model, fromLocal: !req.apiKey && Boolean(local.authToken || local.apiKey) };
+function resolveConfig(req: ChatRequest): ResolvedConfig {
+  const provider: Provider =
+    req.provider === "codex" || req.provider === "gemini" ? req.provider : "claude";
+  const local = loadLocalConfig(provider) ?? {};
+  const fromLocal = !req.apiKey && Boolean(local.authToken || local.apiKey);
+
+  if (provider === "codex") {
+    // ChatGPT-account tokens only work against the chatgpt.com backend;
+    // plain API keys go to api.openai.com (or a user-supplied relay).
+    const chatgpt = !req.apiKey && !req.baseUrl && Boolean(local.chatgpt);
+    return {
+      provider,
+      baseUrl: (req.baseUrl || local.baseUrl || process.env.OPENAI_BASE_URL ||
+        (chatgpt ? "https://chatgpt.com/backend-api/codex" : "https://api.openai.com/v1")).replace(/\/$/, ""),
+      authToken: req.apiKey || local.apiKey || local.authToken || process.env.OPENAI_API_KEY || "",
+      model: req.model || local.model || "gpt-5-codex",
+      fromLocal,
+      accountId: chatgpt ? local.accountId : undefined,
+      refreshToken: chatgpt ? local.refreshToken : undefined,
+      chatgpt,
+      // UI effort selector wins over the CLI config file.
+      reasoningEffort: req.effort || local.reasoningEffort,
+      effort: req.effort,
+    };
+  }
+  if (provider === "gemini") {
+    return {
+      provider,
+      baseUrl: (req.baseUrl || local.baseUrl || "https://generativelanguage.googleapis.com").replace(/\/$/, ""),
+      authToken: req.apiKey || local.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "",
+      model: req.model || local.model || "gemini-2.5-pro",
+      fromLocal,
+      effort: req.effort,
+    };
+  }
+  return {
+    provider,
+    baseUrl: (req.baseUrl || local.baseUrl || process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com").replace(/\/$/, ""),
+    authToken: req.apiKey || local.authToken || local.apiKey || process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || "",
+    model: req.model || local.model || "claude-sonnet-5",
+    fromLocal,
+    effort: req.effort,
+  };
+}
+
+/** Shared tail of a completed chat: persist the assistant reply + tool actions. */
+function finishChat(
+  context: Ctx,
+  actions: { tool: string; input: unknown; result: unknown }[],
+  reply: string,
+) {
+  const session = currentSession();
+  session.messages.push({ role: "assistant", content: reply, actions });
+  session.updatedAt = Date.now();
+  saveStore(context);
+  return { reply, actions };
+}
+
+/** Cap a tool-result payload the same way for live calls and history replay. */
+function truncateResult(resultJson: string): string {
+  if (resultJson.length <= 6000) return resultJson;
+  return (
+    resultJson.slice(0, 6000) +
+    `…（结果过大已截断，共 ${resultJson.length} 字符。请用 filter 缩小查询范围）`
+  );
+}
+
+/** Tools that only read the Set — always allowed, even with YOLO off. */
+const READ_ONLY_TOOLS = new Set([
+  "get_song_overview",
+  "get_device_parameters",
+  "get_clip_notes",
+  "search_samples",
+]);
+
+/**
+ * A tool call waiting for the user's Allow/Deny click in the UI (YOLO off).
+ * The UI polls /api/status for it and answers via POST /api/confirm.
+ */
+let pendingConfirm: {
+  tool: string;
+  input: unknown;
+  resolve: (allow: boolean) => void;
+} | null = null;
+
+/** Ask the user before a Set-modifying tool call; false = denied or timed out. */
+function askConfirmation(tool: string, input: unknown): Promise<boolean> {
+  return new Promise((resolve) => {
+    // Safety net: a forgotten dialog must not wedge the background task forever.
+    const timer = setTimeout(() => {
+      pendingConfirm = null;
+      resolve(false);
+    }, 300_000);
+    pendingConfirm = {
+      tool,
+      input,
+      resolve: (allow) => {
+        clearTimeout(timer);
+        pendingConfirm = null;
+        resolve(allow);
+      },
+    };
+  });
+}
+
+/** Run one tool call and normalize the result for the provider + UI log. */
+async function callTool(
+  context: Ctx,
+  actions: { tool: string; input: unknown; result: unknown }[],
+  name: string,
+  input: Record<string, unknown>,
+  yolo: boolean,
+): Promise<string> {
+  if (!yolo && !READ_ONLY_TOOLS.has(name)) {
+    const allowed = await askConfirmation(name, input);
+    if (!allowed) {
+      const denied = { error: "用户拒绝了该操作 / user denied this action" };
+      actions.push({ tool: name, input, result: denied });
+      debugLog(context, `TOOL ${name} DENIED by user`);
+      return JSON.stringify(denied);
+    }
+  }
+  let result: unknown;
+  try {
+    result = await runTool(context, name, input);
+  } catch (err) {
+    result = { error: err instanceof Error ? err.message : String(err) };
+  }
+  actions.push({ tool: name, input, result });
+  const resultJson = JSON.stringify(result);
+  debugLog(context, `TOOL ${name} ${JSON.stringify(input)} -> ${resultJson.slice(0, 400)}`);
+  return truncateResult(resultJson);
+}
+
+/**
+ * Replay stored messages WITH their tool rounds reconstructed.
+ * Weaker models imitate history: if past assistant turns claim "done" with no
+ * visible tool calls, the model learns to pretend instead of calling tools.
+ * Re-inserting the tool-call/tool-result structure keeps it honest.
+ */
+function historyWithTools(
+  session: ChatSession,
+  format: {
+    userText: (text: string) => unknown;
+    assistantText: (text: string) => unknown;
+    /** Message items replaying one assistant turn's tool calls (id prefix given). */
+    toolRound: (acts: { tool: string; input: unknown; result: unknown }[], idPrefix: string) => unknown[];
+  },
+): unknown[] {
+  const out: unknown[] = [];
+  session.messages.forEach((m, mi) => {
+    if (m.role === "user") {
+      out.push(format.userText(m.content));
+      return;
+    }
+    const acts = m.actions ?? [];
+    if (acts.length) out.push(...format.toolRound(acts, `hist_${mi}_`));
+    out.push(format.assistantText(m.content));
+  });
+  return out;
+}
+
+/**
+ * Attached images ride only on the CURRENT user message (the last one after
+ * history replay). Older turns keep just their "[图片: name]" text marker —
+ * re-sending base64 on every round would bloat each request. The `apply`
+ * callback reshapes that last message into the provider's multimodal shape.
+ */
+function attachImages(
+  messages: unknown[],
+  req: ChatRequest,
+  apply: (last: Record<string, unknown>, images: Attachment[]) => void,
+) {
+  const images = (req.attachments ?? []).filter((a) => typeof a.data === "string" && a.data && !a.kind);
+  if (!images.length) return;
+  const last = messages[messages.length - 1] as (Record<string, unknown> & { role?: string }) | undefined;
+  if (!last || last.role !== "user") return;
+  apply(last, images);
+}
+
+/** Codex CLI's public OAuth client id (the same one codex-cli-rs uses). */
+const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+
+function jwtExp(token: string): number | null {
+  try {
+    const payload = token.split(".")[1];
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { exp?: number };
+    return typeof parsed.exp === "number" ? parsed.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Refresh an expired ChatGPT-account Codex token and persist it back to auth.json. */
+async function refreshCodexToken(cfg: ResolvedConfig): Promise<void> {
+  const fail = new Error("Codex 登录已过期，请运行 codex login 重新登录 / Codex login expired — run `codex login` again");
+  if (!cfg.refreshToken) throw fail;
+  const res = await rawPost(new URL("https://auth.openai.com/oauth/token"), {
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      client_id: CODEX_CLIENT_ID,
+      grant_type: "refresh_token",
+      refresh_token: cfg.refreshToken,
+    }),
+    proxy: detectProxy(),
+  }).catch(() => null);
+  const data =
+    res && res.status >= 200 && res.status < 300
+      ? (JSON.parse(await readAll(res.stream)) as { access_token?: string; refresh_token?: string; id_token?: string })
+      : null;
+  if (!data?.access_token) throw fail;
+  cfg.authToken = data.access_token;
+  if (data.refresh_token) cfg.refreshToken = data.refresh_token;
+  // Persist back, mirroring what codex CLI does (best effort).
+  try {
+    const file = path.join(os.homedir(), ".codex", "auth.json");
+    const cur = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      tokens?: Record<string, unknown>;
+      last_refresh?: string;
+    };
+    cur.tokens = {
+      ...(cur.tokens ?? {}),
+      access_token: data.access_token,
+      ...(data.refresh_token ? { refresh_token: data.refresh_token } : {}),
+      ...(data.id_token ? { id_token: data.id_token } : {}),
+    };
+    cur.last_refresh = new Date().toISOString();
+    fs.writeFileSync(file, JSON.stringify(cur, null, 2));
+    if (configCache.codex) {
+      configCache.codex.authToken = data.access_token;
+      if (data.refresh_token) configCache.codex.refreshToken = data.refresh_token;
+    }
+  } catch {
+    // The in-memory token still works for this run.
+  }
+}
+
+/** Proactively refresh a ChatGPT-account Codex token when it is about to expire. */
+async function ensureCodexAuth(cfg: ResolvedConfig): Promise<void> {
+  if (!cfg.chatgpt) return;
+  const exp = cfg.authToken ? jwtExp(cfg.authToken) : null;
+  if (exp && exp - Date.now() / 1000 > 120) return; // still valid
+  if (exp) await refreshCodexToken(cfg); // expired — refresh before the call
+  // No readable exp (opaque token): proceed; a 401 triggers the refresh retry.
 }
 
 async function chat(context: Ctx, req: ChatRequest) {
-  const { baseUrl, authToken, model } = resolveConfig(req);
-  if (!authToken) {
-    throw new Error("未找到认证信息：请在 ~/.claude/settings.json 配置，或在对话框顶部填入 API Key");
+  const cfg = resolveConfig(req);
+  if (!cfg.authToken && !cfg.refreshToken) {
+    const hint = NO_AUTH_HINT[req.language ?? ""] ?? NO_AUTH_HINT.zh;
+    throw new Error(hint.replace("{p}", PROVIDER_NAMES[cfg.provider]));
   }
+  if (cfg.provider === "codex") {
+    await ensureCodexAuth(cfg);
+    return chatOpenAI(context, cfg, req);
+  }
+  if (cfg.provider === "gemini") return chatGemini(context, cfg, req);
+  return chatAnthropic(context, cfg, req);
+}
 
-  const session = currentSession();
-  const messages: unknown[] = session.messages.map((m) => ({ role: m.role, content: m.content }));
+async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
+  const { baseUrl, authToken, model } = cfg;
+  const messages: unknown[] = historyWithTools(currentSession(), {
+    userText: (text) => ({ role: "user", content: text }),
+    assistantText: (text) => ({ role: "assistant", content: text }),
+    toolRound: (acts, p) => [
+      {
+        role: "assistant",
+        content: acts.map((a, i) => ({ type: "tool_use", id: p + i, name: a.tool, input: a.input ?? {} })),
+      },
+      {
+        role: "user",
+        content: acts.map((a, i) => ({
+          type: "tool_result",
+          tool_use_id: p + i,
+          content: truncateResult(JSON.stringify(a.result)),
+        })),
+      },
+    ],
+  });
   const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  attachImages(messages, req, (last, images) => {
+    if (typeof last.content !== "string") return;
+    last.content = [
+      ...images.map((im) => ({
+        type: "image",
+        source: { type: "base64", media_type: im.mime, data: im.data },
+      })),
+      { type: "text", text: last.content },
+    ];
+  });
+
+  // Effort selector (5 levels, Claude Code style) → extended thinking budget.
+  // max_tokens must exceed the budget; empty effort = no thinking field at all,
+  // so plain relays that reject it keep working at the default level.
+  const CLAUDE_EFFORT: Record<string, { budget: number; maxTokens: number }> = {
+    low:    { budget: 1024,  maxTokens: 4096 },
+    medium: { budget: 4096,  maxTokens: 8192 },
+    high:   { budget: 8192,  maxTokens: 16384 },
+    xhigh:  { budget: 16384, maxTokens: 32768 },
+    max:    { budget: 32768, maxTokens: 49152 },
+  };
+  const claudeEffort = CLAUDE_EFFORT[cfg.effort ?? ""];
+  const thinking = claudeEffort
+    ? { type: "enabled", budget_tokens: claudeEffort.budget }
+    : undefined;
 
   for (let round = 0; round < 12; round++) {
+    if (stopRequested) return finishChat(context, actions, stopNote(req.language));
     // Mirror Claude Code's auth style: Bearer token (works for relays and OAuth),
     // plus x-api-key for endpoints that expect it.
     const headers: Record<string, string> = {
@@ -1030,27 +1503,36 @@ async function chat(context: Ctx, req: ChatRequest) {
     }
     const requestBody = JSON.stringify({
       model,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      max_tokens: claudeEffort ? claudeEffort.maxTokens : 4096,
+      system: systemPromptFor(req.language),
       tools: TOOLS,
       messages,
+      ...(thinking ? { thinking } : {}),
     });
-    const res = await fetch(`${baseUrl}/v1/messages`, {
-      method: "POST",
-      headers,
-      body: requestBody,
-    });
-    const data = (await res.json()) as {
+    let data: {
       content?: { type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }[];
       stop_reason?: string;
       error?: { message?: string };
     };
-    if (!res.ok) {
-      console.error(
-        `[ai-assistant] API ${res.status} · 请求 ${requestBody.length} 字符 · ` +
-          `messages=${messages.length} tools=${TOOLS.length} · 响应: ${JSON.stringify(data).slice(0, 500)}`,
-      );
-      throw new Error(data.error?.message || `Claude API 错误 (${res.status})`);
+    try {
+      const res = await fetch(`${baseUrl}/v1/messages`, {
+        method: "POST",
+        headers,
+        body: requestBody,
+        signal: abortCtl?.signal ?? null,
+      });
+      data = (await res.json()) as typeof data;
+      if (!res.ok) {
+        console.error(
+          `[ai-assistant] API ${res.status} · 请求 ${requestBody.length} 字符 · ` +
+            `messages=${messages.length} tools=${TOOLS.length} · 响应: ${JSON.stringify(data).slice(0, 500)}`,
+        );
+        throw new Error(data.error?.message || `Claude API 错误 (${res.status})`);
+      }
+    } catch (err) {
+      // Aborted mid-request by /api/stop — keep the partial work, no error.
+      if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+      throw err;
     }
 
     const content = data.content ?? [];
@@ -1067,29 +1549,14 @@ async function chat(context: Ctx, req: ChatRequest) {
           .map((b) => b.text ?? "")
           .join("\n")
           .trim() || "（无文本回复）";
-      session.messages.push({ role: "assistant", content: reply, actions });
-      session.updatedAt = Date.now();
-      saveStore(context);
-      return { reply, actions };
+      return finishChat(context, actions, reply);
     }
 
     const toolResults: unknown[] = [];
     for (const block of content) {
       if (block.type !== "tool_use") continue;
-      let result: unknown;
-      try {
-        result = await runTool(context, block.name!, block.input ?? {});
-      } catch (err) {
-        result = { error: err instanceof Error ? err.message : String(err) };
-      }
-      actions.push({ tool: block.name!, input: block.input, result });
-      let resultJson = JSON.stringify(result);
-      debugLog(context, `TOOL ${block.name} ${JSON.stringify(block.input)} -> ${resultJson.slice(0, 400)}`);
-      if (resultJson.length > 6000) {
-        resultJson =
-          resultJson.slice(0, 6000) +
-          `…（结果过大已截断，共 ${resultJson.length} 字符。请用 filter 缩小查询范围）`;
-      }
+      if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+      const resultJson = await callTool(context, actions, block.name!, block.input ?? {}, req.yolo !== false);
       toolResults.push({
         type: "tool_result",
         tool_use_id: block.id,
@@ -1097,6 +1564,467 @@ async function chat(context: Ctx, req: ChatRequest) {
       });
     }
     messages.push({ role: "user", content: toolResults });
+  }
+  throw new Error("工具调用次数过多，已中止");
+}
+
+// ---------- Proxy-aware HTTP transport ----------
+// chatgpt.com / api.openai.com / generativelanguage.googleapis.com are often
+// reachable only through a local proxy, and Node's fetch ignores macOS system
+// proxy settings — so Codex/Gemini calls go through this helper (CONNECT
+// tunnel) instead. The Anthropic path keeps using plain fetch.
+
+let cachedProxy: string | null | undefined;
+
+function detectProxy(): string | null {
+  if (cachedProxy !== undefined) return cachedProxy;
+  const env =
+    process.env.AIBLETON_PROXY ||
+    process.env.HTTPS_PROXY ||
+    process.env.https_proxy ||
+    process.env.HTTP_PROXY ||
+    process.env.http_proxy;
+  if (env) {
+    cachedProxy = env;
+    return env;
+  }
+  if (process.platform === "darwin") {
+    try {
+      const out = execFileSync("scutil", ["--proxy"], { encoding: "utf8", timeout: 3000 });
+      const enabled = /HTTPSEnable\s*:\s*1/.test(out) || /HTTPEnable\s*:\s*1/.test(out);
+      const host = /HTTPSProxy\s*:\s*(\S+)/.exec(out)?.[1] ?? /HTTPProxy\s*:\s*(\S+)/.exec(out)?.[1];
+      const port = /HTTPSPort\s*:\s*(\d+)/.exec(out)?.[1] ?? /HTTPPort\s*:\s*(\d+)/.exec(out)?.[1];
+      if (enabled && host) {
+        cachedProxy = `http://${host}:${port ?? "7890"}`;
+        return cachedProxy;
+      }
+    } catch {
+      // scutil unavailable — no proxy.
+    }
+  }
+  cachedProxy = null;
+  return null;
+}
+
+interface RawResponse {
+  status: number;
+  stream: AsyncIterable<Buffer>;
+}
+
+/** Minimal HTTPS POST with optional HTTP-proxy CONNECT tunneling. */
+function rawPost(
+  target: URL,
+  init: { headers: Record<string, string>; body: string; proxy: string | null; signal?: AbortSignal },
+): Promise<RawResponse> {
+  return new Promise((resolve, reject) => {
+    // Abort support: destroy whatever is in flight. Before the response
+    // arrives that makes this promise reject; after, it kills the body
+    // stream so the caller's read loop throws.
+    let current: { destroy: () => void } | null = null;
+    const cleanup = () => init.signal?.removeEventListener("abort", onAbort);
+    const onAbort = () => {
+      current?.destroy();
+      cleanup();
+      reject(new Error("请求已停止"));
+    };
+    if (init.signal) {
+      if (init.signal.aborted) {
+        reject(new Error("请求已停止"));
+        return;
+      }
+      init.signal.addEventListener("abort", onAbort);
+    }
+    const fail = (err: Error) => {
+      cleanup();
+      reject(err);
+    };
+    const send = (socket?: tls.TLSSocket) => {
+      const reqOpts: https.RequestOptions = {
+        hostname: target.hostname,
+        port: target.port || 443,
+        path: target.pathname + target.search,
+        method: "POST",
+        headers: {
+          "content-length": String(Buffer.byteLength(init.body)),
+          ...init.headers,
+        },
+      };
+      // Request-level createConnection (no `agent` key at all — passing
+      // agent:false makes Node ignore it and dial the target directly).
+      if (socket) reqOpts.createConnection = () => socket;
+      const req = https.request(reqOpts, (res) => {
+        current = req;
+        res.on("close", cleanup);
+        resolve({ status: res.statusCode ?? 0, stream: res });
+      });
+      current = req;
+      req.on("error", fail);
+      req.write(init.body);
+      req.end();
+    };
+    if (!init.proxy) {
+      send();
+      return;
+    }
+    let proxy: URL;
+    try {
+      proxy = new URL(init.proxy);
+    } catch {
+      fail(new Error(`代理地址无效: ${init.proxy}`));
+      return;
+    }
+    const proxySocket = net.connect(Number(proxy.port || 80), proxy.hostname, () => {
+      const auth = proxy.username
+        ? `Proxy-Authorization: Basic ${Buffer.from(`${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`).toString("base64")}\r\n`
+        : "";
+      proxySocket.write(
+        `CONNECT ${target.hostname}:${target.port || 443} HTTP/1.1\r\nHost: ${target.hostname}:${target.port || 443}\r\n${auth}\r\n`,
+      );
+    });
+    current = proxySocket;
+    proxySocket.setTimeout(15000, () => {
+      proxySocket.destroy();
+      fail(new Error(`代理连接超时 (${proxy.host})`));
+    });
+    let head = "";
+    proxySocket.on("data", function onData(chunk: Buffer) {
+      head += chunk.toString("latin1");
+      const endIdx = head.indexOf("\r\n\r\n");
+      if (endIdx < 0) return;
+      proxySocket.removeListener("data", onData);
+      proxySocket.setTimeout(0);
+      if (!/^HTTP\/\d(?:\.\d)? 200/.test(head)) {
+        proxySocket.destroy();
+        fail(new Error(`代理 CONNECT 失败: ${head.slice(0, head.indexOf("\r\n"))}`));
+        return;
+      }
+      const secure = tls.connect(
+        { socket: proxySocket, servername: target.hostname, ALPNProtocols: ["http/1.1"] },
+        () => send(secure),
+      );
+      current = secure;
+      secure.on("error", fail);
+    });
+    proxySocket.on("error", fail);
+  });
+}
+
+async function readAll(stream: AsyncIterable<Buffer>): Promise<string> {
+  let out = "";
+  for await (const chunk of stream) out += chunk.toString("utf8");
+  return out;
+}
+
+// ---------- OpenAI Responses API (Codex) ----------
+
+interface OpenAIOutputItem {
+  type: string;
+  name?: string;
+  arguments?: string;
+  call_id?: string;
+  content?: { type: string; text?: string }[];
+}
+
+interface OpenAIResponseData {
+  output?: OpenAIOutputItem[];
+  error?: { message?: string };
+  status?: string;
+}
+
+/**
+ * The chatgpt.com Codex backend only answers with server-sent events.
+ * Consume the stream and return the terminal response object
+ * (response.completed / response.failed). Note: this backend sends
+ * output:[] in the terminal event — the actual items arrive via
+ * response.output_item.done, so they are collected along the way.
+ */
+async function readResponsesStream(stream: AsyncIterable<Buffer>): Promise<OpenAIResponseData> {
+  let buf = "";
+  let finalResponse: OpenAIResponseData | null = null;
+  let streamError: string | null = null;
+  const items: OpenAIOutputItem[] = [];
+  for await (const chunk of stream) {
+    buf += chunk.toString("utf8");
+    let idx: number;
+    while ((idx = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      let evt: {
+        type?: string;
+        response?: OpenAIResponseData;
+        item?: OpenAIOutputItem;
+        message?: string;
+      };
+      try {
+        evt = JSON.parse(payload) as typeof evt;
+      } catch {
+        continue;
+      }
+      if (evt.type === "response.output_item.done" && evt.item) {
+        items.push(evt.item);
+      } else if (
+        evt.type === "response.completed" ||
+        evt.type === "response.incomplete" ||
+        evt.type === "response.failed"
+      ) {
+        finalResponse = evt.response ?? null;
+      } else if (evt.type === "error") {
+        streamError = evt.message ?? "stream error";
+      }
+    }
+  }
+  if (finalResponse) {
+    if (!finalResponse.output?.length && items.length) finalResponse.output = items;
+    return finalResponse;
+  }
+  if (streamError) throw new Error(streamError);
+  throw new Error("OpenAI 流式响应中断（未收到 completed 事件）");
+}
+
+async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
+  const input: unknown[] = historyWithTools(currentSession(), {
+    userText: (text) => ({ role: "user", content: [{ type: "input_text", text }] }),
+    assistantText: (text) => ({ role: "assistant", content: [{ type: "output_text", text }] }),
+    toolRound: (acts, p) =>
+      acts.flatMap((a, i) => [
+        { type: "function_call", call_id: p + i, name: a.tool, arguments: JSON.stringify(a.input ?? {}) },
+        { type: "function_call_output", call_id: p + i, output: truncateResult(JSON.stringify(a.result)) },
+      ]),
+  });
+  const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  attachImages(input, req, (last, images) => {
+    if (!Array.isArray(last.content)) return;
+    last.content.push(
+      ...images.map((im) => ({
+        type: "input_image",
+        image_url: `data:${im.mime};base64,${im.data}`,
+      })),
+    );
+  });
+  const tools = TOOLS.map((tool) => ({
+    type: "function",
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.input_schema,
+  }));
+
+  for (let round = 0; round < 12; round++) {
+    if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+    const requestBody = JSON.stringify({
+      model: cfg.model,
+      instructions: systemPromptFor(req.language),
+      input,
+      tools,
+      store: false,
+      // The ChatGPT backend requires SSE streaming; api.openai.com takes plain JSON.
+      ...(cfg.chatgpt ? { stream: true } : {}),
+      ...(cfg.reasoningEffort ? { reasoning: { effort: cfg.reasoningEffort } } : {}),
+    });
+    const proxy = detectProxy();
+    const doFetch = () =>
+      rawPost(new URL(`${cfg.baseUrl}/responses`), {
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${cfg.authToken}`,
+          ...(cfg.chatgpt
+            ? {
+                accept: "text/event-stream",
+                "chatgpt-account-id": cfg.accountId ?? "",
+                "OpenAI-Beta": "responses=experimental",
+                originator: "codex_cli_rs",
+              }
+            : {}),
+        },
+        body: requestBody,
+        proxy,
+        signal: abortCtl?.signal,
+      });
+    let data: OpenAIResponseData;
+    let status: number;
+    try {
+      let res = await doFetch();
+      if (res.status === 401 && cfg.chatgpt && cfg.refreshToken) {
+        await refreshCodexToken(cfg);
+        res = await doFetch();
+      }
+      status = res.status;
+      data = cfg.chatgpt
+        ? await readResponsesStream(res.stream)
+        : (JSON.parse(await readAll(res.stream)) as OpenAIResponseData);
+    } catch (err) {
+      // Aborted mid-request by /api/stop — keep the partial work, no error.
+      if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+      throw err;
+    }
+    if (status < 200 || status >= 300) {
+      console.error(
+        `[ai-assistant] OpenAI API ${status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
+      );
+      throw new Error(data.error?.message || `OpenAI API 错误 (${status})`);
+    }
+    if (data.status === "failed") {
+      throw new Error(data.error?.message || "OpenAI 响应失败");
+    }
+
+    const output = data.output ?? [];
+    debugLog(context, `ROUND ${round}: output=${output.map((o) => o.type).join(",")}`);
+    const calls = output.filter((o) => o.type === "function_call");
+    if (!calls.length) {
+      const reply =
+        output
+          .filter((o) => o.type === "message")
+          .flatMap((o) => o.content ?? [])
+          .filter((c) => c.type === "output_text")
+          .map((c) => c.text ?? "")
+          .join("\n")
+          .trim() || "（无文本回复）";
+      return finishChat(context, actions, reply);
+    }
+
+    // Echo the model's output items back, then append each tool result.
+    input.push(...output);
+    for (const call of calls) {
+      if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+      let toolInput: Record<string, unknown> = {};
+      try {
+        toolInput = JSON.parse(call.arguments || "{}") as Record<string, unknown>;
+      } catch {
+        // Malformed arguments — run with empty input, the tool error explains.
+      }
+      const resultJson = await callTool(context, actions, call.name!, toolInput, req.yolo !== false);
+      input.push({ type: "function_call_output", call_id: call.call_id, output: resultJson });
+    }
+  }
+  throw new Error("工具调用次数过多，已中止");
+}
+
+// ---------- Gemini generateContent API ----------
+
+/** Gemini wants OpenAPI-style uppercase types (OBJECT/STRING/…) in schemas. */
+function toGeminiSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(toGeminiSchema);
+  if (schema && typeof schema === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(schema)) {
+      out[k] = k === "type" && typeof v === "string" ? v.toUpperCase() : toGeminiSchema(v);
+    }
+    return out;
+  }
+  return schema;
+}
+
+interface GeminiPart {
+  text?: string;
+  functionCall?: { name?: string; args?: Record<string, unknown> };
+}
+
+async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
+  const contents: unknown[] = historyWithTools(currentSession(), {
+    userText: (text) => ({ role: "user", parts: [{ text }] }),
+    assistantText: (text) => ({ role: "model", parts: [{ text }] }),
+    toolRound: (acts) => [
+      {
+        role: "model",
+        parts: acts.map((a) => ({ functionCall: { name: a.tool, args: (a.input ?? {}) as Record<string, unknown> } })),
+      },
+      {
+        role: "user",
+        parts: acts.map((a) => ({
+          functionResponse: { name: a.tool, response: { result: truncateResult(JSON.stringify(a.result)) } },
+        })),
+      },
+    ],
+  });
+  const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  attachImages(contents, req, (last, images) => {
+    if (!Array.isArray(last.parts)) return;
+    last.parts.push(
+      ...images.map((im) => ({ inlineData: { mimeType: im.mime, data: im.data } })),
+    );
+  });
+  const tools = [
+    {
+      functionDeclarations: TOOLS.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: toGeminiSchema(tool.input_schema),
+      })),
+    },
+  ];
+
+  // Effort selector (4 levels) → thinking budget. 2.5 Pro can't disable
+  // thinking, so "low" gets the minimum useful budget; empty = dynamic default.
+  const GEMINI_EFFORT: Record<string, number> = {
+    low: 1024,
+    medium: 8192,
+    high: 16384,
+    max: 32768,
+  };
+  const thinkingBudget = GEMINI_EFFORT[cfg.effort ?? ""];
+
+  for (let round = 0; round < 12; round++) {
+    if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+    const requestBody = JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPromptFor(req.language) }] },
+      contents,
+      tools,
+      ...(thinkingBudget ? { generationConfig: { thinkingConfig: { thinkingBudget } } } : {}),
+    });
+    let data: {
+      candidates?: { content?: { parts?: GeminiPart[] } }[];
+      error?: { message?: string };
+    };
+    try {
+      const res = await rawPost(
+        new URL(`${cfg.baseUrl}/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`),
+        {
+          headers: { "content-type": "application/json", "x-goog-api-key": cfg.authToken },
+          body: requestBody,
+          proxy: detectProxy(),
+          signal: abortCtl?.signal,
+        },
+      );
+      data = JSON.parse(await readAll(res.stream)) as typeof data;
+      if (res.status < 200 || res.status >= 300) {
+        console.error(
+          `[ai-assistant] Gemini API ${res.status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
+        );
+        throw new Error(data.error?.message || `Gemini API 错误 (${res.status})`);
+      }
+    } catch (err) {
+      // Aborted mid-request by /api/stop — keep the partial work, no error.
+      if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+      throw err;
+    }
+
+    const parts = data.candidates?.[0]?.content?.parts ?? [];
+    debugLog(
+      context,
+      `ROUND ${round}: parts=${parts.map((p) => (p.functionCall ? "functionCall" : "text")).join(",")}`,
+    );
+    const fnCalls = parts.filter((p) => p.functionCall?.name);
+    if (!fnCalls.length) {
+      const reply =
+        parts
+          .filter((p) => typeof p.text === "string")
+          .map((p) => p.text!)
+          .join("\n")
+          .trim() || "（无文本回复）";
+      return finishChat(context, actions, reply);
+    }
+
+    contents.push({ role: "model", parts });
+    const responseParts: unknown[] = [];
+    for (const p of fnCalls) {
+      if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+      const name = p.functionCall!.name!;
+      const resultJson = await callTool(context, actions, name, p.functionCall!.args ?? {}, req.yolo !== false);
+      responseParts.push({ functionResponse: { name, response: { result: resultJson } } });
+    }
+    contents.push({ role: "user", parts: responseParts });
   }
   throw new Error("工具调用次数过多，已中止");
 }
@@ -1118,10 +2046,13 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       send(200, chatInterface, "text/html");
       return;
     }
-    if (req.method === "GET" && req.url === "/api/health") {
-      const cfg = resolveConfig({});
+    if (req.method === "GET" && req.url?.startsWith("/api/health")) {
+      const provider =
+        new URL(req.url, "http://127.0.0.1").searchParams.get("provider") ?? undefined;
+      const cfg = resolveConfig({ provider });
       send(200, JSON.stringify({
         ok: true,
+        provider: cfg.provider,
         hasAuth: Boolean(cfg.authToken),
         baseUrl: cfg.baseUrl,
         model: cfg.model,
@@ -1191,7 +2122,33 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       return;
     }
     if (req.method === "GET" && req.url === "/api/status") {
-      send(200, JSON.stringify({ busy, error: lastError }));
+      send(200, JSON.stringify({
+        busy,
+        error: lastError,
+        pending: pendingConfirm ? { tool: pendingConfirm.tool, input: pendingConfirm.input } : null,
+      }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/confirm") {
+      readBody((parsed) => {
+        const waiting = pendingConfirm;
+        if (waiting) waiting.resolve(parsed.allow === true);
+        send(waiting ? 200 : 409, JSON.stringify({ ok: Boolean(waiting) }));
+      });
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/stop") {
+      // UI stop button: flag the running task, abort its in-flight request,
+      // and release any tool call waiting on Allow/Deny so it can unwind.
+      if (busy) {
+        stopRequested = true;
+        abortCtl?.abort();
+        if (pendingConfirm) pendingConfirm.resolve(false);
+        debugLog(context, "STOP requested");
+        send(200, JSON.stringify({ ok: true }));
+      } else {
+        send(409, JSON.stringify({ ok: false, error: "当前没有运行中的任务" }));
+      }
       return;
     }
     if (req.method === "POST" && req.url === "/api/panel") {
@@ -1222,12 +2179,28 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
           return;
         }
         const session = currentSession();
-        session.messages.push({ role: "user", content: text });
+        // Text attachments fold into the stored message (so history keeps their
+        // content); images leave a marker — the base64 itself only rides this
+        // turn's API request, never the history file.
+        let content = text;
+        for (const a of (parsed.attachments as Attachment[] | undefined)?.slice(0, 10) ?? []) {
+          if (typeof a?.text === "string") {
+            content += `\n\n【附件 ${a.name}】\n${a.text.slice(0, 20000)}`;
+          } else if ((a?.kind === "midi" || a?.kind === "als") && typeof a.data === "string") {
+            // Binary music files reach the model as a parsed text summary.
+            content += `\n\n【附件 ${a.name}】\n${describeBinaryAttachment(a.name, a.kind, a.data)}`;
+          } else if (typeof a?.data === "string") {
+            content += `\n[图片: ${a.name}]`;
+          }
+        }
+        session.messages.push({ role: "user", content });
         if (session.title === "新对话") session.title = text.slice(0, 24);
         session.updatedAt = Date.now();
         saveStore(context);
         busy = true;
         lastError = null;
+        stopRequested = false;
+        abortCtl = new AbortController();
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT
         // stop it. Clients poll /api/status and then read /api/history.
@@ -1244,6 +2217,9 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             saveStore(context);
           } finally {
             busy = false;
+            abortCtl = null;
+            // Never leave a confirmation dangling past its task's lifetime.
+            if (pendingConfirm) pendingConfirm.resolve(false);
           }
         })();
       });

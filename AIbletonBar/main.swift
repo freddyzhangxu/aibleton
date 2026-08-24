@@ -15,7 +15,7 @@ let PANEL_WIDTH: CGFloat = 420
 let BAR_WIDTH: CGFloat = 240
 let BAR_HEIGHT: CGFloat = 32 // traffic lights center = 16px from top (measured)
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
     private var window: NSWindow!
     private var webView: WKWebView!
     private var statusItem: NSStatusItem!
@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         config.applicationNameForUserAgent = "AIbletonBar/1.0"
         let web = WKWebView(frame: container.bounds, configuration: config)
         web.navigationDelegate = self
+        web.uiDelegate = self
         web.autoresizingMask = [.width, .height]
         web.setValue(false, forKey: "drawsBackground") // blend with window until page paints
         container.addSubview(web)
@@ -323,6 +324,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         retryTimer?.invalidate()
         retryTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             self?.loadPage()
+        }
+    }
+    // MARK: - WKUIDelegate
+
+    /// Without this the chat UI's attach button is a dead click: macOS WKWebView
+    /// only opens a file picker when the host app provides one.
+    func webView(_ webView: WKWebView,
+                 runOpenPanelWith parameters: WKOpenPanelParameters,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.canChooseFiles = true
+        // The app runs as a menu-bar accessory — bring the panel to the front.
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { response in
+            completionHandler(response == .OK ? panel.urls : nil)
         }
     }
 }
