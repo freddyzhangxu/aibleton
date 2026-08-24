@@ -141,7 +141,53 @@
       padding: 0 6px;
     }
     header input::placeholder { color: var(--c-text-dim); }
-    #keyRow.hidden { display: none; }
+
+    /* Settings dropdown (gear button) — two-level menu */
+    #settingsPanel {
+      position: absolute;
+      top: 100%; right: 8px;
+      width: 252px;
+      max-height: 70vh;
+      overflow-y: auto;
+      background: var(--c-panel);
+      border: 1px solid var(--c-border);
+      border-radius: 6px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+      z-index: 10;
+      padding: 4px;
+    }
+    #settingsPanel.hidden, .set-view.hidden { display: none; }
+    .menu-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .menu-row:hover { background: var(--c-input-bg); }
+    .menu-row .val { margin-left: auto; color: var(--c-text-dim); font-size: 11px; }
+    .menu-row .tick { width: 14px; flex: none; color: var(--c-accent); font-size: 11px; }
+    .menu-row.back { color: var(--c-text-dim); font-weight: 700; }
+    .menu-row.back:hover { color: var(--c-text); }
+    .menu-row.back .chev { width: 14px; flex: none; }
+    .cfg-fields {
+      border-top: 1px solid var(--c-border);
+      margin-top: 2px;
+      padding: 8px 8px 6px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .cfg-fields label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: var(--c-text-dim); }
+    .cfg-fields input {
+      width: 100%;
+      background: var(--c-input-bg);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      border-radius: 3px;
+      height: 22px;
+      padding: 0 6px;
+    }
+    .cfg-fields input::placeholder { color: var(--c-text-dim); }
+    .cfg-hint { font-size: 10px; color: var(--c-text-dim); line-height: 1.45; }
 
     #log {
       flex: 1;
@@ -164,7 +210,9 @@
       background: var(--c-accent);
       color: hsl(0, 0%, 10%);
     }
-    .msg.ai { align-self: flex-start; background: var(--c-panel); border: 1px solid var(--c-border); }
+    /* AI replies stretch full width so wrapped lines end at the same right
+       edge as the (right-aligned) user bubbles — the wrap columns line up. */
+    .msg.ai { align-self: stretch; max-width: none; background: var(--c-panel); border: 1px solid var(--c-border); }
     .msg.error { align-self: stretch; background: hsl(0, 60%, 25%); color: #fff; }
     .msg.thinking { align-self: flex-start; color: var(--c-text-dim); font-style: italic; }
     .action {
@@ -183,11 +231,105 @@
 
     footer {
       display: flex;
+      flex-direction: column;
       gap: 6px;
       padding: 8px 12px;
       background: var(--c-panel);
       border-top: 1px solid var(--c-border);
     }
+    footer .input-row { display: flex; gap: 6px; align-items: flex-end; }
+
+    /* Attachment chips above the input */
+    #chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    #chips:empty { display: none; }
+    .chip {
+      display: flex; align-items: center; gap: 4px;
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-border);
+      border-radius: 10px;
+      padding: 2px 6px;
+      font-size: 10px;
+      color: var(--c-text);
+      max-width: 160px;
+    }
+    .chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chip .x {
+      background: none; border: none; color: var(--c-text-dim);
+      cursor: pointer; padding: 0 2px; font-size: 11px; flex: none;
+    }
+    .chip .x:hover { color: #FF5F57; }
+
+    /* Toolbar under the input: model / effort / attach … YOLO */
+    .bar { display: flex; gap: 6px; align-items: center; }
+    .bar-btn {
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-border);
+      border-radius: 10px;
+      color: var(--c-text-dim);
+      font-size: 10px;
+      height: 20px;
+      padding: 0 8px;
+      cursor: pointer;
+      display: flex; align-items: center; gap: 4px;
+      max-width: 150px;
+    }
+    .bar-btn:hover { color: var(--c-accent); }
+    .bar-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    select.bar-btn {
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 14px;
+      background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+      background-position: calc(100% - 9px) 55%, calc(100% - 5px) 55%;
+      background-size: 4px 4px;
+      background-repeat: no-repeat;
+    }
+    select.bar-btn option { background: var(--c-panel); color: var(--c-text); }
+    .bar .spacer { flex: 1; }
+
+    /* YOLO toggle switch */
+    .yolo { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--c-text-dim); cursor: pointer; user-select: none; }
+    .yolo input { display: none; }
+    .yolo .sw {
+      width: 26px; height: 14px; border-radius: 7px;
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-border);
+      position: relative;
+      transition: background 0.15s;
+      flex: none;
+    }
+    .yolo .sw::after {
+      content: '';
+      position: absolute; top: 1px; left: 1px;
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--c-text-dim);
+      transition: transform 0.15s, background 0.15s;
+    }
+    .yolo input:checked + .sw { background: hsl(31, 80%, 35%); border-color: hsl(31, 80%, 35%); }
+    .yolo input:checked + .sw::after { transform: translateX(12px); background: var(--c-accent); }
+    .yolo.on { color: var(--c-accent); }
+
+    /* Permission ask bar (YOLO off) pinned above the input */
+    #confirmBar {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-accent);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+    #confirmBar.hidden { display: none; }
+    #confirmBar .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, monospace; font-size: 10px; }
+    #confirmBar button {
+      border: none; border-radius: 4px; padding: 3px 10px;
+      font-size: 11px; font-weight: 700; cursor: pointer; flex: none;
+    }
+    #confirmBar .allow { background: var(--c-accent); color: hsl(0, 0%, 10%); }
+    #confirmBar .deny { background: none; color: var(--c-text-dim); border: 1px solid var(--c-border); }
+    #confirmBar .deny:hover { color: #FF5F57; border-color: #FF5F57; }
+
+    /* Dragging files over the window */
+    body.dragging #log { outline: 2px dashed var(--c-accent); outline-offset: -4px; border-radius: 6px; }
     #input {
       flex: 1;
       background: var(--c-input-bg);
@@ -196,19 +338,33 @@
       border-radius: 4px;
       padding: 6px 8px;
       resize: none;
-      height: 34px;
+      height: 54px;
+      min-height: 54px;
+      max-height: 134px; /* ~6 行，超出后内部滚动 */
+      line-height: 20px;
+      overflow-y: hidden;
     }
     #input:focus { outline: 2px solid var(--c-text-dim); }
+    /* VSCode-style send: small square with an up arrow; while a task runs it
+       becomes a stop button (same Ableton orange, filled-square icon). */
     #send {
       background: var(--c-accent);
       color: hsl(0, 0%, 10%);
       border: none;
-      border-radius: 17px;
-      padding: 0 18px;
-      font-weight: 700;
+      border-radius: 6px;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       cursor: pointer;
+      flex: none;
     }
-    #send:disabled { opacity: 0.4; cursor: default; }
+    #send:hover { filter: brightness(1.08); }
+    #send .ic-stop { display: none; }
+    #send.stop .ic-send { display: none; }
+    #send.stop .ic-stop { display: block; }
   </style>
 </head>
 
@@ -228,13 +384,36 @@
         <button id="showHistory" class="hdr-btn" title="历史对话">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
         </button>
-        <button id="toggleAdvanced" class="hdr-btn" style="font-size:11px;width:auto;padding:0 4px">高级</button>
+        <button id="showSettings" class="hdr-btn" title="设置">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
       </div>
     </div>
-    <div class="row hidden" id="keyRow">
-      <input id="model" placeholder="模型（可选，留空跟随本机配置）" style="max-width:150px">
-      <input id="apiKey" type="password" placeholder="API Key（可选，覆盖本机配置）">
-      <input id="baseUrl" placeholder="API 地址（可选，覆盖本机配置）">
+    <div id="settingsPanel" class="hidden">
+      <div class="set-view" id="viewMain">
+        <div class="menu-row" data-goto="viewLang">
+          <span data-i18n="language">语言</span>
+          <span class="val"><span id="langVal">简体中文</span> ›</span>
+        </div>
+        <div class="menu-row" data-goto="viewAI">
+          <span data-i18n="aiConfig">AI 配置</span>
+          <span class="val"><span id="providerVal">Claude Code</span> ›</span>
+        </div>
+      </div>
+      <div class="set-view hidden" id="viewLang">
+        <div class="menu-row back" data-goto="viewMain"><span class="chev">‹</span><span data-i18n="language">语言</span></div>
+        <div id="langList"></div>
+      </div>
+      <div class="set-view hidden" id="viewAI">
+        <div class="menu-row back" data-goto="viewMain"><span class="chev">‹</span><span data-i18n="aiConfig">AI 配置</span></div>
+        <div id="providerList"></div>
+        <div class="cfg-fields">
+          <label><span data-i18n="apiKey">API Key</span><input id="cfgKey" type="password" autocomplete="off"></label>
+          <label><span data-i18n="baseUrl">API 地址</span><input id="cfgBase" autocomplete="off" spellcheck="false"></label>
+          <label><span data-i18n="model">模型</span><input id="cfgModel" autocomplete="off" spellcheck="false"></label>
+          <div class="cfg-hint" data-i18n="cfgHint">留空将自动使用本机 CLI 配置与默认值</div>
+        </div>
+      </div>
     </div>
     <div id="historyPanel" class="hidden"></div>
   </header>
@@ -248,40 +427,399 @@
   </div>
 
   <footer>
-    <textarea id="input" placeholder="输入消息，Enter 发送（Shift+Enter 换行）"></textarea>
-    <button id="send">发送</button>
+    <div id="chips"></div>
+    <div id="confirmBar" class="hidden">
+      <span>⚠️</span>
+      <span class="what" id="confirmWhat"></span>
+      <button class="allow" id="confirmAllow">允许</button>
+      <button class="deny" id="confirmDeny">拒绝</button>
+    </div>
+    <div class="input-row">
+      <textarea id="input" rows="2" placeholder="输入消息，Enter 发送（Shift+Enter 换行）"></textarea>
+    </div>
+    <div class="bar">
+      <button id="modelBtn" class="bar-btn" title=""><span id="modelName">…</span></button>
+      <select id="effortSel" class="bar-btn" title=""></select>
+      <button id="attachBtn" class="bar-btn" title="">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <input type="file" id="fileInput" multiple hidden
+        accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,.markdown,.json,.jsonc,.csv,.tsv,.xml,.log,.js,.ts,.py,.sh,.html,.css,.yml,.yaml,.ini,.mid,.midi,.als">
+      <span class="spacer"></span>
+      <label class="yolo" id="yoloLabel" title="">
+        <span>YOLO</span>
+        <input type="checkbox" id="yoloToggle" checked>
+        <span class="sw"></span>
+      </label>
+      <button id="send" title="">
+        <svg class="ic-send" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+        <svg class="ic-stop" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+      </button>
+    </div>
   </footer>
 
   <script>
     const log = document.getElementById('log');
     const input = document.getElementById('input');
     const sendBtn = document.getElementById('send');
-    const apiKeyInput = document.getElementById('apiKey');
-    const baseUrlInput = document.getElementById('baseUrl');
-    const modelInput = document.getElementById('model');
+    const statusEl = document.getElementById('status');
+
+    // ---------- i18n (language list matches Ableton Live's preferences) ----------
+    const LANGS = [
+      { code: 'en', name: 'English' },
+      { code: 'zh', name: '简体中文' },
+      { code: 'de', name: 'Deutsch' },
+      { code: 'fr', name: 'Français' },
+      { code: 'ja', name: '日本語' },
+      { code: 'es', name: 'Español' },
+      { code: 'it', name: 'Italiano' },
+    ];
+    const LOCALES = { en: 'en-US', zh: 'zh-CN', de: 'de-DE', fr: 'fr-FR', ja: 'ja-JP', es: 'es-ES', it: 'it-IT' };
+
+    const I18N = {
+      zh: {
+        settings: '设置', language: '语言', aiConfig: 'AI 配置',
+        close: '关闭', minimize: '最小化为右下角小条（需 AIbletonBar 运行中）',
+        newChat: '新建对话', history: '历史对话',
+        send: '发送', stop: '停止', inputPh: '输入消息，Enter 发送（Shift+Enter 换行）',
+        thinking: '思考中…（可关闭窗口，任务在后台继续）',
+        error: '出错：', noHistory: '暂无历史对话', delSession: '删除此对话', msgUnit: '条',
+        cfgLoaded: '已加载本机 {p} 配置', cfgKeySet: '{p} · 使用自定义 API Key',
+        cfgMissing: '未找到 {p} 认证信息，请在设置中填写 API Key',
+        apiKey: 'API Key', baseUrl: 'API 地址', model: '模型',
+        apiKeyPh: '可选，留空跟随本机 CLI 配置',
+        cfgHint: '留空将自动使用本机 CLI 配置与默认值',
+        effortDefault: '默认 Effort',
+        effortTitle: '思考强度：更高 = 推理更深但更慢',
+        attachTitle: '上传文件给 AI：图片/文本 ≤2MB，MIDI/Ableton 工程 ≤5MB；点击选择、拖入窗口或 ⌘V 粘贴',
+        modelTitle: '当前模型 · 点击打开设置',
+        yoloTitle: 'YOLO 模式：开启 = AI 直接执行所有操作；关闭 = 修改 Set 前需你确认',
+        allow: '允许', deny: '拒绝', confirmAsk: 'AI 请求执行',
+        fileTooBig: '文件过大：', fileUnsupported: '不支持的文件类型：',
+        welcome: '你好！我是 Live 里的 AI 助手。\n可以直接问我制作问题，也可以让我操作当前 Set，例如：\n· 「把速度改成 128」\n· 「新建一条 MIDI 轨道叫 Bass，加个 Operator」\n· 「现在有哪些轨道？把第 2 条静音」',
+      },
+      en: {
+        settings: 'Settings', language: 'Language', aiConfig: 'AI Provider',
+        close: 'Close', minimize: 'Minimize to the corner bar (requires AIbletonBar running)',
+        newChat: 'New chat', history: 'History',
+        send: 'Send', stop: 'Stop', inputPh: 'Type a message — Enter to send (Shift+Enter for a new line)',
+        thinking: 'Thinking… (you can close this window; the task continues in the background)',
+        error: 'Error: ', noHistory: 'No past conversations', delSession: 'Delete this conversation', msgUnit: '',
+        cfgLoaded: 'Loaded local {p} config', cfgKeySet: '{p} · custom API Key',
+        cfgMissing: 'No {p} credentials found — add an API Key in Settings',
+        apiKey: 'API Key', baseUrl: 'Base URL', model: 'Model',
+        apiKeyPh: 'Optional — empty uses local CLI config',
+        cfgHint: 'Leave empty to use local CLI config and defaults',
+        effortDefault: 'Default effort',
+        effortTitle: 'Reasoning effort: higher = deeper but slower',
+        attachTitle: 'Attach images/text (≤2MB), MIDI/Live sets (≤5MB): click, drag in, or paste',
+        modelTitle: 'Current model · click to open Settings',
+        yoloTitle: 'YOLO: on = AI runs every action directly; off = confirm before modifying the Set',
+        allow: 'Allow', deny: 'Deny', confirmAsk: 'AI wants to run',
+        fileTooBig: 'File too large: ', fileUnsupported: 'Unsupported file type: ',
+        welcome: 'Hi! I’m your AI assistant inside Live.\nAsk me production questions, or let me operate the current Set:\n· “Set the tempo to 128”\n· “Create a MIDI track called Bass and add an Operator”\n· “What tracks are there? Mute track 2”',
+      },
+      de: {
+        settings: 'Einstellungen', language: 'Sprache', aiConfig: 'AI-Anbieter',
+        close: 'Schließen', minimize: 'Zur Leiste unten rechts minimieren (AIbletonBar muss laufen)',
+        newChat: 'Neuer Chat', history: 'Verlauf',
+        send: 'Senden', stop: 'Stoppen', inputPh: 'Nachricht eingeben – Enter zum Senden (Umschalt+Enter für Zeilenumbruch)',
+        thinking: 'Denkt nach… (Fenster kann geschlossen werden, die Aufgabe läuft im Hintergrund weiter)',
+        error: 'Fehler: ', noHistory: 'Keine früheren Unterhaltungen', delSession: 'Diese Unterhaltung löschen', msgUnit: '',
+        cfgLoaded: 'Lokale {p}-Konfiguration geladen', cfgKeySet: '{p} · eigener API-Schlüssel',
+        cfgMissing: 'Keine {p}-Zugangsdaten gefunden – API-Schlüssel in den Einstellungen eintragen',
+        apiKey: 'API-Schlüssel', baseUrl: 'API-Adresse', model: 'Modell',
+        apiKeyPh: 'Optional – leer = lokale CLI-Konfiguration',
+        cfgHint: 'Leer lassen = lokale CLI-Konfiguration und Standardwerte',
+        effortDefault: 'Standard-Effort',
+        effortTitle: 'Denktiefe: höher = gründlicher, aber langsamer',
+        attachTitle: 'Dateien anhängen: Bilder/Text ≤2MB, MIDI/Live-Sets ≤5MB — klicken, ziehen oder einfügen',
+        modelTitle: 'Aktuelles Modell · Klicken öffnet Einstellungen',
+        yoloTitle: 'YOLO: ein = KI führt alles direkt aus; aus = Bestätigung vor Set-Änderungen',
+        allow: 'Erlauben', deny: 'Ablehnen', confirmAsk: 'KI möchte ausführen',
+        fileTooBig: 'Datei zu groß: ', fileUnsupported: 'Nicht unterstützter Dateityp: ',
+        welcome: 'Hallo! Ich bin dein AI-Assistent in Live.\nStell mir Fragen zum Produzieren oder lass mich das aktuelle Set bedienen:\n· „Stell das Tempo auf 128“\n· „Erstelle eine MIDI-Spur namens Bass und füge Operator hinzu“\n· „Welche Spuren gibt es? Schalte Spur 2 stumm“',
+      },
+      fr: {
+        settings: 'Paramètres', language: 'Langue', aiConfig: 'Fournisseur IA',
+        close: 'Fermer', minimize: 'Réduire en barre en bas à droite (AIbletonBar requis)',
+        newChat: 'Nouvelle conversation', history: 'Historique',
+        send: 'Envoyer', stop: 'Arrêter', inputPh: 'Saisissez un message — Entrée pour envoyer (Maj+Entrée pour sauter une ligne)',
+        thinking: 'Réflexion… (vous pouvez fermer la fenêtre, la tâche continue en arrière-plan)',
+        error: 'Erreur : ', noHistory: 'Aucune conversation passée', delSession: 'Supprimer cette conversation', msgUnit: '',
+        cfgLoaded: 'Configuration {p} locale chargée', cfgKeySet: '{p} · clé API personnalisée',
+        cfgMissing: 'Aucun identifiant {p} trouvé — ajoutez une clé API dans les paramètres',
+        apiKey: 'Clé API', baseUrl: 'Adresse API', model: 'Modèle',
+        apiKeyPh: 'Optionnel — vide = config CLI locale',
+        cfgHint: 'Laisser vide = config CLI locale et valeurs par défaut',
+        effortDefault: 'Effort par défaut',
+        effortTitle: 'Intensité de raisonnement : plus haut = plus profond mais plus lent',
+        attachTitle: 'Joindre images/texte (≤2Mo), MIDI/Live Sets (≤5Mo) : cliquer, glisser ou coller',
+        modelTitle: 'Modèle actuel · cliquer pour ouvrir les paramètres',
+        yoloTitle: 'YOLO : activé = l’IA exécute tout directement ; désactivé = confirmation avant de modifier le Set',
+        allow: 'Autoriser', deny: 'Refuser', confirmAsk: 'L’IA veut exécuter',
+        fileTooBig: 'Fichier trop volumineux : ', fileUnsupported: 'Type de fichier non pris en charge : ',
+        welcome: 'Bonjour ! Je suis votre assistant IA dans Live.\nPosez-moi des questions de production ou laissez-moi piloter le Set actuel :\n· « Règle le tempo à 128 »\n· « Crée une piste MIDI nommée Bass et ajoute un Operator »\n· « Quelles pistes y a-t-il ? Mettez la piste 2 en sourdine »',
+      },
+      ja: {
+        settings: '設定', language: '言語', aiConfig: 'AI プロバイダー',
+        close: '閉じる', minimize: '右下のミニバーに最小化（AIbletonBar の起動が必要）',
+        newChat: '新規チャット', history: '履歴',
+        send: '送信', stop: '停止', inputPh: 'メッセージを入力 — Enter で送信（Shift+Enter で改行）',
+        thinking: '思考中…（ウィンドウを閉じてもタスクはバックグラウンドで続行）',
+        error: 'エラー：', noHistory: '過去の会話はありません', delSession: 'この会話を削除', msgUnit: '件',
+        cfgLoaded: 'ローカルの {p} 設定を読み込みました', cfgKeySet: '{p} · カスタム API キー',
+        cfgMissing: '{p} の認証情報が見つかりません — 設定で API キーを入力してください',
+        apiKey: 'API キー', baseUrl: 'API アドレス', model: 'モデル',
+        apiKeyPh: '省略可 — 空欄ならローカル CLI 設定を使用',
+        cfgHint: '空欄ならローカル CLI 設定とデフォルト値を使用します',
+        effortDefault: 'デフォルト',
+        effortTitle: '思考の強さ：高いほど深く推論しますが遅くなります',
+        attachTitle: 'ファイル添付：画像/テキスト ≤2MB、MIDI/Live Set ≤5MB。クリック、ドラッグ、または貼り付け',
+        modelTitle: '現在のモデル · クリックで設定を開く',
+        yoloTitle: 'YOLO：オン = AI がすべて直接実行、オフ = Set 変更前に確認',
+        allow: '許可', deny: '拒否', confirmAsk: 'AI が実行を要求',
+        fileTooBig: 'ファイルが大きすぎます：', fileUnsupported: '未対応のファイル形式：',
+        welcome: 'こんにちは！Live 内の AI アシスタントです。\n制作の質問や、現在の Set の操作ができます。例：\n· 「テンポを 128 にして」\n· 「Bass という MIDI トラックを作って Operator を追加」\n· 「今どんなトラックがある？2 番目をミュートして」',
+      },
+      es: {
+        settings: 'Ajustes', language: 'Idioma', aiConfig: 'Proveedor de IA',
+        close: 'Cerrar', minimize: 'Minimizar a la barra inferior derecha (requiere AIbletonBar)',
+        newChat: 'Nuevo chat', history: 'Historial',
+        send: 'Enviar', stop: 'Detener', inputPh: 'Escribe un mensaje — Enter para enviar (Mayús+Enter para nueva línea)',
+        thinking: 'Pensando… (puedes cerrar la ventana; la tarea continúa en segundo plano)',
+        error: 'Error: ', noHistory: 'No hay conversaciones', delSession: 'Eliminar esta conversación', msgUnit: '',
+        cfgLoaded: 'Configuración local de {p} cargada', cfgKeySet: '{p} · API Key personalizada',
+        cfgMissing: 'No se encontraron credenciales de {p} — añade una API Key en Ajustes',
+        apiKey: 'API Key', baseUrl: 'Dirección API', model: 'Modelo',
+        apiKeyPh: 'Opcional — vacío = config CLI local',
+        cfgHint: 'Vacío = config CLI local y valores por defecto',
+        effortDefault: 'Effort por defecto',
+        effortTitle: 'Intensidad de razonamiento: mayor = más profundo pero más lento',
+        attachTitle: 'Adjuntar imágenes/texto (≤2MB), MIDI/Sets de Live (≤5MB): clic, arrastrar o pegar',
+        modelTitle: 'Modelo actual · clic para abrir Ajustes',
+        yoloTitle: 'YOLO: activado = la IA ejecuta todo directamente; desactivado = confirmar antes de modificar el Set',
+        allow: 'Permitir', deny: 'Denegar', confirmAsk: 'La IA quiere ejecutar',
+        fileTooBig: 'Archivo demasiado grande: ', fileUnsupported: 'Tipo de archivo no admitido: ',
+        welcome: '¡Hola! Soy tu asistente de IA dentro de Live.\nPregúntame sobre producción o deja que maneje el Set actual:\n· «Pon el tempo a 128»\n· «Crea una pista MIDI llamada Bass y añade un Operator»\n· «¿Qué pistas hay? Silencia la pista 2»',
+      },
+      it: {
+        settings: 'Impostazioni', language: 'Lingua', aiConfig: 'Provider AI',
+        close: 'Chiudi', minimize: 'Riduci a barra in basso a destra (richiede AIbletonBar)',
+        newChat: 'Nuova chat', history: 'Cronologia',
+        send: 'Invia', stop: 'Interrompi', inputPh: 'Scrivi un messaggio — Invio per inviare (Maiusc+Invio per andare a capo)',
+        thinking: 'Sto pensando… (puoi chiudere la finestra; l’attività continua in background)',
+        error: 'Errore: ', noHistory: 'Nessuna conversazione passata', delSession: 'Elimina questa conversazione', msgUnit: '',
+        cfgLoaded: 'Configurazione locale di {p} caricata', cfgKeySet: '{p} · API Key personalizzata',
+        cfgMissing: 'Nessuna credenziale {p} trovata — aggiungi una API Key nelle Impostazioni',
+        apiKey: 'API Key', baseUrl: 'Indirizzo API', model: 'Modello',
+        apiKeyPh: 'Opzionale — vuoto = config CLI locale',
+        cfgHint: 'Vuoto = config CLI locale e valori predefiniti',
+        effortDefault: 'Effort predefinito',
+        effortTitle: 'Intensità di ragionamento: più alta = più profonda ma più lenta',
+        attachTitle: 'Allega immagini/testo (≤2MB), MIDI/Live Set (≤5MB): clic, trascina o incolla',
+        modelTitle: 'Modello attuale · clic per aprire le Impostazioni',
+        yoloTitle: 'YOLO: attivo = l’IA esegue tutto direttamente; spento = conferma prima di modificare il Set',
+        allow: 'Consenti', deny: 'Nega', confirmAsk: 'L’IA vuole eseguire',
+        fileTooBig: 'File troppo grande: ', fileUnsupported: 'Tipo di file non supportato: ',
+        welcome: 'Ciao! Sono il tuo assistente AI dentro Live.\nFammi domande sulla produzione o lasciami operare sul Set corrente:\n· «Imposta il tempo a 128»\n· «Crea una traccia MIDI chiamata Bass e aggiungi un Operator»\n· «Quali tracce ci sono? Silenzia la traccia 2»',
+      },
+    };
+
+    let currentLang = localStorage.getItem('ai.lang') || 'zh';
+    if (!I18N[currentLang]) currentLang = 'zh';
+    const t = (k) => I18N[currentLang][k] ?? I18N.zh[k] ?? k;
+
+    // ---------- AI providers ----------
+    const PROVIDERS = {
+      claude: { name: 'Claude Code', base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
+      codex:  { name: 'Codex',       base: 'https://api.openai.com/v1', model: 'gpt-5-codex' },
+      gemini: { name: 'Gemini',      base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.5-pro' },
+    };
+    let currentProvider = localStorage.getItem('ai.provider') || 'claude';
+    if (!PROVIDERS[currentProvider]) currentProvider = 'claude';
+
+    // Migrate pre-settings localStorage keys (they belonged to the Claude config).
+    for (const f of ['apiKey', 'baseUrl', 'model']) {
+      const old = localStorage.getItem('ai.' + f);
+      if (old && !localStorage.getItem('ai.claude.' + f)) localStorage.setItem('ai.claude.' + f, old);
+      localStorage.removeItem('ai.' + f);
+    }
+
+    const cfgInputs = {
+      apiKey: document.getElementById('cfgKey'),
+      baseUrl: document.getElementById('cfgBase'),
+      model: document.getElementById('cfgModel'),
+    };
 
     // Settings persist across dialog openings (same webview origin = same localStorage)
-    apiKeyInput.value = localStorage.getItem('ai.apiKey') || '';
-    baseUrlInput.value = localStorage.getItem('ai.baseUrl') || '';
-    modelInput.value = localStorage.getItem('ai.model') || '';
-    apiKeyInput.addEventListener('change', () => localStorage.setItem('ai.apiKey', apiKeyInput.value));
-    baseUrlInput.addEventListener('change', () => localStorage.setItem('ai.baseUrl', baseUrlInput.value));
-    modelInput.addEventListener('change', () => localStorage.setItem('ai.model', modelInput.value));
-    document.getElementById('toggleAdvanced').addEventListener('click', () =>
-      document.getElementById('keyRow').classList.toggle('hidden'));
-
-    // Report which config the extension resolved (Claude Code local settings by default)
-    fetch('/api/health').then(r => r.json()).then(h => {
-      const status = document.getElementById('status');
-      if (h.hasAuth) {
-        status.textContent = '已加载本机 Claude Code 配置';
-        status.title = h.baseUrl;
-        if (!modelInput.value) modelInput.placeholder = h.model || '模型';
-      } else {
-        status.textContent = '未找到本机配置，请在「高级」里填 API Key';
-        document.getElementById('keyRow').classList.remove('hidden');
+    function loadProviderFields() {
+      for (const f of Object.keys(cfgInputs)) {
+        cfgInputs[f].value = localStorage.getItem(`ai.${currentProvider}.${f}`) || '';
       }
-    }).catch(() => {});
+      cfgInputs.apiKey.placeholder = t('apiKeyPh');
+      cfgInputs.baseUrl.placeholder = PROVIDERS[currentProvider].base;
+      cfgInputs.model.placeholder = PROVIDERS[currentProvider].model;
+    }
+    for (const f of Object.keys(cfgInputs)) {
+      cfgInputs[f].addEventListener('change', () => {
+        localStorage.setItem(`ai.${currentProvider}.${f}`, cfgInputs[f].value);
+        refreshHealth();
+      });
+    }
+    cfgInputs.model.addEventListener('input', () => updateModelName());
+
+    // Toolbar model label: custom override > server-resolved > provider default.
+    const modelName = document.getElementById('modelName');
+    function updateModelName(serverModel) {
+      modelName.textContent =
+        cfgInputs.model.value || serverModel || PROVIDERS[currentProvider].model;
+    }
+
+    // Report which config the extension resolved for the selected provider.
+    function refreshHealth() {
+      fetch('/api/health?provider=' + currentProvider).then(r => r.json()).then(h => {
+        updateModelName(h.model);
+        const pName = PROVIDERS[currentProvider].name;
+        if (h.hasAuth) {
+          statusEl.textContent = t('cfgLoaded').replace('{p}', pName);
+          statusEl.title = h.baseUrl || '';
+          if (!cfgInputs.model.value && h.model) cfgInputs.model.placeholder = h.model;
+        } else if (cfgInputs.apiKey.value) {
+          statusEl.textContent = t('cfgKeySet').replace('{p}', pName);
+          statusEl.title = '';
+        } else {
+          statusEl.textContent = t('cfgMissing').replace('{p}', pName);
+          statusEl.title = '';
+          settingsPanel.classList.remove('hidden');
+          showView('viewAI');
+        }
+      }).catch(() => updateModelName());
+    }
+
+    // ---------- settings panel (gear → two-level menu) ----------
+    const settingsPanel = document.getElementById('settingsPanel');
+    const langVal = document.getElementById('langVal');
+    const providerVal = document.getElementById('providerVal');
+
+    function showView(id) {
+      settingsPanel.querySelectorAll('.set-view').forEach(v => v.classList.toggle('hidden', v.id !== id));
+    }
+    settingsPanel.querySelectorAll('[data-goto]').forEach(el =>
+      el.addEventListener('click', () => showView(el.dataset.goto)));
+
+    const langList = document.getElementById('langList');
+    function renderLangs() {
+      langList.innerHTML = '';
+      for (const l of LANGS) {
+        const row = document.createElement('div');
+        row.className = 'menu-row';
+        const tick = document.createElement('span');
+        tick.className = 'tick';
+        tick.textContent = l.code === currentLang ? '✓' : '';
+        const name = document.createElement('span');
+        name.textContent = l.name;
+        row.append(tick, name);
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (l.code !== currentLang) {
+            currentLang = l.code;
+            localStorage.setItem('ai.lang', l.code);
+            applyLang();
+            renderLangs();
+          }
+          // Pick = done: close the panel like a native menu.
+          settingsPanel.classList.add('hidden');
+        });
+        langList.appendChild(row);
+      }
+    }
+
+    const providerList = document.getElementById('providerList');
+    function renderProviders() {
+      providerList.innerHTML = '';
+      for (const [code, p] of Object.entries(PROVIDERS)) {
+        const row = document.createElement('div');
+        row.className = 'menu-row';
+        const tick = document.createElement('span');
+        tick.className = 'tick';
+        tick.textContent = code === currentProvider ? '✓' : '';
+        const name = document.createElement('span');
+        name.textContent = p.name;
+        row.append(tick, name);
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (code !== currentProvider) {
+            currentProvider = code;
+            localStorage.setItem('ai.provider', code);
+            loadProviderFields();
+            renderEfforts();
+            refreshHealth();
+          }
+          providerVal.textContent = p.name;
+          renderProviders();
+        });
+        providerList.appendChild(row);
+      }
+    }
+
+    document.getElementById('showSettings').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const opening = settingsPanel.classList.contains('hidden');
+      settingsPanel.classList.toggle('hidden');
+      historyPanel.classList.add('hidden');
+      if (opening) {
+        // Re-render so the ✓ marks reflect the current state (they may have
+        // changed in another window — see the storage listener below).
+        renderLangs();
+        renderProviders();
+        showView('viewMain');
+      }
+    });
+
+    // AIbletonBar and the in-Live dialog are separate webviews on the same
+    // origin: a change made in one must refresh the other. The storage event
+    // fires only in OTHER contexts, i.e. exactly the windows that didn't make
+    // the change.
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'ai.lang' && e.newValue && I18N[e.newValue] && e.newValue !== currentLang) {
+        currentLang = e.newValue;
+        applyLang();
+        renderLangs();
+      }
+      if (e.key === 'ai.provider' && e.newValue && PROVIDERS[e.newValue] && e.newValue !== currentProvider) {
+        currentProvider = e.newValue;
+        providerVal.textContent = PROVIDERS[currentProvider].name;
+        loadProviderFields();
+        renderProviders();
+        renderEfforts();
+        refreshHealth();
+      }
+    });
+
+    function applyLang() {
+      document.documentElement.lang = LOCALES[currentLang];
+      document.getElementById('btnClose').title = t('close');
+      document.getElementById('btnMin').title = t('minimize');
+      document.getElementById('newChat').title = t('newChat');
+      document.getElementById('showHistory').title = t('history');
+      document.getElementById('showSettings').title = t('settings');
+      document.getElementById('modelBtn').title = t('modelTitle');
+      document.getElementById('effortSel').title = t('effortTitle');
+      document.getElementById('attachBtn').title = t('attachTitle');
+      document.getElementById('yoloLabel').title = t('yoloTitle');
+      document.getElementById('confirmAllow').textContent = t('allow');
+      document.getElementById('confirmDeny').textContent = t('deny');
+      sendBtn.title = sendBtn.classList.contains('stop') ? t('stop') : t('send');
+      input.placeholder = t('inputPh');
+      welcome.textContent = t('welcome');
+      document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+      langVal.textContent = LANGS.find(l => l.code === currentLang).name;
+      providerVal.textContent = PROVIDERS[currentProvider].name;
+      loadProviderFields();
+      renderEfforts();
+      refreshHealth();
+    }
 
     // Conversation history lives on the extension server (persisted to disk),
     // so it survives closing/reopening this window or using a browser instead.
@@ -375,9 +913,16 @@
     // poll /api/status; any (re)opened window picks the task up.
     let thinkingEl = null;
 
+    // Busy = a task is running server-side: the send button becomes a stop
+    // button (VSCode style); clicking it asks the server to abort the task.
+    function setBusy(on) {
+      sendBtn.classList.toggle('stop', on);
+      sendBtn.title = on ? t('stop') : t('send');
+    }
+
     function setThinking(on) {
       if (on && !thinkingEl) {
-        thinkingEl = addMsg('thinking', '思考中…（可关闭窗口，任务在后台继续）');
+        thinkingEl = addMsg('thinking', t('thinking'));
       } else if (!on && thinkingEl) {
         thinkingEl.remove();
         thinkingEl = null;
@@ -389,20 +934,22 @@
       if (!s) return;
       if (s.busy) {
         setThinking(true);
+        showConfirm(s.pending || null);
         setTimeout(pollStatus, 900);
         return;
       }
       setThinking(false);
-      sendBtn.disabled = false;
+      showConfirm(null);
+      setBusy(false);
       const h = await fetch('/api/history').then(r => r.json()).catch(() => null);
       if (h) renderMessages(h.messages);
-      if (s.error) addMsg('error', '出错：' + s.error);
+      if (s.error) addMsg('error', t('error') + s.error);
     }
 
     // Pick up a task that is still running from before this window opened.
     fetch('/api/status').then(r => r.json()).then(s => {
       if (s && s.busy) {
-        sendBtn.disabled = true;
+        setBusy(true);
         setThinking(true);
         setTimeout(pollStatus, 700);
       }
@@ -419,7 +966,7 @@
     const historyPanel = document.getElementById('historyPanel');
 
     function fmtTime(ts) {
-      return new Date(ts).toLocaleString('zh-CN', {
+      return new Date(ts).toLocaleString(LOCALES[currentLang], {
         month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
       });
     }
@@ -428,7 +975,7 @@
       const h = await fetch('/api/sessions').then(r => r.json()).catch(() => null);
       historyPanel.innerHTML = '';
       if (!h || !h.sessions || !h.sessions.length) {
-        historyPanel.innerHTML = '<div class="empty">暂无历史对话</div>';
+        historyPanel.innerHTML = '<div class="empty">' + t('noHistory') + '</div>';
         return;
       }
       h.sessions.forEach(s => {
@@ -438,16 +985,16 @@
         meta.className = 'meta';
         const name = document.createElement('div');
         name.className = 'name';
-        name.textContent = s.title || '新对话';
+        name.textContent = s.title || t('newChat');
         const time = document.createElement('div');
         time.className = 'time';
-        time.textContent = fmtTime(s.updatedAt) + ' · ' + s.messageCount + ' 条';
+        time.textContent = fmtTime(s.updatedAt) + ' · ' + s.messageCount + (t('msgUnit') ? ' ' + t('msgUnit') : '');
         meta.appendChild(name);
         meta.appendChild(time);
         const del = document.createElement('button');
         del.className = 'del';
         del.textContent = '✕';
-        del.title = '删除此对话';
+        del.title = t('delSession');
         del.addEventListener('click', async (e) => {
           e.stopPropagation();
           const r = await fetch('/api/delete', {
@@ -475,30 +1022,217 @@
 
     document.getElementById('showHistory').addEventListener('click', (e) => {
       e.stopPropagation();
+      settingsPanel.classList.add('hidden');
       historyPanel.classList.toggle('hidden');
       if (!historyPanel.classList.contains('hidden')) loadSessions();
     });
     document.addEventListener('click', (e) => {
       if (!historyPanel.contains(e.target)) historyPanel.classList.add('hidden');
+      if (!settingsPanel.contains(e.target)) settingsPanel.classList.add('hidden');
     });
+
+    // ----- input-area toolbar: model / effort / attach / YOLO -----
+    // Effort levels match each provider's own naming (Claude Code / Codex CLI /
+    // Gemini thinking); the empty option means "provider default".
+    const EFFORT_LEVELS = {
+      claude: ['low', 'medium', 'high', 'xhigh', 'max'],
+      codex:  ['minimal', 'low', 'medium', 'high', 'xhigh'],
+      gemini: ['low', 'medium', 'high', 'max'],
+    };
+    const effortSel = document.getElementById('effortSel');
+    function renderEfforts() {
+      const levels = EFFORT_LEVELS[currentProvider];
+      const saved = localStorage.getItem('ai.effort') || '';
+      effortSel.innerHTML = '';
+      const dflt = document.createElement('option');
+      dflt.value = '';
+      dflt.textContent = t('effortDefault');
+      effortSel.appendChild(dflt);
+      for (const lv of levels) {
+        const opt = document.createElement('option');
+        opt.value = lv;
+        opt.textContent = lv;
+        effortSel.appendChild(opt);
+      }
+      // A level saved under another provider may not exist here → fall back to default.
+      effortSel.value = levels.includes(saved) ? saved : '';
+    }
+    renderEfforts();
+    effortSel.addEventListener('change', () => localStorage.setItem('ai.effort', effortSel.value));
+
+    const yoloToggle = document.getElementById('yoloToggle');
+    const yoloLabel = document.getElementById('yoloLabel');
+    yoloToggle.checked = localStorage.getItem('ai.yolo') !== '0'; // default on (previous behavior)
+    yoloLabel.classList.toggle('on', yoloToggle.checked);
+    yoloToggle.addEventListener('change', () => {
+      localStorage.setItem('ai.yolo', yoloToggle.checked ? '1' : '0');
+      yoloLabel.classList.toggle('on', yoloToggle.checked);
+    });
+
+    // Model label doubles as a shortcut to the AI settings view (click again to close).
+    document.getElementById('modelBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      historyPanel.classList.add('hidden');
+      const opening = settingsPanel.classList.contains('hidden');
+      settingsPanel.classList.toggle('hidden');
+      if (opening) {
+        renderLangs();
+        renderProviders();
+        showView('viewAI');
+      }
+    });
+
+    // ----- attachments -----
+    const chips = document.getElementById('chips');
+    const fileInput = document.getElementById('fileInput');
+    const pendingAttachments = []; // {name, mime, text?|data?, kind?: 'midi'|'als'}
+    const MAX_FILE = 2 * 1024 * 1024;      // images / text
+    const MAX_BIN = 5 * 1024 * 1024;       // .mid / .als (parsed server-side)
+    const TEXT_EXT = /\.(txt|md|markdown|json|jsonc|csv|tsv|xml|log|js|ts|py|sh|html|css|yml|yaml|ini)$/i;
+    const binKind = (name) => /\.midi?$/i.test(name) ? 'midi' : (/\.als$/i.test(name) ? 'als' : null);
+    const attIcon = (a) => a.kind === 'midi' ? '🎹' : a.kind === 'als' ? '🎚' : (a.data ? '🖼' : '📄');
+
+    function renderChips() {
+      chips.innerHTML = '';
+      pendingAttachments.forEach((a, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        const nm = document.createElement('span');
+        nm.className = 'nm';
+        nm.textContent = attIcon(a) + ' ' + a.name;
+        const x = document.createElement('button');
+        x.className = 'x';
+        x.textContent = '✕';
+        x.addEventListener('click', () => {
+          pendingAttachments.splice(i, 1);
+          renderChips();
+        });
+        chip.append(nm, x);
+        chips.appendChild(chip);
+      });
+    }
+
+    document.getElementById('attachBtn').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      addFiles(fileInput.files);
+      fileInput.value = '';
+    });
+
+    // Live's embedded webview can't pop a native file dialog, so drag & drop
+    // and paste are the primary ways to attach there (the button still works
+    // in regular browsers and AIbletonBar).
+    function addFiles(files) {
+      for (const f of files) {
+        if (pendingAttachments.length >= 10) break;
+        const kind = binKind(f.name);
+        const max = kind ? MAX_BIN : MAX_FILE;
+        if (f.size > max) { addMsg('error', `${t('fileTooBig')}${f.name}（>${Math.round(max / 1048576)}MB）`); continue; }
+        if (kind) {
+          // .mid / .als — uploaded as base64; the extension server parses
+          // them into a text summary before anything reaches the model.
+          const rd = new FileReader();
+          rd.onload = () => {
+            pendingAttachments.push({ name: f.name, mime: f.type || 'application/octet-stream', kind, data: String(rd.result).split(',')[1] });
+            renderChips();
+          };
+          rd.readAsDataURL(f);
+        } else if (/^image\/(png|jpe?g|webp|gif)$/.test(f.type)) {
+          const rd = new FileReader();
+          rd.onload = () => {
+            pendingAttachments.push({ name: f.name, mime: f.type, data: String(rd.result).split(',')[1] });
+            renderChips();
+          };
+          rd.readAsDataURL(f);
+        } else if (f.type.startsWith('text/') || TEXT_EXT.test(f.name)) {
+          const rd = new FileReader();
+          rd.onload = () => {
+            pendingAttachments.push({ name: f.name, mime: f.type || 'text/plain', text: String(rd.result).slice(0, 20000) });
+            renderChips();
+          };
+          rd.readAsText(f);
+        } else {
+          addMsg('error', t('fileUnsupported') + f.name);
+        }
+      }
+    }
+
+    // Drag files anywhere onto the window.
+    let dragDepth = 0;
+    window.addEventListener('dragenter', (e) => {
+      if (![...(e.dataTransfer?.types ?? [])].includes('Files')) return;
+      e.preventDefault();
+      if (++dragDepth === 1) document.body.classList.add('dragging');
+    });
+    window.addEventListener('dragover', (e) => {
+      if ([...(e.dataTransfer?.types ?? [])].includes('Files')) e.preventDefault();
+    });
+    window.addEventListener('dragleave', () => {
+      if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); }
+    });
+    window.addEventListener('drop', (e) => {
+      if (!e.dataTransfer?.files?.length) return;
+      e.preventDefault();
+      dragDepth = 0;
+      document.body.classList.remove('dragging');
+      addFiles(e.dataTransfer.files);
+    });
+
+    // Paste images/files straight from the clipboard (⌘V).
+    document.addEventListener('paste', (e) => {
+      const files = e.clipboardData?.files;
+      if (!files?.length) return; // plain-text paste into the input stays untouched
+      e.preventDefault();
+      addFiles(files);
+    });
+
+    // ----- permission ask bar (YOLO off) -----
+    const confirmBar = document.getElementById('confirmBar');
+    const confirmWhat = document.getElementById('confirmWhat');
+    function showConfirm(pending) {
+      if (!pending) { confirmBar.classList.add('hidden'); return; }
+      const args = JSON.stringify(pending.input);
+      confirmWhat.textContent = t('confirmAsk') + ': ' + pending.tool + ' ' + (args.length > 120 ? args.slice(0, 120) + '…' : args);
+      confirmWhat.title = args;
+      confirmBar.classList.remove('hidden');
+    }
+    function answerConfirm(allow) {
+      confirmBar.classList.add('hidden');
+      fetch('/api/confirm', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ allow }),
+      }).catch(() => {});
+    }
+    document.getElementById('confirmAllow').addEventListener('click', () => answerConfirm(true));
+    document.getElementById('confirmDeny').addEventListener('click', () => answerConfirm(false));
 
     async function send() {
       const text = input.value.trim();
-      if (!text) return;
+      if (!text && !pendingAttachments.length) return;
+      const attachments = pendingAttachments.splice(0);
+      renderChips();
       input.value = '';
+      fitInput();
       if (welcome.parentNode) welcome.remove();
-      addMsg('user', text);
+      addMsg('user', attachments.length
+        ? text + attachments.map(a => `\n[${attIcon(a)} ${a.name}]`).join('')
+        : text);
 
-      sendBtn.disabled = true;
+      setBusy(true);
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            text,
-            apiKey: apiKeyInput.value || undefined,
-            baseUrl: baseUrlInput.value || undefined,
-            model: modelInput.value || undefined,
+            text: text || '(附件)',
+            provider: currentProvider,
+            language: currentLang,
+            apiKey: cfgInputs.apiKey.value || undefined,
+            baseUrl: cfgInputs.baseUrl.value || undefined,
+            model: cfgInputs.model.value || undefined,
+            effort: effortSel.value || undefined,
+            yolo: yoloToggle.checked,
+            attachments: attachments.length ? attachments : undefined,
           }),
         });
         const data = await res.json();
@@ -507,17 +1241,42 @@
         setThinking(true);
         setTimeout(pollStatus, 700);
       } catch (err) {
-        addMsg('error', '出错：' + err.message);
-        sendBtn.disabled = false;
+        addMsg('error', t('error') + err.message);
+        setBusy(false);
       } finally {
         input.focus();
       }
     }
 
-    sendBtn.addEventListener('click', send);
+    sendBtn.addEventListener('click', () => {
+      if (sendBtn.classList.contains('stop')) {
+        // Busy → the button means "stop". pollStatus flips it back to the
+        // arrow once the task has actually wound down server-side.
+        fetch('/api/stop', { method: 'POST' }).catch(() => {});
+      } else {
+        send();
+      }
+    });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
+
+    // 输入框随内容自动增高（VSCode 式），上限由 CSS max-height 控制
+    function fitInput() {
+      const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 8;
+      input.style.height = 'auto';
+      const h = input.scrollHeight + 2; // +2 上下边框
+      input.style.height = Math.min(h, 134) + 'px';
+      input.style.overflowY = h > 134 ? 'auto' : 'hidden';
+      // 日志区被输入框压缩后保持贴底，最新消息不被遮挡；用户上翻读历史时不拉动
+      if (atBottom) log.scrollTop = log.scrollHeight;
+    }
+    input.addEventListener('input', fitInput);
+
+    // Initial render: settings lists, then localized strings + provider config state.
+    renderLangs();
+    renderProviders();
+    applyLang();
     input.focus();
   </script>
 </body>
