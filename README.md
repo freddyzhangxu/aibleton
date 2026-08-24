@@ -5,8 +5,9 @@
 <h1 align="center">AIbleton</h1>
 
 <p align="center">
-  A Claude-powered AI assistant inside <b>Ableton Live 12</b> — chat, generate MIDI,<br>
-  load drum kits, search samples, and control devices & tracks without leaving your session.
+  An AI assistant inside <b>Ableton Live 12</b> — Claude, Codex, or Gemini, your call.<br>
+  Chat, generate MIDI, load drum kits, search samples, and control devices &<br>
+  tracks without leaving your session.
 </p>
 
 <p align="center">
@@ -41,11 +42,20 @@ The project has two parts:
 
 ## Features
 
-- **Chat inside Live** — right-click any track / scene / clip → `打开…` opens the assistant
-  in a modal dialog. The same UI is also reachable at `http://localhost:17666` from any
+- **Chat inside Live** — right-click any track / scene / clip → Extensions →
+  **AIbleton: Open** opens the assistant in a modal dialog. The same UI is also reachable at `http://localhost:17666` from any
   browser, and from AIbletonBar.
-- **MIDI generation** — write arrangement or Session-View clips from natural language,
-  with per-note pitch / timing / velocity and swing support.
+- **Your choice of model** — Claude, OpenAI Codex, or Google Gemini, switchable in the
+  dialog. Credentials are reused from the matching local CLI (Claude Code, Codex CLI
+  including ChatGPT-account sign-in, Gemini CLI) or entered by hand, and a reasoning-effort
+  selector trades speed for deeper thinking when you need it.
+- **File attachments** — attach images or text files, or drop in a `.mid` file or a whole
+  `.als` Live Set: binary music files are parsed into compact text summaries the model
+  can read, so you can ask *"what key is this loop in?"* or *"recreate this bass line
+  on track 3"*. Click to pick, drag into the window, or ⌘V paste.
+- **MIDI generation & editing** — write arrangement or Session-View clips from natural
+  language, or read and rework the notes of existing clips — per-note pitch / timing /
+  velocity, with swing support.
 - **One-shot 808 kit** — builds a Drum Rack with Simpler pads loaded with real factory
   808 samples, ready to program against a GM-style note map.
 - **Sample search & import** — searches your local Splice sync folder, Ableton User
@@ -56,15 +66,19 @@ The project has two parts:
   & pan, create and rename scenes, set tempo.
 - **Operation guidance** — answers how-to questions about Live itself (mixing, warping,
   routing, shortcuts…) with step-by-step instructions, right where you're working.
+- **Localized UI** — the chat interface speaks English, 中文, Deutsch, Français,
+  日本語, Español and Italiano, matching Live's own language list.
 
 ## Requirements
 
 - **Ableton Live 12** (12.4.5+) with the Extensions SDK beta
 - **Node.js ≥ 24.14.1**
-- **Claude API access** — reused automatically from Claude Code's `~/.claude/settings.json`,
-  or via `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL`, or entered in the
-  dialog's「高级」section. Nothing sensitive is stored by the extension.
-  *(Claude is the only provider for now — Codex & Gemini support is on the [Roadmap](#roadmap).)*
+- **An AI provider** — Claude, OpenAI Codex, or Google Gemini. Credentials are reused
+  automatically from the matching local CLI: Claude Code's `~/.claude/settings.json`,
+  Codex CLI's `~/.codex/auth.json` (API key or ChatGPT-account sign-in), Gemini CLI's
+  `~/.gemini/.env`. You can also use environment variables (`ANTHROPIC_*`, `OPENAI_*`,
+  `GEMINI_API_KEY` / `GOOGLE_API_KEY`) or enter everything in the dialog's
+  **Settings → AI Provider** section. Nothing sensitive is stored by the extension.
 - **macOS** — only needed for AIbletonBar; the extension itself is platform-independent
   *(a Windows version of AIbletonBar is planned)*
 
@@ -80,7 +94,7 @@ npm install
 npm start        # build + run inside Live's Extension Host
 ```
 
-Then in Live: right-click a track, scene or clip → **打开…** — or open
+Then in Live: right-click a track, scene or clip → Extensions → **AIbleton: Open** — or open
 `http://localhost:17666` in a browser.
 
 ### Scripts
@@ -102,23 +116,24 @@ open AIbletonBar.app
 
 - **⌥⌘A** toggles the panel globally; it docks to the right edge of the screen,
   stays on top, and follows you across Spaces.
+- Supports the chat's file attachments with a native macOS file picker.
 - Shows an offline placeholder when the extension isn't loaded in Live, and
   reconnects automatically (3 s polling).
 
 ## How it works
 
 The extension starts a small HTTP server (port `17666`) inside Live's Extension Host.
-The chat page talks to Claude with a tool set backed by the Extensions SDK —
-`get_song_overview`, `write_midi_clip`, `write_session_clip`, `load_drum_kit`,
-`search_samples`, `import_audio_clip`, `insert_device`, `set_device_parameter`,
-`set_track_mixer`, scene & tempo tools, and more. Every answer can directly read and
-modify the open Live Set.
+The chat page talks to the selected provider — Claude, Codex, or Gemini — with a tool
+set backed by the Extensions SDK: `get_song_overview`, `write_midi_clip`,
+`write_session_clip`, `load_drum_kit`, `search_samples`, `import_audio_clip`,
+`insert_device`, `set_device_parameter`, `set_track_mixer`, scene & tempo tools, and
+more. Every answer can directly read and modify the open Live Set.
 
 ```
 ┌────────────────────┐      ┌──────────────────────┐      ┌────────────────┐
-│ Chat UI            │      │ Assistant server     │      │ Claude API     │
-│ (dialog / browser  │─────▶│ localhost:17666      │─────▶│ (tool use)     │
-│  / AIbletonBar)    │      │ + ~20 Live tools     │◀─────│                │
+│ Chat UI            │      │ Assistant server     │      │ Model API      │
+│ (dialog / browser  │─────▶│ localhost:17666      │─────▶│ Claude / Codex │
+│  / AIbletonBar)    │      │ + ~20 Live tools     │◀─────│ / Gemini       │
 └────────────────────┘      └──────────┬───────────┘      └────────────────┘
                                        │ Extensions SDK
                                        ▼
@@ -133,8 +148,10 @@ modify the open Live Set.
 ```
 AIbleton/          Live extension (TypeScript)
 ├── src/extension.ts   entry point — registers context-menu actions, starts server
-├── src/server.ts      assistant server + tool implementations
+├── src/server.ts      assistant server + tool implementations (Claude / Codex / Gemini)
+├── src/fileparsers.ts parses .mid / .als attachments into text summaries for the model
 ├── ui/interface.html  chat UI
+├── scripts/           smoke tests (npx tsx scripts/test-fileparsers.ts)
 └── vendor/            Extensions SDK beta tarballs (gitignored, see note below)
 
 AIbletonBar/       macOS floating sidebar (Swift, ~180 lines, no deps)
@@ -153,8 +170,6 @@ and modal dialogs, which is exactly why AIbletonBar exists as a separate sidebar
 
 ## Roadmap
 
-- **More model providers** — the assistant currently runs on Claude; support for
-  OpenAI Codex and Google Gemini is planned.
 - **AIbletonBar for Windows** — the floating sidebar is macOS-only today; a Windows
   version is on the list.
 - **Deeper Live integration** — move the sidebar into Live itself once the SDK's
