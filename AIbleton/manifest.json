@@ -1,7 +1,7 @@
 {
   "name": "AIbleton",
-  "author": "freddy",
+  "author": "Freddy Zhang",
   "entry": "dist/extension.js",
-  "version": "0.8.0-beta",
+  "version": "0.8.1",
   "minimumApiVersion": "1.0.0"
 }

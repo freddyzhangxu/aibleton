@@ -11,3 +11,10 @@ extensions-sdk-*/
 
 # AIbletonBar 构建产物
 *.app
+
+# 安装器调试 scratch
+bisect/
+install-test/
+
+# 发布物（走 GitHub Releases，不入库）
+AIbletonBar/*.zip
