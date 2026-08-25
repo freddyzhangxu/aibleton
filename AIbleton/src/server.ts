@@ -125,22 +125,74 @@ interface LocalConfig {
 
 const configCache: Partial<Record<Provider, LocalConfig | null>> = {};
 
+/**
+ * Read a file under the user's home directory (~/.claude, ~/.codex, ~/.gemini).
+ *
+ * The installed Extension Host is launched by Live as
+ *   node --permission --allow-fs-read=<Extensions dirs only> … --allow-child-process
+ * so a direct fs.readFileSync of the home dir fails with ERR_ACCESS_DENIED.
+ * But the permission model does not propagate to spawned children — and Live
+ * explicitly grants --allow-child-process — so /bin/cat still reads those
+ * files. Dev mode (`ableton-extensions-cli run`) has no --permission at all
+ * and takes the direct path. If Ableton ever drops --allow-child-process the
+ * fallback simply fails too and we behave as "no CLI config detected".
+ */
+function readHomeFile(p: string): string | null {
+  try {
+    return fs.readFileSync(p, "utf8");
+  } catch (e) {
+    // Only the sandbox denial is worth retrying via child process; a genuine
+    // ENOENT just means the CLI is not installed/configured.
+    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") return null;
+  }
+  if (process.platform === "win32") return null;
+  try {
+    return execFileSync("/bin/cat", [p], {
+      encoding: "utf8",
+      timeout: 5000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** writeFileSync with the same child-process fallback as readHomeFile. */
+function writeHomeFile(p: string, content: string): void {
+  try {
+    fs.writeFileSync(p, content);
+    return;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") throw e;
+  }
+  if (process.platform === "win32") throw new Error(`ERR_ACCESS_DENIED: ${p}`);
+  execFileSync("/usr/bin/tee", [p], {
+    input: content,
+    timeout: 5000,
+    stdio: ["pipe", "ignore", "ignore"],
+  });
+}
+
 function loadClaudeCodeConfig(): LocalConfig | null {
   if ("claude" in configCache) return configCache.claude ?? null;
-  try {
-    const settingsPath = path.join(os.homedir(), ".claude", "settings.json");
-    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
-      env?: Record<string, string>;
-      model?: string;
-    };
-    const env = settings.env ?? {};
-    configCache.claude = {
-      baseUrl: env.ANTHROPIC_BASE_URL,
-      authToken: env.ANTHROPIC_AUTH_TOKEN,
-      apiKey: env.ANTHROPIC_API_KEY,
-      model: env.ANTHROPIC_MODEL || settings.model,
-    };
-  } catch {
+  const raw = readHomeFile(path.join(os.homedir(), ".claude", "settings.json"));
+  if (raw) {
+    try {
+      const settings = JSON.parse(raw) as {
+        env?: Record<string, string>;
+        model?: string;
+      };
+      const env = settings.env ?? {};
+      configCache.claude = {
+        baseUrl: env.ANTHROPIC_BASE_URL,
+        authToken: env.ANTHROPIC_AUTH_TOKEN,
+        apiKey: env.ANTHROPIC_API_KEY,
+        model: env.ANTHROPIC_MODEL || settings.model,
+      };
+    } catch {
+      configCache.claude = null;
+    }
+  } else {
     configCache.claude = null;
   }
   return configCache.claude ?? null;
@@ -160,30 +212,29 @@ function loadCodexConfig(): LocalConfig | null {
   let refreshToken: string | undefined;
   let model: string | undefined;
   let reasoningEffort: string | undefined;
-  try {
-    const auth = JSON.parse(
-      fs.readFileSync(path.join(os.homedir(), ".codex", "auth.json"), "utf8"),
-    ) as {
-      OPENAI_API_KEY?: string | null;
-      tokens?: { access_token?: string; account_id?: string; refresh_token?: string };
-    };
-    if (typeof auth.OPENAI_API_KEY === "string" && auth.OPENAI_API_KEY) {
-      apiKey = auth.OPENAI_API_KEY;
+  const authRaw = readHomeFile(path.join(os.homedir(), ".codex", "auth.json"));
+  if (authRaw) {
+    try {
+      const auth = JSON.parse(authRaw) as {
+        OPENAI_API_KEY?: string | null;
+        tokens?: { access_token?: string; account_id?: string; refresh_token?: string };
+      };
+      if (typeof auth.OPENAI_API_KEY === "string" && auth.OPENAI_API_KEY) {
+        apiKey = auth.OPENAI_API_KEY;
+      }
+      accessToken = auth.tokens?.access_token || undefined;
+      accountId = auth.tokens?.account_id || undefined;
+      refreshToken = auth.tokens?.refresh_token || undefined;
+    } catch {
+      // Unparseable auth.json — fall through to env vars at resolve time.
     }
-    accessToken = auth.tokens?.access_token || undefined;
-    accountId = auth.tokens?.account_id || undefined;
-    refreshToken = auth.tokens?.refresh_token || undefined;
-  } catch {
-    // No auth.json — fall through to env vars at resolve time.
   }
-  try {
-    const toml = fs.readFileSync(path.join(os.homedir(), ".codex", "config.toml"), "utf8");
+  const toml = readHomeFile(path.join(os.homedir(), ".codex", "config.toml"));
+  if (toml) {
     const m = /^model\s*=\s*"([^"]+)"/m.exec(toml);
     if (m) model = m[1];
     const effort = /^model_reasoning_effort\s*=\s*"([^"]+)"/m.exec(toml);
     if (effort) reasoningEffort = effort[1];
-  } catch {
-    // No config.toml — the default model applies.
   }
   const hasAuth = Boolean(apiKey || accessToken || refreshToken);
   configCache.codex = hasAuth || model
@@ -205,12 +256,10 @@ function loadGeminiConfig(): LocalConfig | null {
   if ("gemini" in configCache) return configCache.gemini ?? null;
   let apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || undefined;
   if (!apiKey) {
-    try {
-      const envFile = fs.readFileSync(path.join(os.homedir(), ".gemini", ".env"), "utf8");
+    const envFile = readHomeFile(path.join(os.homedir(), ".gemini", ".env"));
+    if (envFile) {
       const m = /^(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*"?([^"\r\n]+)"?/m.exec(envFile);
       if (m) apiKey = m[1].trim();
-    } catch {
-      // No .env file.
     }
   }
   configCache.gemini = apiKey ? { apiKey } : null;
@@ -221,6 +270,48 @@ function loadLocalConfig(provider: Provider): LocalConfig | null {
   if (provider === "codex") return loadCodexConfig();
   if (provider === "gemini") return loadGeminiConfig();
   return loadClaudeCodeConfig();
+}
+
+/**
+ * Manual provider config from the settings UI, persisted as providers.json in
+ * the extension's storage directory. Resolution order per field:
+ * per-request override > manual > CLI autodetect > env. CLI autodetect reads
+ * ~/.claude / ~/.codex / ~/.gemini — inside the installed Extension Host that
+ * only works through readHomeFile's child-process fallback, so a manual
+ * config remains the reliable last resort there.
+ */
+let manualConfigs: Partial<Record<Provider, LocalConfig>> = {};
+let manualConfigPath: string | null = null;
+
+function loadManualConfigs(context: Ctx): void {
+  // Same directory as chats.json (storage dir, or the fallback it picked).
+  const dir = storeFileOverride
+    ? path.dirname(storeFileOverride)
+    : context.environment.storageDirectory || path.dirname(fallbackStorePath());
+  manualConfigPath = path.join(dir, "providers.json");
+  try {
+    const data = JSON.parse(fs.readFileSync(manualConfigPath, "utf8")) as
+      Partial<Record<Provider, LocalConfig>>;
+    manualConfigs = {};
+    for (const p of ["claude", "codex", "gemini"] as Provider[]) {
+      const cfg = data[p];
+      if (cfg && typeof cfg === "object") manualConfigs[p] = cfg;
+    }
+  } catch {
+    manualConfigs = {};
+  }
+  const configured = Object.keys(manualConfigs).join(", ");
+  console.log(`[ai-assistant] Provider 手动配置: ${configured || "无"}`);
+}
+
+function saveManualConfigs(): void {
+  if (!manualConfigPath) return;
+  try {
+    fs.mkdirSync(path.dirname(manualConfigPath), { recursive: true });
+    fs.writeFileSync(manualConfigPath, JSON.stringify(manualConfigs, null, 2));
+  } catch {
+    // In-memory copy still works for this run.
+  }
 }
 
 type Ctx = ExtensionContext<"1.0.0">;
@@ -505,7 +596,7 @@ const SYSTEM_PROMPT = `You are an AI music-production assistant living inside Ab
 You can chat about music production and ALSO directly operate the user's Live Set with the provided tools.
 
 Rules:
-- Reply in the same language the user writes in (default: Chinese).
+- Reply in the same language the user writes in (default: English).
 - Be concise and practical. No fluff.
 - Before calling tools that modify the Set, briefly say what you are about to do.
 - Track indices are 0-based, matching get_song_overview output. Call get_song_overview first whenever you need current track/scene info.
@@ -1003,7 +1094,7 @@ const LANG_NAMES: Record<string, string> = {
 };
 
 function systemPromptFor(language?: string): string {
-  const name = LANG_NAMES[language ?? ""] ?? "Chinese";
+  const name = LANG_NAMES[language ?? ""] ?? "English";
   return (
     SYSTEM_PROMPT +
     `\n\nThe user's UI language is ${name} — use it as the default reply language unless they write in a different language.`
@@ -1032,7 +1123,7 @@ const STOP_NOTE: Record<string, string> = {
 };
 
 function stopNote(language?: string): string {
-  return STOP_NOTE[language ?? ""] ?? STOP_NOTE.zh;
+  return STOP_NOTE[language ?? ""] ?? STOP_NOTE.en;
 }
 
 // ---------- Chat sessions (server-side, persisted) ----------
@@ -1184,13 +1275,16 @@ function saveStore(context: Ctx) {
 function resolveConfig(req: ChatRequest): ResolvedConfig {
   const provider: Provider =
     req.provider === "codex" || req.provider === "gemini" ? req.provider : "claude";
-  const local = loadLocalConfig(provider) ?? {};
+  // Manual settings-UI config wins over CLI autodetect; per-request fields win over both.
+  const local: LocalConfig = { ...(loadLocalConfig(provider) ?? {}), ...(manualConfigs[provider] ?? {}) };
   const fromLocal = !req.apiKey && Boolean(local.authToken || local.apiKey);
 
   if (provider === "codex") {
     // ChatGPT-account tokens only work against the chatgpt.com backend;
     // plain API keys go to api.openai.com (or a user-supplied relay).
-    const chatgpt = !req.apiKey && !req.baseUrl && Boolean(local.chatgpt);
+    const chatgpt =
+      !req.apiKey && !req.baseUrl && !local.apiKey &&
+      Boolean(local.chatgpt || local.authToken || local.refreshToken);
     return {
       provider,
       baseUrl: (req.baseUrl || local.baseUrl || process.env.OPENAI_BASE_URL ||
@@ -1394,10 +1488,22 @@ async function refreshCodexToken(cfg: ResolvedConfig): Promise<void> {
   if (!data?.access_token) throw fail;
   cfg.authToken = data.access_token;
   if (data.refresh_token) cfg.refreshToken = data.refresh_token;
-  // Persist back, mirroring what codex CLI does (best effort).
+  // Update the manual store too: providers.json lives in the always-writable
+  // storage dir, so refreshed tokens survive even if the write-back to
+  // ~/.codex fails (installed sandbox without the child-process fallback).
+  const manual = manualConfigs.codex;
+  if (manual?.refreshToken) {
+    manual.authToken = data.access_token;
+    if (data.refresh_token) manual.refreshToken = data.refresh_token;
+    saveManualConfigs();
+  }
+  // Persist back, mirroring what codex CLI does (best effort — writeHomeFile
+  // routes around the installed sandbox's fs-write restriction via tee).
   try {
     const file = path.join(os.homedir(), ".codex", "auth.json");
-    const cur = JSON.parse(fs.readFileSync(file, "utf8")) as {
+    const raw = readHomeFile(file);
+    if (!raw) throw new Error("auth.json unreadable");
+    const cur = JSON.parse(raw) as {
       tokens?: Record<string, unknown>;
       last_refresh?: string;
     };
@@ -1408,7 +1514,7 @@ async function refreshCodexToken(cfg: ResolvedConfig): Promise<void> {
       ...(data.id_token ? { id_token: data.id_token } : {}),
     };
     cur.last_refresh = new Date().toISOString();
-    fs.writeFileSync(file, JSON.stringify(cur, null, 2));
+    writeHomeFile(file, JSON.stringify(cur, null, 2));
     if (configCache.codex) {
       configCache.codex.authToken = data.access_token;
       if (data.refresh_token) configCache.codex.refreshToken = data.refresh_token;
@@ -1430,7 +1536,7 @@ async function ensureCodexAuth(cfg: ResolvedConfig): Promise<void> {
 async function chat(context: Ctx, req: ChatRequest) {
   const cfg = resolveConfig(req);
   if (!cfg.authToken && !cfg.refreshToken) {
-    const hint = NO_AUTH_HINT[req.language ?? ""] ?? NO_AUTH_HINT.zh;
+    const hint = NO_AUTH_HINT[req.language ?? ""] ?? NO_AUTH_HINT.en;
     throw new Error(hint.replace("{p}", PROVIDER_NAMES[cfg.provider]));
   }
   if (cfg.provider === "codex") {
@@ -2041,22 +2147,82 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       res.writeHead(status, { "content-type": `${type}; charset=utf-8` });
       res.end(body);
     };
+    const readBody = (cb: (parsed: Record<string, unknown>) => void) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          cb(body ? (JSON.parse(body) as Record<string, unknown>) : {});
+        } catch (err) {
+          send(400, JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+      });
+    };
 
     if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
       send(200, chatInterface, "text/html");
       return;
     }
     if (req.method === "GET" && req.url?.startsWith("/api/health")) {
-      const provider =
+      const providerParam =
         new URL(req.url, "http://127.0.0.1").searchParams.get("provider") ?? undefined;
+      const provider: Provider =
+        providerParam === "codex" || providerParam === "gemini" ? providerParam : "claude";
       const cfg = resolveConfig({ provider });
+      const manual = manualConfigs[provider];
+      const source =
+        manual && (manual.apiKey || manual.authToken || manual.refreshToken)
+          ? "manual"
+          : loadLocalConfig(provider)
+            ? "cli"
+            : "none";
       send(200, JSON.stringify({
         ok: true,
         provider: cfg.provider,
         hasAuth: Boolean(cfg.authToken),
         baseUrl: cfg.baseUrl,
         model: cfg.model,
+        source,
       }));
+      return;
+    }
+    if (req.method === "GET" && req.url?.startsWith("/api/provider-config")) {
+      const providerParam =
+        new URL(req.url, "http://127.0.0.1").searchParams.get("provider") ?? undefined;
+      const provider: Provider =
+        providerParam === "codex" || providerParam === "gemini" ? providerParam : "claude";
+      const cli = loadLocalConfig(provider);
+      send(200, JSON.stringify({
+        provider,
+        manual: manualConfigs[provider] ?? null,
+        detected: cli
+          ? {
+              baseUrl: cli.baseUrl,
+              model: cli.model,
+              hasAuth: Boolean(cli.apiKey || cli.authToken || cli.refreshToken),
+            }
+          : null,
+      }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/provider-config") {
+      readBody((parsed) => {
+        const provider: Provider =
+          parsed.provider === "codex" || parsed.provider === "gemini"
+            ? parsed.provider
+            : "claude";
+        const fields = (parsed.config ?? {}) as Record<string, unknown>;
+        const cur: LocalConfig = { ...(manualConfigs[provider] ?? {}) };
+        for (const key of ["baseUrl", "authToken", "apiKey", "model", "accountId", "refreshToken", "reasoningEffort"] as const) {
+          const v = fields[key];
+          if (typeof v === "string" && v.trim()) (cur as Record<string, unknown>)[key] = v.trim();
+          else if (key in fields) delete (cur as Record<string, unknown>)[key];
+        }
+        if (Object.keys(cur).length) manualConfigs[provider] = cur;
+        else delete manualConfigs[provider];
+        saveManualConfigs();
+        send(200, JSON.stringify({ ok: true, manual: manualConfigs[provider] ?? null }));
+      });
       return;
     }
     if (req.method === "GET" && req.url === "/api/open") {
@@ -2088,17 +2254,6 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       send(200, JSON.stringify({ id: session.id }));
       return;
     }
-    const readBody = (cb: (parsed: Record<string, unknown>) => void) => {
-      let body = "";
-      req.on("data", (chunk) => (body += chunk));
-      req.on("end", () => {
-        try {
-          cb(body ? (JSON.parse(body) as Record<string, unknown>) : {});
-        } catch (err) {
-          send(400, JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
-        }
-      });
-    };
     if (req.method === "POST" && req.url === "/api/switch") {
       readBody((parsed) => {
         const target = sessions.find((s) => s.id === parsed.id);
@@ -2248,6 +2403,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       });
     };
     loadStore(context);
+    loadManualConfigs(context);
     tryListen(PREFERRED_PORT);
   });
 }

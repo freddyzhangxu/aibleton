@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8">
@@ -626,9 +626,9 @@
       },
     };
 
-    let currentLang = localStorage.getItem('ai.lang') || 'zh';
-    if (!I18N[currentLang]) currentLang = 'zh';
-    const t = (k) => I18N[currentLang][k] ?? I18N.zh[k] ?? k;
+    let currentLang = localStorage.getItem('ai.lang') || 'en';
+    if (!I18N[currentLang]) currentLang = 'en';
+    const t = (k) => I18N[currentLang][k] ?? I18N.en[k] ?? k;
 
     // ---------- AI providers ----------
     const PROVIDERS = {
