@@ -24,12 +24,12 @@
 
 ## Download
 
-**Current version: v0.8.1** (pre-release) — get it from the
+**Current version: v0.8.2** (pre-release) — get it from the
 [**Releases page**](https://github.com/freddyzhangxu/aibleton/releases):
 
 | File | What it is |
 |---|---|
-| [AIbleton-0.8.1.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.1/AIbleton-0.8.1.ablx) | The Live extension — **required**. Drop it onto Live's **Settings → Extensions** page. |
+| [AIbleton-0.8.2.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.2/AIbleton-0.8.2.ablx) | The Live extension — **required**. Drop it onto Live's **Settings → Extensions** page. |
 | [AIbletonBar-0.8.0-beta-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.0-beta/AIbletonBar-0.8.0-beta-macOS.zip) | Optional macOS floating sidebar app (unchanged since 0.8.0-beta). |
 
 No Node.js needed for end users — the extension runs inside Live's own Extension Host.
