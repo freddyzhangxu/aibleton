@@ -1,6 +1,6 @@
 {
   "name": "aibleton",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "main": "dist/extension.js",
   "engines": {
     "node": ">=24.14.1"

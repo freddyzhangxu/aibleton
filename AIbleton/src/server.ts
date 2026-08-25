@@ -40,16 +40,12 @@ function sampleRoots(): string[] {
     path.join(home, "Music", "Ableton", "Factory Packs"),
   ];
   // Core Library of every installed Live 12 app
-  try {
-    for (const app of fs.readdirSync("/Applications")) {
-      if (/^Ableton Live 12.*\.app$/.test(app)) {
-        candidates.push(`/Applications/${app}/Contents/App-Resources/Core Library/Samples`);
-      }
+  for (const app of readdirNames("/Applications") ?? []) {
+    if (/^Ableton Live 12.*\.app$/.test(app)) {
+      candidates.push(`/Applications/${app}/Contents/App-Resources/Core Library/Samples`);
     }
-  } catch {
-    // /Applications not readable — skip Core Library.
   }
-  return candidates.filter((p) => fs.existsSync(p));
+  return candidates.filter((p) => pathExists(p));
 }
 
 let sampleIndex: string[] | null = null;
@@ -58,20 +54,32 @@ function buildSampleIndex(): string[] {
   if (sampleIndex) return sampleIndex;
   const roots = sampleRoots();
   const out: string[] = [];
-  const stack = [...roots];
-  while (stack.length && out.length < 200000) {
-    const dir = stack.pop()!;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
+  for (const root of roots) {
+    if (out.length >= 200000) break;
+    // Direct recursive walk; if the sandbox denies the root itself, fall back
+    // to /usr/bin/find for that root (same child-process escape as readHomeFile).
+    let denied = false;
+    const stack = [root];
+    const fromRoot: string[] = [];
+    while (stack.length && out.length + fromRoot.length < 200000) {
+      const dir = stack.pop()!;
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ERR_ACCESS_DENIED" && dir === root) {
+          denied = true;
+          break;
+        }
+        continue;
+      }
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) stack.push(full);
+        else if (AUDIO_EXT.has(path.extname(e.name).toLowerCase())) fromRoot.push(full);
+      }
     }
-    for (const e of entries) {
-      const full = path.join(dir, e.name);
-      if (e.isDirectory()) stack.push(full);
-      else if (AUDIO_EXT.has(path.extname(e.name).toLowerCase())) out.push(full);
-    }
+    out.push(...(denied ? listAudioFilesViaFind(root, 200000 - out.length) : fromRoot));
   }
   sampleIndex = out;
   console.log(`[ai-assistant] 采样索引: ${out.length} 个文件，来源: ${roots.join(" | ")}`);
@@ -171,6 +179,79 @@ function writeHomeFile(p: string, content: string): void {
     timeout: 5000,
     stdio: ["pipe", "ignore", "ignore"],
   });
+}
+
+/** mkdirSync -p with the same child-process fallback as writeHomeFile. */
+function mkdirOutsideSandbox(dir: string): void {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    return;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") throw e;
+  }
+  if (process.platform === "win32") throw new Error(`ERR_ACCESS_DENIED: ${dir}`);
+  execFileSync("/bin/mkdir", ["-p", dir], { timeout: 5000, stdio: "ignore" });
+}
+
+/**
+ * existsSync that survives the installed Extension Host sandbox (same trick as
+ * readHomeFile): a denied statSync throws ERR_ACCESS_DENIED, then /bin/ls -d
+ * answers from outside the permission model.
+ */
+function pathExists(p: string): boolean {
+  try {
+    fs.statSync(p);
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") return false;
+  }
+  if (process.platform === "win32") return false;
+  try {
+    execFileSync("/bin/ls", ["-d", p], { stdio: "ignore", timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** readdirSync (names only) with the same child-process fallback as pathExists. */
+function readdirNames(dir: string): string[] | null {
+  try {
+    return fs.readdirSync(dir);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") return null;
+  }
+  if (process.platform === "win32") return null;
+  try {
+    const out = execFileSync("/bin/ls", ["-1", dir], {
+      encoding: "utf8",
+      timeout: 5000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return out.split("\n").filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+/** Recursive audio-file listing via /usr/bin/find, for roots the sandbox denies. */
+function listAudioFilesViaFind(root: string, budget: number): string[] {
+  if (process.platform === "win32") return [];
+  const nameArgs = [...AUDIO_EXT].flatMap((ext) => ["-iname", `*${ext}`, "-o"]).slice(0, -1);
+  try {
+    const out = execFileSync("/usr/bin/find", [root, "-type", "f", "(", ...nameArgs, ")"], {
+      encoding: "utf8",
+      timeout: 60000,
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return out
+      .split("\n")
+      .filter((l) => l && AUDIO_EXT.has(path.extname(l).toLowerCase()))
+      .slice(0, budget);
+  } catch {
+    return [];
+  }
 }
 
 function loadClaudeCodeConfig(): LocalConfig | null {
@@ -290,7 +371,9 @@ function loadManualConfigs(context: Ctx): void {
     : context.environment.storageDirectory || path.dirname(fallbackStorePath());
   manualConfigPath = path.join(dir, "providers.json");
   try {
-    const data = JSON.parse(fs.readFileSync(manualConfigPath, "utf8")) as
+    const raw = readHomeFile(manualConfigPath);
+    if (!raw) throw new Error("unreadable");
+    const data = JSON.parse(raw) as
       Partial<Record<Provider, LocalConfig>>;
     manualConfigs = {};
     for (const p of ["claude", "codex", "gemini"] as Provider[]) {
@@ -307,8 +390,8 @@ function loadManualConfigs(context: Ctx): void {
 function saveManualConfigs(): void {
   if (!manualConfigPath) return;
   try {
-    fs.mkdirSync(path.dirname(manualConfigPath), { recursive: true });
-    fs.writeFileSync(manualConfigPath, JSON.stringify(manualConfigs, null, 2));
+    mkdirOutsideSandbox(path.dirname(manualConfigPath));
+    writeHomeFile(manualConfigPath, JSON.stringify(manualConfigs, null, 2));
   } catch {
     // In-memory copy still works for this run.
   }
@@ -898,11 +981,11 @@ async function runTool(
     }
     case "load_drum_kit": {
       const track = trackAt(context, Number(input.track_index));
-      const root = KIT_ROOTS.find((r) => fs.existsSync(r));
+      const root = KIT_ROOTS.find((r) => pathExists(r));
       if (!root) {
         throw new Error("找不到 Drum Essentials 音色包（~/Music/Ableton/Factory Packs/Drum Essentials）");
       }
-      const missing = KIT_808.filter((p) => !fs.existsSync(path.join(root, p.file)));
+      const missing = KIT_808.filter((p) => !pathExists(path.join(root, p.file)));
       if (missing.length) {
         throw new Error("缺少采样文件: " + missing.map((m) => m.file).join(", "));
       }
@@ -943,7 +1026,7 @@ async function runTool(
         throw new Error(`轨道 ${input.track_index}（${track.name}）不是音频轨道，先用 create_audio_track 建一条`);
       }
       const filePath = String(input.file_path ?? "");
-      if (!fs.existsSync(filePath)) throw new Error(`文件不存在: ${filePath}`);
+      if (!pathExists(filePath)) throw new Error(`文件不存在: ${filePath}`);
       const managed = await context.resources.importIntoProject(filePath);
       const clip = await context.withinTransaction(() =>
         track.createAudioClip({
@@ -958,7 +1041,7 @@ async function runTool(
     case "load_sample": {
       const track = trackAt(context, Number(input.track_index));
       const filePath = String(input.file_path ?? "");
-      if (!fs.existsSync(filePath)) throw new Error(`文件不存在: ${filePath}`);
+      if (!pathExists(filePath)) throw new Error(`文件不存在: ${filePath}`);
       const managed = await context.resources.importIntoProject(filePath);
       let simpler = track.devices.find((d): d is Simpler<"1.0.0"> => d instanceof Simpler);
       if (!simpler) {
@@ -1210,7 +1293,9 @@ function loadStore(context: Ctx) {
   let loadedFrom: string | null = null;
   for (const file of candidates) {
     try {
-      const data = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      const raw = readHomeFile(file);
+      if (!raw) continue;
+      const data = JSON.parse(raw) as {
         sessions?: ChatSession[];
         currentId?: string;
       };
@@ -1230,9 +1315,9 @@ function loadStore(context: Ctx) {
   if (sessions.length === 0) {
     for (const file of candidates) {
       try {
-        const legacy = JSON.parse(
-          fs.readFileSync(path.join(path.dirname(file), "chat-history.json"), "utf8"),
-        ) as unknown;
+        const legacyRaw = readHomeFile(path.join(path.dirname(file), "chat-history.json"));
+        if (!legacyRaw) continue;
+        const legacy = JSON.parse(legacyRaw) as unknown;
         if (Array.isArray(legacy) && legacy.length) {
           const session = createSession();
           session.messages = legacy.filter(
@@ -1256,19 +1341,19 @@ function saveStore(context: Ctx) {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ sessions, currentId }));
+    return;
   } catch {
-    // Primary location unwritable — switch permanently to the fallback.
-    const fallback = fallbackStorePath();
-    if (file !== fallback) {
-      storeFileOverride = fallback;
-      try {
-        fs.mkdirSync(path.dirname(fallback), { recursive: true });
-        fs.writeFileSync(fallback, JSON.stringify({ sessions, currentId }));
-        console.log(`[ai-assistant] 会话存储回退到: ${fallback}`);
-      } catch {
-        // In-memory sessions still work for this run.
-      }
-    }
+    // Primary location unwritable — fall through to the home fallback, reached
+    // via the same child-process escape as readHomeFile/writeHomeFile.
+  }
+  const fallback = fallbackStorePath();
+  if (file !== fallback) storeFileOverride = fallback;
+  try {
+    mkdirOutsideSandbox(path.dirname(fallback));
+    writeHomeFile(fallback, JSON.stringify({ sessions, currentId }));
+    if (file !== fallback) console.log(`[ai-assistant] 会话存储回退到: ${fallback}`);
+  } catch {
+    // In-memory sessions still work for this run.
   }
 }
 
