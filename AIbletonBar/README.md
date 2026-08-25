@@ -6,6 +6,13 @@ A floating macOS sidebar for AIbleton — a small native window that loads the c
 service served by the Live extension (`http://localhost:17666`), giving you an
 IDE-style side chat panel next to Ableton Live.
 
+> ⚠️ **Not a standalone app.** AIbletonBar is only a window shell — the AI chat
+> and all Live control run inside the **AIbleton extension**. Install
+> **`AIbleton-x.y.z.ablx`** first (Live → **Settings → Extensions**, drop the file
+> onto the page — get it from
+> [Releases](https://github.com/freddyzhangxu/aibleton/releases)). Without the
+> extension loaded, the sidebar only shows an offline placeholder.
+
 > Ableton Extensions SDK beta 1 only supports right-click menus / modal dialogs —
 > there is no panel API. So the sidebar experience is implemented as a separate
 > floating window. The extension itself needs no changes.
@@ -63,7 +70,7 @@ quarantine flag and open directly.
 Requires Xcode Command Line Tools (Swift toolchain):
 
 ```sh
-./build.sh           # builds AIbletonBar.app
+./build.sh           # builds AIbletonBar.app + AIbletonBar-<version>-macOS.zip
 open AIbletonBar.app # launch
 ```
 
@@ -73,7 +80,7 @@ open AIbletonBar.app # launch
 |---|---|
 | `main.swift` | All logic (~180 lines, no third-party dependencies) |
 | `Info.plist` | `LSUIElement` — menu-bar utility, no Dock icon |
-| `build.sh` | Direct `swiftc` compile + bundle + ad-hoc sign |
+| `build.sh` | `swiftc` compile + bundle + ad-hoc sign + zip; version synced from `AIbleton/package.json` |
 
 ## Customize
 
@@ -88,6 +95,12 @@ open AIbletonBar.app # launch
 
 AIbleton 的悬浮侧边栏 —— 原生 macOS 小窗，加载 Live 扩展里的聊天服务
 （`http://localhost:17666`），体验等同 IDE 侧边对话栏。
+
+> ⚠️ **不能独立使用。** AIbletonBar 只是一个窗口外壳 —— AI 对话和 Live 控制
+> 都运行在 **AIbleton 扩展**里。请先在 Live 中安装 **`AIbleton-x.y.z.ablx`**
+> （设置 → Extensions 页面，把文件拖进去 —— 到
+> [Releases](https://github.com/freddyzhangxu/aibleton/releases) 下载）。
+> 没装扩展时，侧边栏只会显示离线占位页。
 
 > Ableton Extensions SDK beta 1 只支持右键菜单 / 模态对话框，没有面板 API，
 > 所以用独立悬浮窗实现侧边栏体验。扩展本体无需任何改动。
@@ -141,7 +154,7 @@ xattr -cr /Applications/AIbletonBar.app
 需要 Xcode Command Line Tools（Swift 工具链）：
 
 ```sh
-./build.sh           # 编译出 AIbletonBar.app
+./build.sh           # 编译出 AIbletonBar.app + AIbletonBar-<版本>-macOS.zip
 open AIbletonBar.app # 启动
 ```
 
@@ -151,7 +164,7 @@ open AIbletonBar.app # 启动
 |---|---|
 | `main.swift` | 全部逻辑（~180 行，无第三方依赖） |
 | `Info.plist` | `LSUIElement` = 菜单栏工具，不占 Dock |
-| `build.sh` | swiftc 直编 + 打包 + ad-hoc 签名 |
+| `build.sh` | swiftc 直编 + 打包 + 签名 + zip；版本号自动同步 `AIbleton/package.json` |
 
 ## 自定义
 
