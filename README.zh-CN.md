@@ -85,7 +85,8 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 ## 环境要求
 
 - **Ableton Live 12**（12.4.5+），配套 Extensions SDK beta
-- **Node.js ≥ 24.14.1**
+- **Node.js ≥ 24.14.1** —— 仅开发者从源码构建时需要；安装 `.ablx` 的最终用户
+  **无需**安装 Node.js（扩展运行在 Live 自带的 Extension Host 中）
 - **任一 AI 服务商凭证** —— Claude、OpenAI Codex 或 Google Gemini。自动复用对应
   本地 CLI 的配置：Claude Code 的 `~/.claude/settings.json`、Codex CLI 的
   `~/.codex/auth.json`（API Key 或 ChatGPT 账号登录）、Gemini CLI 的
