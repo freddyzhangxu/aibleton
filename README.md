@@ -90,7 +90,9 @@ The project has two parts:
 ## Requirements
 
 - **Ableton Live 12** (12.4.5+) with the Extensions SDK beta
-- **Node.js ≥ 24.14.1**
+- **Node.js ≥ 24.14.1** — developers only, for building from source. End users
+  installing the `.ablx` do *not* need Node.js (the extension runs inside Live's own
+  Extension Host)
 - **An AI provider** — Claude, OpenAI Codex, or Google Gemini. Credentials are reused
   automatically from the matching local CLI: Claude Code's `~/.claude/settings.json`,
   Codex CLI's `~/.codex/auth.json` (API key or ChatGPT-account sign-in), Gemini CLI's
