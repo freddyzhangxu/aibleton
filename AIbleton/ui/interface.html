@@ -365,6 +365,13 @@
     #send .ic-stop { display: none; }
     #send.stop .ic-send { display: none; }
     #send.stop .ic-stop { display: block; }
+    /* 设置页底部版本号（构建时由 server 注入） */
+    #appVersion {
+      padding: 10px 14px;
+      font-size: 11px;
+      color: var(--c-text-dim);
+      text-align: center;
+    }
   </style>
 </head>
 
@@ -399,6 +406,7 @@
           <span data-i18n="aiConfig">AI 配置</span>
           <span class="val"><span id="providerVal">Claude Code</span> ›</span>
         </div>
+        <div id="appVersion">v__APP_VERSION__</div>
       </div>
       <div class="set-view hidden" id="viewLang">
         <div class="menu-row back" data-goto="viewMain"><span class="chev">‹</span><span data-i18n="language">语言</span></div>
@@ -1259,6 +1267,45 @@
     });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+
+    // ----- macOS 文本光标键：⌃A/⌃E 与 ⌘←/⌘→ 跳行首/行尾（⇧ 扩展选区）-----
+    // 实测（0.8.4 诊断）：Live 的对话框 webview 没有原生光标绑定，且在原生层
+    // 吞掉 ⌘+方向键（⌘ 键本身的 keydown 能到页面，组合键到不了）——所以
+    // Live 里实际生效的是 ⌃A/⌃E；⌘←/⌘→ 留给 AIbletonBar 和未来宿主。
+    // 兼容老 WebKit 键名（Left/Right）并回退 keyCode；isMac 守卫避免劫持
+    // Windows 的 Ctrl+A 全选。
+    const isMac = /Mac/i.test(navigator.platform || '') || /Mac/i.test(navigator.userAgent);
+
+    document.addEventListener('keydown', (e) => {
+      const el = e.target;
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+      if (!isMac || el.selectionStart == null) return; // checkbox 等无选区类型
+
+      const kc = e.keyCode || 0;
+      const isLeft = e.key === 'ArrowLeft' || e.key === 'Left' || kc === 37;
+      const isRight = e.key === 'ArrowRight' || e.key === 'Right' || kc === 39;
+      let toStart = null;
+      if (e.metaKey && !e.ctrlKey && !e.altKey && (isLeft || isRight)) toStart = isLeft; // ⌘←/⌘→
+      else if (e.ctrlKey && !e.metaKey && !e.altKey && /^(a|e)$/i.test(e.key || '')) toStart = /^a$/i.test(e.key); // ⌃A/⌃E
+      else return;
+
+      e.preventDefault();
+      const caret = toStart ? el.selectionStart : el.selectionEnd;
+      let pos;
+      if (toStart) {
+        // 特判文首：lastIndexOf 会把负 fromIndex 钳到 0，首字符是 \n 时会误命中
+        pos = caret === 0 ? 0 : el.value.lastIndexOf('\n', caret - 1) + 1;
+      } else {
+        const nl = el.value.indexOf('\n', caret);
+        pos = nl === -1 ? el.value.length : nl;
+      }
+      if (e.shiftKey) {
+        if (toStart) el.setSelectionRange(pos, el.selectionEnd, 'backward');
+        else el.setSelectionRange(el.selectionStart, pos, 'forward');
+      } else {
+        el.setSelectionRange(pos, pos);
+      }
     });
 
     // 输入框随内容自动增高（VSCode 式），上限由 CSS max-height 控制
