@@ -1235,6 +1235,11 @@ let panelCommand: { mode: "bar" | "show"; at: number } | null = null;
 declare const __BUILD_ID__: string | undefined;
 const BUILD_ID = typeof __BUILD_ID__ === "string" ? __BUILD_ID__ : "dev";
 
+// Stamped by esbuild from package.json; injected into the served page so the
+// settings view can show the real version (and users can confirm the reload).
+declare const __APP_VERSION__: string | undefined;
+const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
+
 /** Append a line to ai-debug.log next to chats.json — for diagnosing background tasks. */
 function debugLog(context: Ctx, line: string) {
   try {
@@ -2245,7 +2250,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     };
 
     if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
-      send(200, chatInterface, "text/html");
+      send(200, chatInterface.replaceAll("__APP_VERSION__", APP_VERSION), "text/html");
       return;
     }
     if (req.method === "GET" && req.url?.startsWith("/api/health")) {

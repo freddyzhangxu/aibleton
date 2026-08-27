@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var expandedFrame: NSRect = .zero
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        setupMainMenu()
         setupWindow()
         setupStatusItem()
         registerHotKey()
@@ -36,6 +37,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false // closing the panel only hides it; quit from the menu-bar icon
+    }
+
+    // MARK: - Main menu
+
+    /// Pure-code app = no storyboard = no main menu, so ⌘C/⌘V/⌘X/⌘A never
+    /// route into the web view (macOS dispatches editing key equivalents via
+    /// the Edit menu). Install a minimal one; it's invisible in an accessory
+    /// app but restores copy/paste in the chat input.
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+        let editItem = NSMenuItem()
+        mainMenu.addItem(editItem)
+        let editMenu = NSMenu(title: "Edit")
+        editItem.submenu = editMenu
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        NSApp.mainMenu = mainMenu
     }
 
     // MARK: - Window
