@@ -52,6 +52,15 @@
     body.native-bar header { padding-top: 4px; padding-bottom: 4px; }
     body.native-bar header .row:first-child { padding-left: 43px; }
 
+    /* Windows AIbletonBar draws its own caption strip above the page — no
+       traffic lights overlay the header, so nothing to clear. */
+    body.native-bar-win header { padding-top: 8px; padding-bottom: 8px; }
+    body.native-bar-win header .row:first-child { padding-left: 0; }
+
+    /* The in-page traffic lights are for Live's dialog only — inside the
+       native bar (either platform) the real window buttons do the job. */
+    body.native-bar .lights { display: none; }
+
     /* macOS traffic lights */
     .lights { display: flex; gap: 8px; padding: 0 2px; }
     .light {
@@ -67,6 +76,22 @@
     .light.close:active { background: #d94b44; }
     .light.min { background: #FEBC2E; }
     .light.min:active { background: #d89e24; }
+
+    /* Live's dialog on Windows: caption-style buttons at the row's right end
+       (min left of close, glyphs always visible, close hovers red) instead
+       of macOS traffic lights. */
+    body.win-dialog .lights { order: 99; gap: 2px; padding: 0; }
+    body.win-dialog .light {
+      width: 28px; height: 20px; border-radius: 4px; border: none;
+      background: transparent; color: var(--c-text-dim); font-size: 11px;
+    }
+    body.win-dialog .light span { opacity: 1; }
+    body.win-dialog .light.min { order: 1; }
+    body.win-dialog .light.close { order: 2; }
+    body.win-dialog .light.min:hover { background: rgba(255,255,255,0.1); }
+    body.win-dialog .light.min:active { background: rgba(255,255,255,0.06); }
+    body.win-dialog .light.close:hover { background: #E81123; color: #fff; }
+    body.win-dialog .light.close:active { background: #c42b1c; color: #fff; }
     .light.max { background: #28C840; }
     .light.disabled {
       background: hsl(0, 0%, 30%);
@@ -860,11 +885,21 @@
         window.chrome.webview.postMessage(msg);
       }
     }
-    const inLive = !!(window.webkit?.messageHandlers?.live || window.chrome?.webview);
+    // AIbletonBar (native sidebar) identifies itself via its user agent. On
+    // macOS its real traffic-light buttons overlay the header's top-left
+    // corner; on Windows it draws its own caption strip above the page.
+    const inNativeBar = navigator.userAgent.includes('AIbletonBar');
+    if (inNativeBar) {
+      document.body.classList.add('native-bar');
+      if (navigator.userAgent.includes('Windows')) document.body.classList.add('native-bar-win');
+    }
+    // Inside Live's dialog webview. Note window.chrome.webview exists in ANY
+    // WebView2 — including the Windows AIbletonBar — so the bar check comes
+    // first and excludes it here.
+    const inLive = !inNativeBar && !!(window.webkit?.messageHandlers?.live || window.chrome?.webview);
     if (!inLive) document.querySelector('.lights').style.display = 'none';
-    // AIbletonBar (native macOS sidebar) identifies itself via its user agent;
-    // its real traffic-light buttons overlay the header's top-left corner.
-    if (navigator.userAgent.includes('AIbletonBar')) document.body.classList.add('native-bar');
+    // Live's dialog on Windows gets caption-style window buttons, not macOS lights.
+    if (inLive && navigator.userAgent.includes('Windows')) document.body.classList.add('win-dialog');
     document.getElementById('btnClose').addEventListener('click', closeDialog);
     // Minimize: close the modal and hand off to AIbletonBar's mini bar at the
     // screen's bottom-right corner (queued via the extension server; the

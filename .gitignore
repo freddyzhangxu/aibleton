@@ -12,9 +12,15 @@ extensions-sdk-*/
 # AIbletonBar 构建产物
 *.app
 
+# AIbletonBar Windows 构建产物（AppIcon.ico 由 build.sh 生成）
+AIbletonBar/windows/bin/
+AIbletonBar/windows/obj/
+AIbletonBar/windows/publish/
+AIbletonBar/windows/Resources/AppIcon.ico
+
 # 安装器调试 scratch
 bisect/
 install-test/
 
 # 发布物（走 GitHub Releases，不入库）
-AIbletonBar/*.zip
+AIbletonBar/**/*.zip
