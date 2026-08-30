@@ -240,18 +240,50 @@
     .msg.ai { align-self: stretch; max-width: none; background: var(--c-panel); border: 1px solid var(--c-border); }
     .msg.error { align-self: stretch; background: hsl(0, 60%, 25%); color: #fff; }
     .msg.thinking { align-self: flex-start; color: var(--c-text-dim); font-style: italic; }
-    .action {
+    /* Tool-call log for one assistant reply, collapsed into a single summary
+       line (details/summary). Never uses horizontal scrolling: Windows WebView2
+       scrollbars are always-visible and ~15px tall, which nearly covers these
+       ~20px lines — that was the "white bar" rendering bug on Windows. */
+    .steps {
       align-self: flex-start;
-      font-size: 11px;
-      color: var(--c-text-dim);
+      max-width: 92%;
       background: var(--c-input-bg);
       border: 1px solid var(--c-border);
       border-radius: 6px;
-      padding: 3px 8px;
+      font-size: 11px;
+      color: var(--c-text-dim);
       font-family: ui-monospace, monospace;
-      max-width: 92%;
-      overflow-x: auto;
+      overflow: hidden;
+    }
+    .steps summary {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 8px;
+      cursor: pointer;
+      list-style: none;
       white-space: nowrap;
+      overflow: hidden;
+      user-select: none;
+    }
+    .steps summary::-webkit-details-marker { display: none; }
+    .steps summary:hover { color: var(--c-text); }
+    .steps .chev { flex: none; font-size: 8px; transition: transform 0.12s; }
+    .steps[open] .chev { transform: rotate(90deg); }
+    .steps .sum { overflow: hidden; text-overflow: ellipsis; }
+    .steps .step-list { border-top: 1px solid var(--c-border); padding: 2px 0; }
+    .steps .action {
+      padding: 2px 8px 2px 20px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+    }
+    .steps .action:hover { color: var(--c-text); }
+    /* Click a line to read it in full: wraps, vertically scrolls if huge. */
+    .steps .action.open {
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 160px;
+      overflow-y: auto;
     }
 
     footer {
@@ -519,6 +551,7 @@
         send: '发送', stop: '停止', inputPh: '输入消息，Enter 发送（Shift+Enter 换行）',
         thinking: '思考中…（可关闭窗口，任务在后台继续）',
         error: '出错：', noHistory: '暂无历史对话', delSession: '删除此对话', msgUnit: '条',
+        stepsDone: '{n} 个操作',
         cfgLoaded: '已加载本机 {p} 配置', cfgKeySet: '{p} · 使用自定义 API Key',
         cfgMissing: '未找到 {p} 认证信息，请在设置中填写 API Key',
         apiKey: 'API Key', baseUrl: 'API 地址', model: '模型',
@@ -540,6 +573,7 @@
         send: 'Send', stop: 'Stop', inputPh: 'Type a message — Enter to send (Shift+Enter for a new line)',
         thinking: 'Thinking… (you can close this window; the task continues in the background)',
         error: 'Error: ', noHistory: 'No past conversations', delSession: 'Delete this conversation', msgUnit: '',
+        stepsDone: '{n} actions',
         cfgLoaded: 'Loaded local {p} config', cfgKeySet: '{p} · custom API Key',
         cfgMissing: 'No {p} credentials found — add an API Key in Settings',
         apiKey: 'API Key', baseUrl: 'Base URL', model: 'Model',
@@ -561,6 +595,7 @@
         send: 'Senden', stop: 'Stoppen', inputPh: 'Nachricht eingeben – Enter zum Senden (Umschalt+Enter für Zeilenumbruch)',
         thinking: 'Denkt nach… (Fenster kann geschlossen werden, die Aufgabe läuft im Hintergrund weiter)',
         error: 'Fehler: ', noHistory: 'Keine früheren Unterhaltungen', delSession: 'Diese Unterhaltung löschen', msgUnit: '',
+        stepsDone: '{n} Aktionen',
         cfgLoaded: 'Lokale {p}-Konfiguration geladen', cfgKeySet: '{p} · eigener API-Schlüssel',
         cfgMissing: 'Keine {p}-Zugangsdaten gefunden – API-Schlüssel in den Einstellungen eintragen',
         apiKey: 'API-Schlüssel', baseUrl: 'API-Adresse', model: 'Modell',
@@ -582,6 +617,7 @@
         send: 'Envoyer', stop: 'Arrêter', inputPh: 'Saisissez un message — Entrée pour envoyer (Maj+Entrée pour sauter une ligne)',
         thinking: 'Réflexion… (vous pouvez fermer la fenêtre, la tâche continue en arrière-plan)',
         error: 'Erreur : ', noHistory: 'Aucune conversation passée', delSession: 'Supprimer cette conversation', msgUnit: '',
+        stepsDone: '{n} actions',
         cfgLoaded: 'Configuration {p} locale chargée', cfgKeySet: '{p} · clé API personnalisée',
         cfgMissing: 'Aucun identifiant {p} trouvé — ajoutez une clé API dans les paramètres',
         apiKey: 'Clé API', baseUrl: 'Adresse API', model: 'Modèle',
@@ -603,6 +639,7 @@
         send: '送信', stop: '停止', inputPh: 'メッセージを入力 — Enter で送信（Shift+Enter で改行）',
         thinking: '思考中…（ウィンドウを閉じてもタスクはバックグラウンドで続行）',
         error: 'エラー：', noHistory: '過去の会話はありません', delSession: 'この会話を削除', msgUnit: '件',
+        stepsDone: '{n} 件の操作',
         cfgLoaded: 'ローカルの {p} 設定を読み込みました', cfgKeySet: '{p} · カスタム API キー',
         cfgMissing: '{p} の認証情報が見つかりません — 設定で API キーを入力してください',
         apiKey: 'API キー', baseUrl: 'API アドレス', model: 'モデル',
@@ -624,6 +661,7 @@
         send: 'Enviar', stop: 'Detener', inputPh: 'Escribe un mensaje — Enter para enviar (Mayús+Enter para nueva línea)',
         thinking: 'Pensando… (puedes cerrar la ventana; la tarea continúa en segundo plano)',
         error: 'Error: ', noHistory: 'No hay conversaciones', delSession: 'Eliminar esta conversación', msgUnit: '',
+        stepsDone: '{n} acciones',
         cfgLoaded: 'Configuración local de {p} cargada', cfgKeySet: '{p} · API Key personalizada',
         cfgMissing: 'No se encontraron credenciales de {p} — añade una API Key en Ajustes',
         apiKey: 'API Key', baseUrl: 'Dirección API', model: 'Modelo',
@@ -645,6 +683,7 @@
         send: 'Invia', stop: 'Interrompi', inputPh: 'Scrivi un messaggio — Invio per inviare (Maiusc+Invio per andare a capo)',
         thinking: 'Sto pensando… (puoi chiudere la finestra; l’attività continua in background)',
         error: 'Errore: ', noHistory: 'Nessuna conversazione passata', delSession: 'Elimina questa conversazione', msgUnit: '',
+        stepsDone: '{n} azioni',
         cfgLoaded: 'Configurazione locale di {p} caricata', cfgKeySet: '{p} · API Key personalizzata',
         cfgMissing: 'Nessuna credenziale {p} trovata — aggiungi una API Key nelle Impostazioni',
         apiKey: 'API Key', baseUrl: 'Indirizzo API', model: 'Modello',
@@ -867,12 +906,37 @@
       return div;
     }
 
+    // One tool-call line inside a steps group: single-line ellipsis; clicking
+    // it toggles the full wrapped text (never a horizontal scrollbar).
     function addAction(tool, input, result) {
       const div = document.createElement('div');
       div.className = 'action';
       div.textContent = '⚙ ' + tool + ' ' + JSON.stringify(input) + ' → ' + JSON.stringify(result);
-      log.appendChild(div);
-      log.scrollTop = log.scrollHeight;
+      div.title = div.textContent;
+      div.addEventListener('click', () => div.classList.toggle('open'));
+      return div;
+    }
+
+    // All tool calls of one assistant reply collapse into a single summary
+    // line: "⚙ N 个操作 · NewTrack、AddNotes…". Expanding shows the lines.
+    function addSteps(actions) {
+      const det = document.createElement('details');
+      det.className = 'steps';
+      const sum = document.createElement('summary');
+      const chev = document.createElement('span');
+      chev.className = 'chev';
+      chev.textContent = '▸';
+      const label = document.createElement('span');
+      label.className = 'sum';
+      const tools = [...new Set(actions.map(a => a.tool))];
+      const sep = (currentLang === 'zh' || currentLang === 'ja') ? '、' : ', ';
+      label.textContent = '⚙ ' + t('stepsDone').replace('{n}', actions.length) + ' · ' + tools.join(sep);
+      sum.append(chev, label);
+      const list = document.createElement('div');
+      list.className = 'step-list';
+      for (const a of actions) list.appendChild(addAction(a.tool, a.input, a.result));
+      det.append(sum, list);
+      log.appendChild(det);
     }
 
     // Traffic-light buttons: post close_and_send to the Live host to dismiss the dialog.
@@ -936,14 +1000,14 @@
     }
 
     function renderMessages(messages) {
-      log.querySelectorAll('.msg, .action').forEach(el => el.remove());
+      log.querySelectorAll('.msg, .steps').forEach(el => el.remove());
       if (!messages || !messages.length) {
         log.appendChild(welcome);
         return;
       }
       messages.forEach(m => {
-        if (m.role === 'assistant' && Array.isArray(m.actions)) {
-          m.actions.forEach(a => addAction(a.tool, a.input, a.result));
+        if (m.role === 'assistant' && Array.isArray(m.actions) && m.actions.length) {
+          addSteps(m.actions);
         }
         addMsg(m.role === 'user' ? 'user' : 'ai', m.content);
       });
