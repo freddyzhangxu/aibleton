@@ -48,7 +48,7 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 | 组件 | 说明 |
 |---|---|
 | **[AIbleton/](AIbleton/)** | Live 12 扩展本体：聊天界面 + 本地助手服务，内置约 20 个读写 Live Set 的工具 |
-| **[AIbletonBar/](AIbletonBar/)** | 原生 macOS 悬浮侧边栏，把同一个聊天界面挂在 Live 旁边，IDE 式体验，**⌥⌘A** 呼出 |
+| **[AIbletonBar/](AIbletonBar/)** | 原生悬浮侧边栏（macOS / Windows），把同一个聊天界面挂在 Live 旁边，IDE 式体验，**⌥⌘A** / **Win+Alt+A** 呼出 |
 
 ## 截图
 
@@ -94,8 +94,7 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
   `~/.gemini/.env`；也可用环境变量（`ANTHROPIC_*`、`OPENAI_*`、
   `GEMINI_API_KEY` / `GOOGLE_API_KEY`），或在对话框「设置 → AI 配置」里手动填写。
   扩展本身不存储任何敏感信息。
-- **macOS** —— 仅 AIbletonBar 需要；扩展本体与平台无关
-  （Windows 版 AIbletonBar 计划中）
+- **macOS 或 Windows** —— 仅 AIbletonBar 需要；扩展本体与平台无关
 
 ## 安装
 
@@ -123,14 +122,23 @@ npm run package    # 生产构建 + 打包可分发的 .ablx 文件
 
 ### AIbletonBar（可选侧边栏）
 
+macOS：
+
 ```sh
 cd AIbletonBar
 ./build.sh            # 编译 AIbletonBar.app（swiftc 直编，无第三方依赖）
 open AIbletonBar.app
 ```
 
-- **⌥⌘A** 全局呼出 / 隐藏；面板吸附屏幕右缘、全高、置顶、随所有 Space 显示。
-- 支持聊天里的文件附件功能，调起 macOS 原生文件选择器。
+Windows（可从 macOS 交叉编译，也可在 Windows 的 Git Bash 里跑 —— 需要 .NET SDK）：
+
+```sh
+cd AIbletonBar/windows
+./build.sh            # 发布单文件 AIbletonBar.exe（WinForms + WebView2）
+```
+
+- **⌥⌘A**（macOS）/ **Win+Alt+A**（Windows）全局呼出 / 隐藏；面板吸附屏幕右缘、全高、置顶（macOS 下随所有 Space 显示）。
+- 支持聊天里的文件附件功能，调起系统原生文件选择器。
 - Live 未加载扩展时显示离线占位页，连上后自动恢复（3 秒轮询）。
 
 ## 工作原理

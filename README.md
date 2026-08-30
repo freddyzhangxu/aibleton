@@ -51,7 +51,7 @@ The project has two parts:
 | Component | What it is |
 |---|---|
 | **[AIbleton/](AIbleton/)** | The Live 12 extension: chat UI + a local assistant server with ~20 tools that read and control the Live Set |
-| **[AIbletonBar/](AIbletonBar/)** | A native macOS floating sidebar that hosts the same chat UI next to Live — IDE-style, toggled with **⌥⌘A** |
+| **[AIbletonBar/](AIbletonBar/)** | A native floating sidebar (macOS & Windows) that hosts the same chat UI next to Live — IDE-style, toggled with **⌥⌘A** / **Win+Alt+A** |
 
 ## Screenshots
 
@@ -100,8 +100,7 @@ The project has two parts:
   `~/.gemini/.env`. You can also use environment variables (`ANTHROPIC_*`, `OPENAI_*`,
   `GEMINI_API_KEY` / `GOOGLE_API_KEY`) or enter everything in the dialog's
   **Settings → AI Provider** section. Nothing sensitive is stored by the extension.
-- **macOS** — only needed for AIbletonBar; the extension itself is platform-independent
-  *(a Windows version of AIbletonBar is planned)*
+- **macOS or Windows** — only needed for AIbletonBar; the extension itself is platform-independent
 
 ## Setup
 
@@ -129,15 +128,24 @@ npm run package    # production build + create a distributable .ablx archive
 
 ### AIbletonBar (optional sidebar)
 
+macOS:
+
 ```sh
 cd AIbletonBar
 ./build.sh            # compiles AIbletonBar.app (swiftc, no dependencies)
 open AIbletonBar.app
 ```
 
-- **⌥⌘A** toggles the panel globally; it docks to the right edge of the screen,
-  stays on top, and follows you across Spaces.
-- Supports the chat's file attachments with a native macOS file picker.
+Windows (cross-builds from macOS, needs the .NET SDK; also works in Git Bash on Windows):
+
+```sh
+cd AIbletonBar/windows
+./build.sh            # publishes a single-file AIbletonBar.exe (WinForms + WebView2)
+```
+
+- **⌥⌘A** (macOS) / **Win+Alt+A** (Windows) toggles the panel globally; it docks
+  to the right edge of the screen and stays on top (follows you across Spaces on macOS).
+- Supports the chat's file attachments with a native file picker.
 - Shows an offline placeholder when the extension isn't loaded in Live, and
   reconnects automatically (3 s polling).
 
