@@ -471,6 +471,8 @@
     const input = document.getElementById('input');
     const sendBtn = document.getElementById('send');
     const statusEl = document.getElementById('status');
+    // 未发送草稿的 localStorage 键（与设置同一持久化机制，同源 webview 共享）
+    const DRAFT_KEY = 'ai.draft';
 
     // ---------- i18n (language list matches Ableton Live's preferences) ----------
     const LANGS = [
@@ -1220,6 +1222,7 @@
       const attachments = pendingAttachments.splice(0);
       renderChips();
       input.value = '';
+      localStorage.setItem(DRAFT_KEY, ''); // 已发送，清掉草稿
       fitInput();
       if (welcome.parentNode) welcome.remove();
       addMsg('user', attachments.length
@@ -1320,10 +1323,21 @@
     }
     input.addEventListener('input', fitInput);
 
+    // 未发送草稿随输入持久化：对话框每次打开都是全新加载的页面，
+    // 关掉再开不会丢正在编辑的内容。只在本窗口加载时恢复，不做跨窗口
+    // 实时同步（否则两个窗口同时打字会互相覆盖）。
+    input.addEventListener('input', () => localStorage.setItem(DRAFT_KEY, input.value));
+
     // Initial render: settings lists, then localized strings + provider config state.
     renderLangs();
     renderProviders();
     applyLang();
+    // 恢复上次未发送的草稿，光标放到末尾。
+    input.value = localStorage.getItem(DRAFT_KEY) || '';
+    if (input.value) {
+      fitInput();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
     input.focus();
   </script>
 </body>
