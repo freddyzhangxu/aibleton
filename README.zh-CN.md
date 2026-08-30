@@ -23,13 +23,14 @@
 
 ## 下载
 
-**当前版本：v0.8.3**（预发布）—— 前往
+**当前版本：v0.8.4**（预发布）—— 前往
 [**Releases 页面**](https://github.com/freddyzhangxu/aibleton/releases) 下载：
 
 | 文件 | 说明 |
 |---|---|
-| [AIbleton-0.8.3.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.3/AIbleton-0.8.3.ablx) | Live 扩展本体 —— **必装**。拖进 Live 的 **设置 → Extensions** 页面即可。 |
-| [AIbletonBar-0.8.3-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.3/AIbletonBar-0.8.3-macOS.zip) | 可选的 macOS 悬浮侧边栏（版本号与扩展保持同步）。 |
+| [AIbleton-0.8.4.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.4/AIbleton-0.8.4.ablx) | Live 扩展本体 —— **必装**。拖进 Live 的 **设置 → Extensions** 页面即可。 |
+| [AIbletonBar-0.8.4-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.4/AIbletonBar-0.8.4-macOS.zip) | 可选的 macOS 悬浮侧边栏（版本号与扩展保持同步）。 |
+| [AIbletonBar-0.8.4-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.4/AIbletonBar-0.8.4-Windows.zip) | 可选的 Windows 悬浮侧边栏 —— Win+Alt+A 呼出（版本号与扩展保持同步）。 |
 
 用户无需安装 Node.js —— 扩展运行在 Live 自带的 Extension Host 中。
 
