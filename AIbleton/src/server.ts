@@ -2,7 +2,6 @@ import * as http from "node:http";
 import * as https from "node:https";
 import * as tls from "node:tls";
 import * as net from "node:net";
-import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -12,6 +11,18 @@ import * as path from "node:path";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
 import { describeBinaryAttachment } from "./fileparsers.js";
+import {
+  AUDIO_EXT,
+  detectSystemProxy,
+  kitRoots,
+  listAudioFilesViaFind,
+  mkdirOutsideSandbox,
+  pathExists,
+  readHomeFile,
+  sampleRoots,
+  storeFallbackPath,
+  writeHomeFile,
+} from "./paths.js";
 import {
   AudioTrack,
   DrumChain,
@@ -28,26 +39,6 @@ import {
 
 // ---------- Local sample library search ----------
 
-const AUDIO_EXT = new Set([".wav", ".aif", ".aiff", ".mp3", ".flac", ".ogg", ".m4a"]);
-
-function sampleRoots(): string[] {
-  const home = os.homedir();
-  const candidates = [
-    path.join(home, "Splice"),
-    path.join(home, "Music", "Splice"),
-    path.join(home, "Documents", "Splice"),
-    path.join(home, "Music", "Ableton", "User Library"),
-    path.join(home, "Music", "Ableton", "Factory Packs"),
-  ];
-  // Core Library of every installed Live 12 app
-  for (const app of readdirNames("/Applications") ?? []) {
-    if (/^Ableton Live 12.*\.app$/.test(app)) {
-      candidates.push(`/Applications/${app}/Contents/App-Resources/Core Library/Samples`);
-    }
-  }
-  return candidates.filter((p) => pathExists(p));
-}
-
 let sampleIndex: string[] | null = null;
 
 function buildSampleIndex(): string[] {
@@ -57,7 +48,8 @@ function buildSampleIndex(): string[] {
   for (const root of roots) {
     if (out.length >= 200000) break;
     // Direct recursive walk; if the sandbox denies the root itself, fall back
-    // to /usr/bin/find for that root (same child-process escape as readHomeFile).
+    // to /usr/bin/find for that root (same child-process escape as the fs
+    // primitives in paths.ts).
     let denied = false;
     const stack = [root];
     const fromRoot: string[] = [];
@@ -87,11 +79,6 @@ function buildSampleIndex(): string[] {
 }
 
 // ---------- Factory 808 drum kit (Drum Essentials pack) ----------
-
-const KIT_ROOTS = [
-  path.join(os.homedir(), "Music/Ableton/Factory Packs/Drum Essentials/Samples/Drums"),
-  "/Users/Shared/Ableton/Factory Packs/Drum Essentials/Samples/Drums",
-];
 
 /** GM-style note map so models can reuse standard drum programming knowledge. */
 const KIT_808 = [
@@ -132,127 +119,6 @@ interface LocalConfig {
 }
 
 const configCache: Partial<Record<Provider, LocalConfig | null>> = {};
-
-/**
- * Read a file under the user's home directory (~/.claude, ~/.codex, ~/.gemini).
- *
- * The installed Extension Host is launched by Live as
- *   node --permission --allow-fs-read=<Extensions dirs only> … --allow-child-process
- * so a direct fs.readFileSync of the home dir fails with ERR_ACCESS_DENIED.
- * But the permission model does not propagate to spawned children — and Live
- * explicitly grants --allow-child-process — so /bin/cat still reads those
- * files. Dev mode (`ableton-extensions-cli run`) has no --permission at all
- * and takes the direct path. If Ableton ever drops --allow-child-process the
- * fallback simply fails too and we behave as "no CLI config detected".
- */
-function readHomeFile(p: string): string | null {
-  try {
-    return fs.readFileSync(p, "utf8");
-  } catch (e) {
-    // Only the sandbox denial is worth retrying via child process; a genuine
-    // ENOENT just means the CLI is not installed/configured.
-    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") return null;
-  }
-  if (process.platform === "win32") return null;
-  try {
-    return execFileSync("/bin/cat", [p], {
-      encoding: "utf8",
-      timeout: 5000,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-  } catch {
-    return null;
-  }
-}
-
-/** writeFileSync with the same child-process fallback as readHomeFile. */
-function writeHomeFile(p: string, content: string): void {
-  try {
-    fs.writeFileSync(p, content);
-    return;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") throw e;
-  }
-  if (process.platform === "win32") throw new Error(`ERR_ACCESS_DENIED: ${p}`);
-  execFileSync("/usr/bin/tee", [p], {
-    input: content,
-    timeout: 5000,
-    stdio: ["pipe", "ignore", "ignore"],
-  });
-}
-
-/** mkdirSync -p with the same child-process fallback as writeHomeFile. */
-function mkdirOutsideSandbox(dir: string): void {
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-    return;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") throw e;
-  }
-  if (process.platform === "win32") throw new Error(`ERR_ACCESS_DENIED: ${dir}`);
-  execFileSync("/bin/mkdir", ["-p", dir], { timeout: 5000, stdio: "ignore" });
-}
-
-/**
- * existsSync that survives the installed Extension Host sandbox (same trick as
- * readHomeFile): a denied statSync throws ERR_ACCESS_DENIED, then /bin/ls -d
- * answers from outside the permission model.
- */
-function pathExists(p: string): boolean {
-  try {
-    fs.statSync(p);
-    return true;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") return false;
-  }
-  if (process.platform === "win32") return false;
-  try {
-    execFileSync("/bin/ls", ["-d", p], { stdio: "ignore", timeout: 5000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** readdirSync (names only) with the same child-process fallback as pathExists. */
-function readdirNames(dir: string): string[] | null {
-  try {
-    return fs.readdirSync(dir);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") return null;
-  }
-  if (process.platform === "win32") return null;
-  try {
-    const out = execFileSync("/bin/ls", ["-1", dir], {
-      encoding: "utf8",
-      timeout: 5000,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return out.split("\n").filter(Boolean);
-  } catch {
-    return null;
-  }
-}
-
-/** Recursive audio-file listing via /usr/bin/find, for roots the sandbox denies. */
-function listAudioFilesViaFind(root: string, budget: number): string[] {
-  if (process.platform === "win32") return [];
-  const nameArgs = [...AUDIO_EXT].flatMap((ext) => ["-iname", `*${ext}`, "-o"]).slice(0, -1);
-  try {
-    const out = execFileSync("/usr/bin/find", [root, "-type", "f", "(", ...nameArgs, ")"], {
-      encoding: "utf8",
-      timeout: 60000,
-      maxBuffer: 64 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return out
-      .split("\n")
-      .filter((l) => l && AUDIO_EXT.has(path.extname(l).toLowerCase()))
-      .slice(0, budget);
-  } catch {
-    return [];
-  }
-}
 
 function loadClaudeCodeConfig(): LocalConfig | null {
   if ("claude" in configCache) return configCache.claude ?? null;
@@ -368,7 +234,7 @@ function loadManualConfigs(context: Ctx): void {
   // Same directory as chats.json (storage dir, or the fallback it picked).
   const dir = storeFileOverride
     ? path.dirname(storeFileOverride)
-    : context.environment.storageDirectory || path.dirname(fallbackStorePath());
+    : context.environment.storageDirectory || path.dirname(storeFallbackPath());
   manualConfigPath = path.join(dir, "providers.json");
   try {
     const raw = readHomeFile(manualConfigPath);
@@ -981,9 +847,10 @@ async function runTool(
     }
     case "load_drum_kit": {
       const track = trackAt(context, Number(input.track_index));
-      const root = KIT_ROOTS.find((r) => pathExists(r));
+      const roots = kitRoots();
+      const root = roots.find((r) => pathExists(r));
       if (!root) {
-        throw new Error("找不到 Drum Essentials 音色包（~/Music/Ableton/Factory Packs/Drum Essentials）");
+        throw new Error("找不到 Drum Essentials 音色包（已检查: " + roots.join(" | ") + "）");
       }
       const missing = KIT_808.filter((p) => !pathExists(path.join(root, p.file)));
       if (missing.length) {
@@ -1209,6 +1076,17 @@ function stopNote(language?: string): string {
   return STOP_NOTE[language ?? ""] ?? STOP_NOTE.en;
 }
 
+/** Appended to a reply that stayed truncated after all auto-continuations. */
+const TRUNC_NOTE: Record<string, string> = {
+  zh: "（回复超出长度限制被截断，发送「继续」可补全）",
+  en: "(Reply hit the token limit and was cut off — send “continue” to finish it.)",
+  de: "(Antwort am Token-Limit abgeschnitten — sende „weiter“ zum Fortsetzen.)",
+  fr: "(Réponse tronquée par la limite de tokens — envoyez « continuer » pour la terminer.)",
+  ja: "（トークン上限で途中で切れました —「続けて」と送信すると続きます）",
+  es: "(Respuesta cortada por el límite de tokens — envía «continuar» para completarla.)",
+  it: "(Risposta troncata dal limite di token — invia «continua» per completarla.)",
+};
+
 // ---------- Chat sessions (server-side, persisted) ----------
 
 interface HistoryMessage {
@@ -1264,16 +1142,12 @@ let currentId: string | null = null;
 /** Set when the SDK storage dir turns out to be missing/unwritable. */
 let storeFileOverride: string | null = null;
 
-function fallbackStorePath(): string {
-  return path.join(os.homedir(), "Library", "Application Support", "AIbleton", "chats.json");
-}
-
 function storeFilePath(context: Ctx): string {
   if (storeFileOverride) return storeFileOverride;
   const dir = context.environment.storageDirectory;
   // The beta may return undefined for storageDirectory — fall back to a
   // stable per-user location so sessions actually persist.
-  return dir ? path.join(dir, "chats.json") : fallbackStorePath();
+  return dir ? path.join(dir, "chats.json") : storeFallbackPath();
 }
 
 function createSession(): ChatSession {
@@ -1294,7 +1168,7 @@ function currentSession(): ChatSession {
 }
 
 function loadStore(context: Ctx) {
-  const candidates = [...new Set([storeFilePath(context), fallbackStorePath()])];
+  const candidates = [...new Set([storeFilePath(context), storeFallbackPath()])];
   let loadedFrom: string | null = null;
   for (const file of candidates) {
     try {
@@ -1351,7 +1225,7 @@ function saveStore(context: Ctx) {
     // Primary location unwritable — fall through to the home fallback, reached
     // via the same child-process escape as readHomeFile/writeHomeFile.
   }
-  const fallback = fallbackStorePath();
+  const fallback = storeFallbackPath();
   if (file !== fallback) storeFileOverride = fallback;
   try {
     mkdirOutsideSandbox(path.dirname(fallback));
@@ -1684,6 +1558,9 @@ async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest
     ? { type: "enabled", budget_tokens: claudeEffort.budget }
     : undefined;
 
+  // Bounded retries when max_tokens truncates a text-only answer (see below).
+  let continuations = 0;
+
   for (let round = 0; round < 12; round++) {
     if (stopRequested) return finishChat(context, actions, stopNote(req.language));
     // Mirror Claude Code's auth style: Bearer token (works for relays and OAuth),
@@ -1732,34 +1609,71 @@ async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest
     }
 
     const content = data.content ?? [];
-    messages.push({ role: "assistant", content });
     debugLog(
       context,
       `ROUND ${round}: stop_reason=${data.stop_reason} blocks=${content.map((b) => b.type).join(",")}`,
     );
 
-    if (data.stop_reason !== "tool_use") {
-      const reply =
-        content
-          .filter((b) => b.type === "text")
-          .map((b) => b.text ?? "")
-          .join("\n")
-          .trim() || "（无文本回复）";
-      return finishChat(context, actions, reply);
+    // max_tokens cuts the stream mid-block: a trailing tool_use would carry
+    // incomplete input (and its echo would lack a tool_result, which the API
+    // rejects), a trailing thinking block is incomplete — drop whichever it
+    // is. Every block before it completed and is safe to act on.
+    if (data.stop_reason === "max_tokens") {
+      const last = content[content.length - 1];
+      if (last && (last.type === "tool_use" || last.type === "thinking")) content.pop();
+    }
+    const toolBlocks = content.filter((b) => b.type === "tool_use");
+
+    // Completed tool calls survive a max_tokens cutoff — run them and let the
+    // model re-issue the truncated one next round.
+    if (toolBlocks.length && (data.stop_reason === "tool_use" || data.stop_reason === "max_tokens")) {
+      messages.push({ role: "assistant", content });
+      const toolResults: unknown[] = [];
+      for (const block of toolBlocks) {
+        if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+        const resultJson = await callTool(context, actions, block.name!, block.input ?? {}, req.yolo !== false);
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: resultJson,
+        });
+      }
+      messages.push({ role: "user", content: toolResults });
+      continue;
     }
 
-    const toolResults: unknown[] = [];
-    for (const block of content) {
-      if (block.type !== "tool_use") continue;
-      if (stopRequested) return finishChat(context, actions, stopNote(req.language));
-      const resultJson = await callTool(context, actions, block.name!, block.input ?? {}, req.yolo !== false);
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: block.id,
-        content: resultJson,
-      });
+    // Pure text truncation (a long thinking block ate the budget): echo the
+    // partial text and ask the model to pick up where it stopped, bounded so
+    // a runaway can't burn the whole round budget.
+    if (data.stop_reason === "max_tokens") {
+      const partial = content
+        .filter((b) => b.type === "text")
+        .map((b) => b.text ?? "")
+        .join("\n")
+        .trim();
+      if (continuations < 2) {
+        continuations++;
+        debugLog(context, `ROUND ${round}: max_tokens — auto-continue ${continuations}/2`);
+        messages.push({ role: "assistant", content: partial || "…" });
+        messages.push({
+          role: "user",
+          content:
+            "你的上一条回复因长度限制被截断，请从中断处继续，不要重复已输出的内容。" +
+            " / Your previous reply was cut off by the token limit — continue exactly where you stopped, without repeating yourself.",
+        });
+        continue;
+      }
+      const note = TRUNC_NOTE[req.language ?? ""] ?? TRUNC_NOTE.en;
+      return finishChat(context, actions, (partial ? partial + "\n\n" : "") + note);
     }
-    messages.push({ role: "user", content: toolResults });
+
+    const reply =
+      content
+        .filter((b) => b.type === "text")
+        .map((b) => b.text ?? "")
+        .join("\n")
+        .trim() || "（无文本回复）";
+    return finishChat(context, actions, reply);
   }
   throw new Error("工具调用次数过多，已中止");
 }
@@ -1784,22 +1698,8 @@ function detectProxy(): string | null {
     cachedProxy = env;
     return env;
   }
-  if (process.platform === "darwin") {
-    try {
-      const out = execFileSync("scutil", ["--proxy"], { encoding: "utf8", timeout: 3000 });
-      const enabled = /HTTPSEnable\s*:\s*1/.test(out) || /HTTPEnable\s*:\s*1/.test(out);
-      const host = /HTTPSProxy\s*:\s*(\S+)/.exec(out)?.[1] ?? /HTTPProxy\s*:\s*(\S+)/.exec(out)?.[1];
-      const port = /HTTPSPort\s*:\s*(\d+)/.exec(out)?.[1] ?? /HTTPPort\s*:\s*(\d+)/.exec(out)?.[1];
-      if (enabled && host) {
-        cachedProxy = `http://${host}:${port ?? "7890"}`;
-        return cachedProxy;
-      }
-    } catch {
-      // scutil unavailable — no proxy.
-    }
-  }
-  cachedProxy = null;
-  return null;
+  cachedProxy = detectSystemProxy();
+  return cachedProxy;
 }
 
 interface RawResponse {
