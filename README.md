@@ -199,8 +199,6 @@ and modal dialogs, which is exactly why AIbletonBar exists as a separate sidebar
 
 ## Roadmap
 
-- **AIbletonBar for Windows** — the floating sidebar is macOS-only today; a Windows
-  version is on the list.
 - **Deeper Live integration** — move the sidebar into Live itself once the SDK's
   panel APIs land in a stable release.
 

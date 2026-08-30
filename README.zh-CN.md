@@ -190,7 +190,6 @@ AIbleton 现已开源。Ableton Extensions SDK 仍处于 **beta** 阶段，其�
 
 ## 路线图
 
-- **Windows 版 AIbletonBar** —— 悬浮侧边栏目前仅支持 macOS，Windows 版本已在计划中。
 - **更深度的 Live 集成** —— 待 SDK 正式版提供面板 API 后，把侧边栏直接搬进 Live 内部。
 
 ## 免责声明
