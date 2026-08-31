@@ -98,6 +98,17 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 
 ## 安装
 
+### 普通用户 —— 直接安装 `.ablx`
+
+需要 **Ableton Live 12.4.5 beta** 或更高版本。下载
+[AIbleton-0.8.5.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.5/AIbleton-0.8.5.ablx) 后，
+打开 Live 的 **设置 → Extensions** 页面，把 `.ablx` 文件拖进去即可 —— 无需 Node.js、无需命令行。
+
+安装完成后：右键轨道、场景或 Clip → Extensions → **AIbleton: Open** —— 或在浏览器打开
+`http://localhost:17666`。
+
+### 开发者模式 —— 从源码构建运行
+
 ```sh
 cd AIbleton
 npm install

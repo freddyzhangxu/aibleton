@@ -102,7 +102,19 @@ The project has two parts:
   **Settings → AI Provider** section. Nothing sensitive is stored by the extension.
 - **macOS or Windows** — only needed for AIbletonBar; the extension itself is platform-independent
 
-## Setup
+## Installation
+
+### For users — install the `.ablx`
+
+Requires **Ableton Live 12.4.5 beta** or later. Download
+[AIbleton-0.8.5.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.5/AIbleton-0.8.5.ablx),
+then open Live's **Settings → Extensions** page and drag the `.ablx` file onto it —
+no Node.js, no terminal.
+
+Once installed: right-click a track, scene or clip → Extensions → **AIbleton: Open** —
+or open `http://localhost:17666` in a browser.
+
+### For developers — build & run from source
 
 ```sh
 cd AIbleton
