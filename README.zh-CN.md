@@ -23,14 +23,14 @@
 
 ## 下载
 
-**当前版本：v0.8.7**（预发布）—— 前往
+**当前版本：v0.8.8**（预发布）—— 前往
 [**Releases 页面**](https://github.com/freddyzhangxu/aibleton/releases) 下载：
 
 | 文件 | 说明 |
 |---|---|
-| [AIbleton-0.8.7.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.7/AIbleton-0.8.7.ablx) | Live 扩展本体 —— **必装**。拖进 Live 的 **设置 → Extensions** 页面即可。 |
-| [AIbletonBar-0.8.7-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.7/AIbletonBar-0.8.7-macOS.zip) | 可选的 macOS 悬浮侧边栏（版本号与扩展保持同步）。 |
-| [AIbletonBar-0.8.7-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.7/AIbletonBar-0.8.7-Windows.zip) | 可选的 Windows 悬浮侧边栏 —— Win+Alt+A 呼出（版本号与扩展保持同步）。 |
+| [AIbleton-0.8.8.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.8/AIbleton-0.8.8.ablx) | Live 扩展本体 —— **必装**。拖进 Live 的 **设置 → Extensions** 页面即可。 |
+| [AIbletonBar-0.8.8-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.8/AIbletonBar-0.8.8-macOS.zip) | 可选的 macOS 悬浮侧边栏（版本号与扩展保持同步）。 |
+| [AIbletonBar-0.8.8-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.8/AIbletonBar-0.8.8-Windows.zip) | 可选的 Windows 悬浮侧边栏 —— Win+Alt+A 呼出（版本号与扩展保持同步）。 |
 
 用户无需安装 Node.js —— 扩展运行在 Live 自带的 Extension Host 中。
 
@@ -74,8 +74,9 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
   按 GM 风格音符表直接编程，出声即用。
 - **采样搜索与导入** —— 搜索本地 Splice 同步目录、Ableton User Library、
   官方 Packs 与 Core Library，导入音频或装载到 Simpler。
-- **AI 音频生成** —— 用 Stable Audio 把文字描述渲染成 WAV 并直接进工程：
-  loop 上编排、one-shot 进 Simpler；文件落在 User Library，随取随用。
+- **AI 音频生成** —— 用 Stable Audio、ElevenLabs 或 MiniMax（自带 key，设置里切换）
+  把文字描述渲染成音频并直接进工程：loop 上编排、one-shot 进 Simpler；
+  文件落在 User Library，随取随用。
 - **设备控制** —— 插入设备（Operator、Auto Filter……），按模糊名称读写参数
   （"freq" → Filter Freq）。
 - **轨道与场景操作** —— 创建 / 重命名 / 静音 / 独奏 / 布防轨道，调节音量与声像，
@@ -103,7 +104,7 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 ### 普通用户 —— 直接安装 `.ablx`
 
 需要 **Ableton Live 12.4.5 beta** 或更高版本。下载
-[AIbleton-0.8.7.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.7/AIbleton-0.8.7.ablx) 后，
+[AIbleton-0.8.8.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.8.8/AIbleton-0.8.8.ablx) 后，
 打开 Live 的 **设置 → Extensions** 页面，把 `.ablx` 文件拖进去即可 —— 无需 Node.js、无需命令行。
 
 安装完成后：右键轨道、场景或 Clip → Extensions → **AIbleton: Open** —— 或在浏览器打开
