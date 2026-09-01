@@ -835,20 +835,24 @@
       cfgInputs.apiKey.placeholder = t('apiKeyPh');
       cfgInputs.baseUrl.placeholder = PROVIDERS[currentProvider].base;
       cfgInputs.model.placeholder = PROVIDERS[currentProvider].model;
+      // 服务端 providers.json 是唯一权威（= 内置界面显示的内容）：完整镜像
+      // 服务端值，覆盖 localStorage 里可能残留的旧值 —— 两个壳（内置对话框 /
+      // AIbletonBar）的 localStorage 互相隔离，只有这样才能保持一致。
       const p = currentProvider;
       fetch('/api/provider-config?provider=' + p).then(r => r.json()).then(s => {
-        // 只补全仍为空的字段：不覆盖用户正在输入的内容或其他窗口的新值。
-        if (p !== currentProvider || !s || !s.manual) return;
-        let filled = false;
+        if (p !== currentProvider || !s) return;
+        const saved = s.manual || {};
+        let changed = false;
         for (const f of Object.keys(cfgInputs)) {
-          const v = s.manual[f];
-          if (typeof v === 'string' && v && !cfgInputs[f].value) {
+          const v = typeof saved[f] === 'string' ? saved[f] : '';
+          if (cfgInputs[f].value !== v) {
             cfgInputs[f].value = v;
-            localStorage.setItem(`ai.${p}.${f}`, v);
-            filled = true;
+            if (v) localStorage.setItem(`ai.${p}.${f}`, v);
+            else localStorage.removeItem(`ai.${p}.${f}`);
+            changed = true;
           }
         }
-        if (filled) updateModelName();
+        if (changed) updateModelName();
       }).catch(() => {});
     }
     for (const f of Object.keys(cfgInputs)) {
@@ -1034,23 +1038,27 @@
           customInputs[f].value = localStorage.getItem(`ai.audio.custom.${f}`) || '';
         }
       }
-      // 服务端副本回填空字段（竞态守卫：拉取期间切了 provider 则丢弃）。
+      // 同样以服务端为准做完整镜像（而非只补空），统一两个壳的显示。
       const code = currentAudioProvider;
       fetch('/api/audio-config').then(r => r.json()).then(s => {
         if (code !== currentAudioProvider || !s) return;
         const saved = (s.fields && s.fields[code]) || {};
         for (const f of Object.keys(audioCfgInputs)) {
-          if (typeof saved[f] === 'string' && saved[f] && !audioCfgInputs[f].value) {
-            audioCfgInputs[f].value = saved[f];
-            localStorage.setItem(`ai.audio.${code}.${f}`, saved[f]);
+          const v = typeof saved[f] === 'string' ? saved[f] : '';
+          if (audioCfgInputs[f].value !== v) {
+            audioCfgInputs[f].value = v;
+            if (v) localStorage.setItem(`ai.audio.${code}.${f}`, v);
+            else localStorage.removeItem(`ai.audio.${code}.${f}`);
           }
         }
-        if (code === 'custom' && s.custom) {
+        if (code === 'custom') {
+          const savedCustom = s.custom || {};
           for (const f of Object.keys(customInputs)) {
-            const v = s.custom[f];
-            if (typeof v === 'string' && v && !customInputs[f].value) {
+            const v = typeof savedCustom[f] === 'string' ? savedCustom[f] : '';
+            if (customInputs[f].value !== v) {
               customInputs[f].value = v;
-              localStorage.setItem(`ai.audio.custom.${f}`, v);
+              if (v) localStorage.setItem(`ai.audio.custom.${f}`, v);
+              else localStorage.removeItem(`ai.audio.custom.${f}`);
             }
           }
         }
@@ -1109,6 +1117,7 @@
         renderLangs();
         renderProviders();
         renderAudioProviders();
+        loadProviderFields();
         loadAudioFields();
         showView('viewMain');
       }
@@ -1720,34 +1729,29 @@
     renderLangs();
     renderProviders();
     applyLang();
-    // Live 内置 webview 的 localStorage 不持久：本地没有记录时，回读服务端
-    // 记住的"上次使用的 provider"。
-    if (!savedProvider) {
-      fetch('/api/last-provider').then(r => r.json()).then(s => {
-        if (s && PROVIDERS[s.provider] && s.provider !== currentProvider) {
-          currentProvider = s.provider;
-          localStorage.setItem('ai.provider', currentProvider);
-          providerVal.textContent = PROVIDERS[currentProvider].name;
-          loadProviderFields();
-          renderProviders();
-          renderEfforts();
-          refreshHealth();
-        }
-      }).catch(() => {});
-    }
-    // 音频 provider 同理：本地无记录时采用服务端记住的选择（字段回填由
-    // loadAudioFields 内部的 GET 完成，无需在此重复）。
-    if (!savedAudioProvider) {
-      fetch('/api/audio-config').then(r => r.json()).then(s => {
-        if (s && AUDIO_PROVIDERS[s.selected] && s.selected !== currentAudioProvider) {
-          currentAudioProvider = s.selected;
-          localStorage.setItem('ai.audio.provider', currentAudioProvider);
-          audioVal.textContent = AUDIO_PROVIDERS[currentAudioProvider].name;
-          loadAudioFields();
-          renderAudioProviders();
-        }
-      }).catch(() => {});
-    }
+    // 服务端记住的选择优先（内置界面为准）：即使本地 localStorage 有旧值，
+    // 也以服务端为准校对 —— 两个壳的 localStorage 隔离，这是唯一的同步通道。
+    fetch('/api/last-provider').then(r => r.json()).then(s => {
+      if (s && PROVIDERS[s.provider] && s.provider !== currentProvider) {
+        currentProvider = s.provider;
+        localStorage.setItem('ai.provider', currentProvider);
+        providerVal.textContent = PROVIDERS[currentProvider].name;
+        loadProviderFields();
+        renderProviders();
+        renderEfforts();
+        refreshHealth();
+      }
+    }).catch(() => {});
+    // 音频 provider 同理（字段镜像由 loadAudioFields 内部的 GET 完成）。
+    fetch('/api/audio-config').then(r => r.json()).then(s => {
+      if (s && AUDIO_PROVIDERS[s.selected] && s.selected !== currentAudioProvider) {
+        currentAudioProvider = s.selected;
+        localStorage.setItem('ai.audio.provider', currentAudioProvider);
+        audioVal.textContent = AUDIO_PROVIDERS[currentAudioProvider].name;
+        loadAudioFields();
+        renderAudioProviders();
+      }
+    }).catch(() => {});
     // 恢复上次未发送的草稿，光标放到末尾。
     input.value = localStorage.getItem(DRAFT_KEY) || '';
     if (input.value) {
