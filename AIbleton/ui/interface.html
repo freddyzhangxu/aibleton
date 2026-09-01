@@ -489,7 +489,7 @@
         <div class="cfg-fields">
           <label><span data-i18n="apiKey">API Key</span><input id="audioCfgKey" type="password" autocomplete="off"></label>
           <label><span data-i18n="baseUrl">API 地址</span><input id="audioCfgBase" autocomplete="off" spellcheck="false"></label>
-          <div class="cfg-hint" data-i18n="audioCfgHint">在 platform.stability.ai 申请 key；生成按次计费</div>
+          <div class="cfg-hint" id="audioCfgHint"></div>
         </div>
       </div>
     </div>
@@ -569,8 +569,7 @@
         cfgMissing: '未找到 {p} 认证信息，请在设置中填写 API Key',
         apiKey: 'API Key', baseUrl: 'API 地址', model: '模型',
         apiKeyPh: '可选，留空跟随本机 CLI 配置',
-        audioKeyPh: 'Stability API Key',
-        audioCfgHint: '在 platform.stability.ai 申请 key；生成按次计费',
+        audioCfgHint: '在 {site} 申请 key；生成按次计费',
         cfgHint: '留空将自动使用本机 CLI 配置与默认值',
         effortDefault: '默认 Effort',
         effortTitle: '思考强度：更高 = 推理更深但更慢',
@@ -593,8 +592,7 @@
         cfgMissing: 'No {p} credentials found — add an API Key in Settings',
         apiKey: 'API Key', baseUrl: 'Base URL', model: 'Model',
         apiKeyPh: 'Optional — empty uses local CLI config',
-        audioKeyPh: 'Stability API key',
-        audioCfgHint: 'Get a key at platform.stability.ai — billed per generation',
+        audioCfgHint: 'Get a key at {site} — billed per generation',
         cfgHint: 'Leave empty to use local CLI config and defaults',
         effortDefault: 'Default effort',
         effortTitle: 'Reasoning effort: higher = deeper but slower',
@@ -617,8 +615,7 @@
         cfgMissing: 'Keine {p}-Zugangsdaten gefunden – API-Schlüssel in den Einstellungen eintragen',
         apiKey: 'API-Schlüssel', baseUrl: 'API-Adresse', model: 'Modell',
         apiKeyPh: 'Optional – leer = lokale CLI-Konfiguration',
-        audioKeyPh: 'Stability API-Schlüssel',
-        audioCfgHint: 'Schlüssel auf platform.stability.ai — Abrechnung pro Generierung',
+        audioCfgHint: 'Schlüssel auf {site} — Abrechnung pro Generierung',
         cfgHint: 'Leer lassen = lokale CLI-Konfiguration und Standardwerte',
         effortDefault: 'Standard-Effort',
         effortTitle: 'Denktiefe: höher = gründlicher, aber langsamer',
@@ -641,8 +638,7 @@
         cfgMissing: 'Aucun identifiant {p} trouvé — ajoutez une clé API dans les paramètres',
         apiKey: 'Clé API', baseUrl: 'Adresse API', model: 'Modèle',
         apiKeyPh: 'Optionnel — vide = config CLI locale',
-        audioKeyPh: 'Clé API Stability',
-        audioCfgHint: 'Clé sur platform.stability.ai — facturation par génération',
+        audioCfgHint: 'Clé sur {site} — facturation par génération',
         cfgHint: 'Laisser vide = config CLI locale et valeurs par défaut',
         effortDefault: 'Effort par défaut',
         effortTitle: 'Intensité de raisonnement : plus haut = plus profond mais plus lent',
@@ -665,8 +661,7 @@
         cfgMissing: '{p} の認証情報が見つかりません — 設定で API キーを入力してください',
         apiKey: 'API キー', baseUrl: 'API アドレス', model: 'モデル',
         apiKeyPh: '省略可 — 空欄ならローカル CLI 設定を使用',
-        audioKeyPh: 'Stability API キー',
-        audioCfgHint: 'platform.stability.ai でキー取得 — 生成ごとに課金',
+        audioCfgHint: '{site} でキー取得 — 生成ごとに課金',
         cfgHint: '空欄ならローカル CLI 設定とデフォルト値を使用します',
         effortDefault: 'デフォルト',
         effortTitle: '思考の強さ：高いほど深く推論しますが遅くなります',
@@ -689,8 +684,7 @@
         cfgMissing: 'No se encontraron credenciales de {p} — añade una API Key en Ajustes',
         apiKey: 'API Key', baseUrl: 'Dirección API', model: 'Modelo',
         apiKeyPh: 'Opcional — vacío = config CLI local',
-        audioKeyPh: 'Clave API de Stability',
-        audioCfgHint: 'Consigue una clave en platform.stability.ai — cobro por generación',
+        audioCfgHint: 'Consigue una clave en {site} — cobro por generación',
         cfgHint: 'Vacío = config CLI local y valores por defecto',
         effortDefault: 'Effort por defecto',
         effortTitle: 'Intensidad de razonamiento: mayor = más profundo pero más lento',
@@ -713,8 +707,7 @@
         cfgMissing: 'Nessuna credenziale {p} trovata — aggiungi una API Key nelle Impostazioni',
         apiKey: 'API Key', baseUrl: 'Indirizzo API', model: 'Modello',
         apiKeyPh: 'Opzionale — vuoto = config CLI locale',
-        audioKeyPh: 'Chiave API Stability',
-        audioCfgHint: 'Chiave su platform.stability.ai — addebito per generazione',
+        audioCfgHint: 'Chiave su {site} — addebito per generazione',
         cfgHint: 'Vuoto = config CLI locale e valori predefiniti',
         effortDefault: 'Effort predefinito',
         effortTitle: 'Intensità di ragionamento: più alta = più profonda ma più lenta',
@@ -866,7 +859,9 @@
 
     // ---------- Audio generation providers (Settings → 音频生成) ----------
     const AUDIO_PROVIDERS = {
-      'stable-audio': { name: 'Stable Audio', base: 'https://api.stability.ai' },
+      'stable-audio': { name: 'Stable Audio', base: 'https://api.stability.ai', site: 'platform.stability.ai' },
+      'elevenlabs':   { name: 'ElevenLabs',   base: 'https://api.elevenlabs.io', site: 'elevenlabs.io' },
+      'minimax':      { name: 'MiniMax',      base: 'https://api.minimaxi.com',  site: 'platform.minimaxi.com' },
     };
     let currentAudioProvider = localStorage.getItem('ai.audio.provider') || 'stable-audio';
     if (!AUDIO_PROVIDERS[currentAudioProvider]) currentAudioProvider = 'stable-audio';
@@ -876,13 +871,16 @@
       baseUrl: document.getElementById('audioCfgBase'),
     };
     const audioVal = document.getElementById('audioVal');
+    const audioCfgHint = document.getElementById('audioCfgHint');
 
     function loadAudioFields() {
       for (const f of Object.keys(audioCfgInputs)) {
         audioCfgInputs[f].value = localStorage.getItem(`ai.audio.${currentAudioProvider}.${f}`) || '';
       }
-      audioCfgInputs.apiKey.placeholder = t('audioKeyPh');
-      audioCfgInputs.baseUrl.placeholder = AUDIO_PROVIDERS[currentAudioProvider].base;
+      const p = AUDIO_PROVIDERS[currentAudioProvider];
+      audioCfgInputs.apiKey.placeholder = p.name + ' API key';
+      audioCfgInputs.baseUrl.placeholder = p.base;
+      audioCfgHint.textContent = t('audioCfgHint').replace('{site}', p.site);
     }
     for (const f of Object.keys(audioCfgInputs)) {
       audioCfgInputs[f].addEventListener('change', () =>

@@ -1,7 +1,4 @@
 import * as http from "node:http";
-import * as https from "node:https";
-import * as tls from "node:tls";
-import * as net from "node:net";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -11,18 +8,23 @@ import * as path from "node:path";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
 import { describeBinaryAttachment } from "./fileparsers.js";
+import { detectProxy, rawPost, readAll } from "./http.js";
+import {
+  AUDIO_PROVIDER_NAMES,
+  audioProviderEnv,
+  generateAudio,
+  resolveAudioConfig,
+  type AudioGenConfig,
+} from "./audiogen.js";
 import {
   AUDIO_EXT,
-  detectSystemProxy,
   kitRoots,
   listAudioFilesViaFind,
   mkdirOutsideSandbox,
   pathExists,
   readHomeFile,
-  resolveAbletonLibraryPaths,
   sampleRoots,
   storeFallbackPath,
-  writeHomeBinary,
   writeHomeFile,
 } from "./paths.js";
 import {
@@ -267,19 +269,7 @@ function saveManualConfigs(): void {
 
 type Ctx = ExtensionContext<"1.0.0">;
 
-// ---------- Audio-generation providers ----------
-
-type AudioProvider = "stable-audio";
-
-const AUDIO_PROVIDER_NAMES: Record<AudioProvider, string> = {
-  "stable-audio": "Stable Audio",
-};
-
-interface AudioGenConfig {
-  provider: AudioProvider;
-  apiKey: string;
-  baseUrl: string;
-}
+// ---------- Audio-generation providers (see audiogen.ts) ----------
 
 /**
  * Audio-generator config for the running chat task. Rides the chat request
@@ -287,15 +277,6 @@ interface AudioGenConfig {
  * resolved once per /api/chat — `busy` guarantees a single task at a time.
  */
 let activeAudioConfig: AudioGenConfig | null = null;
-
-function resolveAudioConfig(req: ChatRequest): AudioGenConfig | null {
-  // Only one provider so far; req.audio.provider is reserved for the switcher.
-  const provider: AudioProvider = "stable-audio";
-  const apiKey = req.audio?.apiKey || process.env.STABILITY_API_KEY || "";
-  if (!apiKey) return null;
-  const baseUrl = (req.audio?.baseUrl || "https://api.stability.ai").replace(/\/$/, "");
-  return { provider, apiKey, baseUrl };
-}
 
 // ---------- Claude tool definitions ----------
 
@@ -459,7 +440,7 @@ const TOOLS = [
   {
     name: "generate_audio",
     description:
-      "Generate NEW audio with an AI music model (Stable Audio) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Returns the saved file path — then call import_audio_clip (loops onto an audio track's arrangement) or load_sample (one-shots into a Simpler).",
+      "Generate NEW audio with an AI music model (Stable Audio / ElevenLabs / MiniMax — whichever is configured in Settings) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Returns the saved file path — then call import_audio_clip (loops onto an audio track's arrangement) or load_sample (one-shots into a Simpler).",
     input_schema: {
       type: "object",
       properties: {
@@ -469,6 +450,14 @@ const TOOLS = [
             "English, specific: genre, BPM, key, instrumentation, mood. Add 'seamless loop' for loops.",
         },
         duration_seconds: { type: "number", description: "1–190 (default 8); use 4–16 for loops" },
+        instrumental: {
+          type: "boolean",
+          description: "Guarantee no vocals (ElevenLabs / MiniMax; Stable Audio is always instrumental)",
+        },
+        lyrics: {
+          type: "string",
+          description: "Vocal lyrics — MiniMax only; omit for instrumentals",
+        },
       },
       required: ["prompt"],
     },
@@ -618,9 +607,10 @@ Samples and audio files:
 - search with specific keywords ("deep house loop 124", "909 snare"); if total is huge, refine the query instead of paging.
 
 AI audio generation:
-- generate_audio(prompt, duration_seconds) creates NEW audio with Stable Audio and saves it into the User Library's "AIbleton" folder. It costs API credits and takes ~10–60 s — write a precise English prompt (genre, BPM, key, mood; add "seamless loop" for loops) and keep loops short (4–16 s).
+- generate_audio(prompt, duration_seconds) creates NEW audio with the configured provider (Stable Audio / ElevenLabs / MiniMax) and saves it into the User Library's "AIbleton" folder. It costs API credits and takes ~10–60 s — write a precise English prompt (genre, BPM, key, mood; add "seamless loop" for loops) and keep loops short (4–16 s).
+- Vocals: generated audio is instrumental by default. Only add lyrics when the user explicitly asks for a sung vocal (MiniMax).
 - Workflow: generate_audio → import_audio_clip (loops/stems onto an audio track) or load_sample (one-shots into a Simpler). Generated files also become searchable via search_samples afterwards.
-- If the tool errors about a missing API key, tell the user to add their Stability key in Settings (gear icon) → 音频生成 / Audio Generation.
+- If the tool errors about a missing API key, tell the user to add their key in Settings (gear icon) → 音频生成 / Audio Generation.
 
 Swing and groove:
 - Live's Groove Pool, .agr files and the global groove amount are NOT reachable via the SDK — never claim you assigned a groove.
@@ -977,17 +967,27 @@ async function runTool(
       const cfg = activeAudioConfig;
       if (!cfg) {
         throw new Error(
-          `未配置音频生成 API Key:设置(齿轮)→ 音频生成 里填 ${AUDIO_PROVIDER_NAMES["stable-audio"]} 的 key,或设环境变量 STABILITY_API_KEY`,
+          `未配置音频生成 API Key:设置(齿轮)→ 音频生成 里填所选提供商的 key,或设环境变量 ${audioProviderEnv("stable-audio")} / ${audioProviderEnv("elevenlabs")} / ${audioProviderEnv("minimax")}`,
         );
       }
       const prompt = String(input.prompt ?? "").trim();
       if (!prompt) throw new Error("prompt 不能为空");
       const duration = Math.min(190, Math.max(1, Number(input.duration_seconds ?? 8) || 8));
-      const file = await generateStableAudio(cfg, prompt, duration);
+      const file = await generateAudio(
+        cfg,
+        {
+          prompt,
+          seconds: duration,
+          instrumental: typeof input.instrumental === "boolean" ? input.instrumental : undefined,
+          lyrics: typeof input.lyrics === "string" ? input.lyrics : undefined,
+        },
+        abortCtl?.signal ?? undefined,
+      );
       // Let search_samples find the new file without a restart.
       sampleIndex = null;
       return {
         file,
+        provider: AUDIO_PROVIDER_NAMES[cfg.provider],
         duration_seconds: duration,
         next: "用 import_audio_clip 放上编排(loop/stem)或 load_sample 装进 Simpler(one-shot)",
       };
@@ -1753,229 +1753,6 @@ async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest
   throw new Error("工具调用次数过多，已中止");
 }
 
-// ---------- Proxy-aware HTTP transport ----------
-// chatgpt.com / api.openai.com / generativelanguage.googleapis.com are often
-// reachable only through a local proxy, and Node's fetch ignores macOS system
-// proxy settings — so Codex/Gemini calls go through this helper (CONNECT
-// tunnel) instead. The Anthropic path keeps using plain fetch.
-
-let cachedProxy: string | null | undefined;
-
-function detectProxy(): string | null {
-  if (cachedProxy !== undefined) return cachedProxy;
-  const env =
-    process.env.AIBLETON_PROXY ||
-    process.env.HTTPS_PROXY ||
-    process.env.https_proxy ||
-    process.env.HTTP_PROXY ||
-    process.env.http_proxy;
-  if (env) {
-    cachedProxy = env;
-    return env;
-  }
-  cachedProxy = detectSystemProxy();
-  return cachedProxy;
-}
-
-interface RawResponse {
-  status: number;
-  stream: AsyncIterable<Buffer>;
-}
-
-/** Minimal HTTPS POST with optional HTTP-proxy CONNECT tunneling. */
-function rawPost(
-  target: URL,
-  init: { headers: Record<string, string>; body: string; proxy: string | null; signal?: AbortSignal },
-): Promise<RawResponse> {
-  return new Promise((resolve, reject) => {
-    // Abort support: destroy whatever is in flight. Before the response
-    // arrives that makes this promise reject; after, it kills the body
-    // stream so the caller's read loop throws.
-    let current: { destroy: () => void } | null = null;
-    const cleanup = () => init.signal?.removeEventListener("abort", onAbort);
-    const onAbort = () => {
-      current?.destroy();
-      cleanup();
-      reject(new Error("请求已停止"));
-    };
-    if (init.signal) {
-      if (init.signal.aborted) {
-        reject(new Error("请求已停止"));
-        return;
-      }
-      init.signal.addEventListener("abort", onAbort);
-    }
-    const fail = (err: Error) => {
-      cleanup();
-      reject(err);
-    };
-    const send = (socket?: tls.TLSSocket) => {
-      const reqOpts: https.RequestOptions = {
-        hostname: target.hostname,
-        port: target.port || 443,
-        path: target.pathname + target.search,
-        method: "POST",
-        headers: {
-          "content-length": String(Buffer.byteLength(init.body)),
-          ...init.headers,
-        },
-      };
-      // Request-level createConnection (no `agent` key at all — passing
-      // agent:false makes Node ignore it and dial the target directly).
-      if (socket) reqOpts.createConnection = () => socket;
-      const req = https.request(reqOpts, (res) => {
-        current = req;
-        res.on("close", cleanup);
-        resolve({ status: res.statusCode ?? 0, stream: res });
-      });
-      current = req;
-      req.on("error", fail);
-      req.write(init.body);
-      req.end();
-    };
-    if (!init.proxy) {
-      send();
-      return;
-    }
-    let proxy: URL;
-    try {
-      proxy = new URL(init.proxy);
-    } catch {
-      fail(new Error(`代理地址无效: ${init.proxy}`));
-      return;
-    }
-    const proxySocket = net.connect(Number(proxy.port || 80), proxy.hostname, () => {
-      const auth = proxy.username
-        ? `Proxy-Authorization: Basic ${Buffer.from(`${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`).toString("base64")}\r\n`
-        : "";
-      proxySocket.write(
-        `CONNECT ${target.hostname}:${target.port || 443} HTTP/1.1\r\nHost: ${target.hostname}:${target.port || 443}\r\n${auth}\r\n`,
-      );
-    });
-    current = proxySocket;
-    proxySocket.setTimeout(15000, () => {
-      proxySocket.destroy();
-      fail(new Error(`代理连接超时 (${proxy.host})`));
-    });
-    let head = "";
-    proxySocket.on("data", function onData(chunk: Buffer) {
-      head += chunk.toString("latin1");
-      const endIdx = head.indexOf("\r\n\r\n");
-      if (endIdx < 0) return;
-      proxySocket.removeListener("data", onData);
-      proxySocket.setTimeout(0);
-      if (!/^HTTP\/\d(?:\.\d)? 200/.test(head)) {
-        proxySocket.destroy();
-        fail(new Error(`代理 CONNECT 失败: ${head.slice(0, head.indexOf("\r\n"))}`));
-        return;
-      }
-      const secure = tls.connect(
-        { socket: proxySocket, servername: target.hostname, ALPNProtocols: ["http/1.1"] },
-        () => send(secure),
-      );
-      current = secure;
-      secure.on("error", fail);
-    });
-    proxySocket.on("error", fail);
-  });
-}
-
-async function readAll(stream: AsyncIterable<Buffer>): Promise<string> {
-  let out = "";
-  for await (const chunk of stream) out += chunk.toString("utf8");
-  return out;
-}
-
-// ---------- AI audio generation (Stable Audio) ----------
-
-/** multipart/form-data body for Stability's API (text fields only). */
-function multipartBody(fields: Record<string, string>): { body: string; contentType: string } {
-  const boundary = "----aibleton" + Math.random().toString(36).slice(2);
-  let body = "";
-  for (const [k, v] of Object.entries(fields)) {
-    body += `--${boundary}\r\ncontent-disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`;
-  }
-  return { body: body + `--${boundary}--\r\n`, contentType: `multipart/form-data; boundary=${boundary}` };
-}
-
-async function readAllBinary(stream: AsyncIterable<Buffer>): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) chunks.push(chunk);
-  return Buffer.concat(chunks);
-}
-
-/**
- * Stable Audio text-to-audio: one synchronous POST that holds the
- * connection until the render finishes (~10–60 s), then answers with the
- * audio bytes (accept: audio/*). Errors still come back as JSON text.
- * Note: the endpoint path is "stable-audio-2" even though the backend now
- * serves Stable Audio 2.5 — there is no versioned 2.5 path (probed 2026-09:
- * the 2.5 path 404s, this one answers 401 without a key).
- */
-async function generateStableAudio(
-  cfg: AudioGenConfig,
-  prompt: string,
-  seconds: number,
-): Promise<string> {
-  const { body, contentType } = multipartBody({
-    prompt,
-    duration: String(seconds),
-    output_format: "wav",
-  });
-  const res = await rawPost(
-    new URL(`${cfg.baseUrl}/v2beta/audio/stable-audio-2/text-to-audio`),
-    {
-      headers: {
-        authorization: `Bearer ${cfg.apiKey}`,
-        accept: "audio/*",
-        "content-type": contentType,
-      },
-      body,
-      proxy: detectProxy(),
-      signal: abortCtl?.signal ?? undefined,
-    },
-  );
-  if (res.status < 200 || res.status >= 300) {
-    const errText = await readAll(res.stream);
-    let msg = errText.slice(0, 300);
-    try {
-      const parsed = JSON.parse(errText) as { errors?: string[]; message?: string };
-      msg = parsed.errors?.join("; ") || parsed.message || msg;
-    } catch {
-      // Not JSON — keep the raw excerpt.
-    }
-    throw new Error(`Stable Audio API 错误 (${res.status}): ${msg}`);
-  }
-  const audio = await readAllBinary(res.stream);
-  if (!audio.length) throw new Error("Stable Audio 返回了空音频");
-  return saveGeneratedAudio(audio, "wav");
-}
-
-/**
- * Where generated files land: <User Library>/AIbleton — visible in Live's
- * browser under the User Library and indexed by search_samples (the handler
- * drops the index cache after each generation).
- */
-function generatedAudioDir(): string {
-  const lib = resolveAbletonLibraryPaths();
-  const userLib =
-    lib.userLibraries[0] ??
-    (process.platform === "win32"
-      ? path.join(os.homedir(), "Documents", "Ableton", "User Library")
-      : path.join(os.homedir(), "Music", "Ableton", "User Library"));
-  return path.join(userLib, "AIbleton");
-}
-
-function saveGeneratedAudio(audio: Buffer, ext: string): string {
-  const dir = generatedAudioDir();
-  mkdirOutsideSandbox(dir);
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
-  const rand = Math.random().toString(36).slice(2, 6);
-  const file = path.join(dir, `gen-${stamp}-${rand}.${ext}`);
-  writeHomeBinary(file, audio);
-  return file;
-}
-
 // ---------- OpenAI Responses API (Codex) ----------
 
 interface OpenAIOutputItem {
@@ -2511,7 +2288,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         lastError = null;
         stopRequested = false;
         abortCtl = new AbortController();
-        activeAudioConfig = resolveAudioConfig(parsed);
+        activeAudioConfig = resolveAudioConfig(parsed.audio as Parameters<typeof resolveAudioConfig>[0]);
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT
         // stop it. Clients poll /api/status and then read /api/history.
