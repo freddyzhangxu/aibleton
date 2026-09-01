@@ -172,22 +172,32 @@ The extension starts a small HTTP server (port `17666`) inside Live's Extension 
 The chat page talks to the selected provider — Claude, Codex, or Gemini — with a tool
 set backed by the Extensions SDK: `get_song_overview`, `write_midi_clip`,
 `write_session_clip`, `load_drum_kit`, `search_samples`, `import_audio_clip`,
-`insert_device`, `set_device_parameter`, `set_track_mixer`, scene & tempo tools, and
-more. Every answer can directly read and modify the open Live Set.
+`generate_audio`, `insert_device`, `set_device_parameter`, `set_track_mixer`,
+scene & tempo tools, and more. Every answer can directly read and modify the
+open Live Set.
 
 ```
 ┌────────────────────┐      ┌──────────────────────┐      ┌────────────────┐
 │ Chat UI            │      │ Assistant server     │      │ Model API      │
 │ (dialog / browser  │─────▶│ localhost:17666      │─────▶│ Claude / Codex │
 │  / AIbletonBar)    │      │ + ~20 Live tools     │◀─────│ / Gemini       │
-└────────────────────┘      └──────────┬───────────┘      └────────────────┘
-                                       │ Extensions SDK
-                                       ▼
-                              ┌──────────────────┐
+└────────────────────┘      │                      │      └────────────────┘
+                            │                      │      ┌────────────────┐
+                            │                      │─────▶│ Audio API      │
+                            │                      │◀─────│ Stable Audio / │
+                            └──────────┬───────────┘      │ ElevenLabs /   │
+                                       │ Extensions SDK   │ MiniMax /      │
+                                       ▼                  │ custom HTTP    │
+                              ┌──────────────────┐        └────────────────┘
                               │ Ableton Live 12  │
                               │ (open Live Set)  │
                               └──────────────────┘
 ```
+
+`generate_audio` is a separate provider stack from the chat model — its own API
+keys (Settings → Audio Generation), called directly by the server, never routed
+through the LLM. Renders land in User Library › AIbleton, then the model drops
+them into the Set with `import_audio_clip` / `load_sample`.
 
 ## Project structure
 
@@ -195,6 +205,7 @@ more. Every answer can directly read and modify the open Live Set.
 AIbleton/          Live extension (TypeScript)
 ├── src/extension.ts   entry point — registers context-menu actions, starts server
 ├── src/server.ts      assistant server + tool implementations (Claude / Codex / Gemini)
+├── src/audiogen.ts    audio generation providers (Stable Audio / ElevenLabs / MiniMax / custom HTTP)
 ├── src/fileparsers.ts parses .mid / .als attachments into text summaries for the model
 ├── ui/interface.html  chat UI
 ├── scripts/           smoke tests (npx tsx scripts/test-fileparsers.ts)
