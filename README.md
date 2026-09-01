@@ -46,6 +46,9 @@ It's also an operation guide while you work: ask *"how do I sidechain-compress t
 bass against the kick?"* or *"where do I set up warping for this loop?"* and it walks
 you through the steps — or simply does it for you.
 
+With Stable Audio (or ElevenLabs / MiniMax) connected, it can also render audio from
+a one-line description — loops onto the arrangement, one-shots into Simpler.
+
 The project has two parts:
 
 | Component | What it is |
