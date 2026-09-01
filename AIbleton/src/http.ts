@@ -39,6 +39,7 @@ export function detectProxy(): string | null {
 
 export interface RawResponse {
   status: number;
+  headers: http.IncomingHttpHeaders;
   stream: AsyncIterable<Buffer>;
 }
 
@@ -99,7 +100,7 @@ export function rawRequest(
       const req = transport.request(reqOpts, (res) => {
         current = req;
         res.on("close", cleanup);
-        resolve({ status: res.statusCode ?? 0, stream: res });
+        resolve({ status: res.statusCode ?? 0, headers: res.headers, stream: res });
       });
       current = req;
       req.on("error", fail);
