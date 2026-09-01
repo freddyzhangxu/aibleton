@@ -103,6 +103,40 @@ export function writeHomeFile(p: string, content: string): void {
   });
 }
 
+/**
+ * Binary counterpart of writeHomeFile (generated audio files). The sandbox
+ * fallback pipes base64 through a decoder child — tee alone would store the
+ * base64 text, and PowerShell's WriteAllText would mangle the bytes.
+ */
+export function writeHomeBinary(p: string, content: Buffer): void {
+  try {
+    fs.writeFileSync(p, content);
+    return;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") throw e;
+  }
+  const b64 = content.toString("base64");
+  if (process.platform === "win32") {
+    const psPath = `'${p.replace(/'/g, "''")}'`;
+    execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `[IO.File]::WriteAllBytes(${psPath}, [Convert]::FromBase64String([Console]::In.ReadToEnd()))`,
+      ],
+      { input: b64, timeout: 120000, stdio: ["pipe", "ignore", "ignore"], windowsHide: true },
+    );
+    return;
+  }
+  execFileSync("/usr/bin/base64", ["-D", "-o", p], {
+    input: b64,
+    timeout: 120000,
+    stdio: ["pipe", "ignore", "ignore"],
+  });
+}
+
 /** mkdirSync -p with the same child-process fallback as writeHomeFile. */
 export function mkdirOutsideSandbox(dir: string): void {
   try {

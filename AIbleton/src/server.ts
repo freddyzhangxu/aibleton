@@ -19,8 +19,10 @@ import {
   mkdirOutsideSandbox,
   pathExists,
   readHomeFile,
+  resolveAbletonLibraryPaths,
   sampleRoots,
   storeFallbackPath,
+  writeHomeBinary,
   writeHomeFile,
 } from "./paths.js";
 import {
@@ -265,6 +267,36 @@ function saveManualConfigs(): void {
 
 type Ctx = ExtensionContext<"1.0.0">;
 
+// ---------- Audio-generation providers ----------
+
+type AudioProvider = "stable-audio";
+
+const AUDIO_PROVIDER_NAMES: Record<AudioProvider, string> = {
+  "stable-audio": "Stable Audio",
+};
+
+interface AudioGenConfig {
+  provider: AudioProvider;
+  apiKey: string;
+  baseUrl: string;
+}
+
+/**
+ * Audio-generator config for the running chat task. Rides the chat request
+ * (same per-request override pattern as the chat provider keys) and is
+ * resolved once per /api/chat — `busy` guarantees a single task at a time.
+ */
+let activeAudioConfig: AudioGenConfig | null = null;
+
+function resolveAudioConfig(req: ChatRequest): AudioGenConfig | null {
+  // Only one provider so far; req.audio.provider is reserved for the switcher.
+  const provider: AudioProvider = "stable-audio";
+  const apiKey = req.audio?.apiKey || process.env.STABILITY_API_KEY || "";
+  if (!apiKey) return null;
+  const baseUrl = (req.audio?.baseUrl || "https://api.stability.ai").replace(/\/$/, "");
+  return { provider, apiKey, baseUrl };
+}
+
 // ---------- Claude tool definitions ----------
 
 const TOOLS = [
@@ -425,6 +457,23 @@ const TOOLS = [
     },
   },
   {
+    name: "generate_audio",
+    description:
+      "Generate NEW audio with an AI music model (Stable Audio) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Returns the saved file path — then call import_audio_clip (loops onto an audio track's arrangement) or load_sample (one-shots into a Simpler).",
+    input_schema: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description:
+            "English, specific: genre, BPM, key, instrumentation, mood. Add 'seamless loop' for loops.",
+        },
+        duration_seconds: { type: "number", description: "1–190 (default 8); use 4–16 for loops" },
+      },
+      required: ["prompt"],
+    },
+  },
+  {
     name: "write_midi_clip",
     description:
       "Create a MIDI clip in a track's arrangement and fill it with notes. Times are in beats (4/4: one bar = 4 beats, so 4 bars = 16 beats). pitch is a MIDI note number (0–127); for an Impulse drum kit use pitches 48–60 (48=kick-ish, 50=snare-ish, 54=closed hat-ish, 58=open hat-ish).",
@@ -567,6 +616,11 @@ Samples and audio files:
 - Workflow: search_samples(query) → import_audio_clip (loops/stems onto an audio track's arrangement) or load_sample (one-shots into a Simpler for pitched play).
 - search_samples covers the Splice folder if the Splice app is installed and synced, plus Ableton User Library, Factory Packs and Core Library. Splice's online catalog is NOT browsable — only local files.
 - search with specific keywords ("deep house loop 124", "909 snare"); if total is huge, refine the query instead of paging.
+
+AI audio generation:
+- generate_audio(prompt, duration_seconds) creates NEW audio with Stable Audio and saves it into the User Library's "AIbleton" folder. It costs API credits and takes ~10–60 s — write a precise English prompt (genre, BPM, key, mood; add "seamless loop" for loops) and keep loops short (4–16 s).
+- Workflow: generate_audio → import_audio_clip (loops/stems onto an audio track) or load_sample (one-shots into a Simpler). Generated files also become searchable via search_samples afterwards.
+- If the tool errors about a missing API key, tell the user to add their Stability key in Settings (gear icon) → 音频生成 / Audio Generation.
 
 Swing and groove:
 - Live's Groove Pool, .agr files and the global groove amount are NOT reachable via the SDK — never claim you assigned a groove.
@@ -919,6 +973,25 @@ async function runTool(
       await simpler.replaceSample(managed);
       return { track: track.name, device: "Simpler", file: managed };
     }
+    case "generate_audio": {
+      const cfg = activeAudioConfig;
+      if (!cfg) {
+        throw new Error(
+          `未配置音频生成 API Key:设置(齿轮)→ 音频生成 里填 ${AUDIO_PROVIDER_NAMES["stable-audio"]} 的 key,或设环境变量 STABILITY_API_KEY`,
+        );
+      }
+      const prompt = String(input.prompt ?? "").trim();
+      if (!prompt) throw new Error("prompt 不能为空");
+      const duration = Math.min(190, Math.max(1, Number(input.duration_seconds ?? 8) || 8));
+      const file = await generateStableAudio(cfg, prompt, duration);
+      // Let search_samples find the new file without a restart.
+      sampleIndex = null;
+      return {
+        file,
+        duration_seconds: duration,
+        next: "用 import_audio_clip 放上编排(loop/stem)或 load_sample 装进 Simpler(one-shot)",
+      };
+    }
     case "write_midi_clip": {
       const track = midiTrackAt(context, Number(input.track_index));
       const start = Number(input.start_beat ?? 0);
@@ -1015,6 +1088,8 @@ interface ChatRequest {
   /** false = ask the user before any Set-modifying tool call (default true = run freely). */
   yolo?: boolean;
   attachments?: Attachment[];
+  /** Audio-generation provider config from the settings UI (same per-request pattern as apiKey). */
+  audio?: { provider?: string; apiKey?: string; baseUrl?: string };
 }
 
 interface ResolvedConfig {
@@ -1811,6 +1886,96 @@ async function readAll(stream: AsyncIterable<Buffer>): Promise<string> {
   return out;
 }
 
+// ---------- AI audio generation (Stable Audio) ----------
+
+/** multipart/form-data body for Stability's API (text fields only). */
+function multipartBody(fields: Record<string, string>): { body: string; contentType: string } {
+  const boundary = "----aibleton" + Math.random().toString(36).slice(2);
+  let body = "";
+  for (const [k, v] of Object.entries(fields)) {
+    body += `--${boundary}\r\ncontent-disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`;
+  }
+  return { body: body + `--${boundary}--\r\n`, contentType: `multipart/form-data; boundary=${boundary}` };
+}
+
+async function readAllBinary(stream: AsyncIterable<Buffer>): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Stable Audio text-to-audio: one synchronous POST that holds the
+ * connection until the render finishes (~10–60 s), then answers with the
+ * audio bytes (accept: audio/*). Errors still come back as JSON text.
+ * Note: the endpoint path is "stable-audio-2" even though the backend now
+ * serves Stable Audio 2.5 — there is no versioned 2.5 path (probed 2026-09:
+ * the 2.5 path 404s, this one answers 401 without a key).
+ */
+async function generateStableAudio(
+  cfg: AudioGenConfig,
+  prompt: string,
+  seconds: number,
+): Promise<string> {
+  const { body, contentType } = multipartBody({
+    prompt,
+    duration: String(seconds),
+    output_format: "wav",
+  });
+  const res = await rawPost(
+    new URL(`${cfg.baseUrl}/v2beta/audio/stable-audio-2/text-to-audio`),
+    {
+      headers: {
+        authorization: `Bearer ${cfg.apiKey}`,
+        accept: "audio/*",
+        "content-type": contentType,
+      },
+      body,
+      proxy: detectProxy(),
+      signal: abortCtl?.signal ?? undefined,
+    },
+  );
+  if (res.status < 200 || res.status >= 300) {
+    const errText = await readAll(res.stream);
+    let msg = errText.slice(0, 300);
+    try {
+      const parsed = JSON.parse(errText) as { errors?: string[]; message?: string };
+      msg = parsed.errors?.join("; ") || parsed.message || msg;
+    } catch {
+      // Not JSON — keep the raw excerpt.
+    }
+    throw new Error(`Stable Audio API 错误 (${res.status}): ${msg}`);
+  }
+  const audio = await readAllBinary(res.stream);
+  if (!audio.length) throw new Error("Stable Audio 返回了空音频");
+  return saveGeneratedAudio(audio, "wav");
+}
+
+/**
+ * Where generated files land: <User Library>/AIbleton — visible in Live's
+ * browser under the User Library and indexed by search_samples (the handler
+ * drops the index cache after each generation).
+ */
+function generatedAudioDir(): string {
+  const lib = resolveAbletonLibraryPaths();
+  const userLib =
+    lib.userLibraries[0] ??
+    (process.platform === "win32"
+      ? path.join(os.homedir(), "Documents", "Ableton", "User Library")
+      : path.join(os.homedir(), "Music", "Ableton", "User Library"));
+  return path.join(userLib, "AIbleton");
+}
+
+function saveGeneratedAudio(audio: Buffer, ext: string): string {
+  const dir = generatedAudioDir();
+  mkdirOutsideSandbox(dir);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
+  const rand = Math.random().toString(36).slice(2, 6);
+  const file = path.join(dir, `gen-${stamp}-${rand}.${ext}`);
+  writeHomeBinary(file, audio);
+  return file;
+}
+
 // ---------- OpenAI Responses API (Codex) ----------
 
 interface OpenAIOutputItem {
@@ -2346,6 +2511,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         lastError = null;
         stopRequested = false;
         abortCtl = new AbortController();
+        activeAudioConfig = resolveAudioConfig(parsed);
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT
         // stop it. Clients poll /api/status and then read /api/history.
