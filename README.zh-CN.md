@@ -160,8 +160,8 @@ cd AIbletonBar/windows
 扩展在 Live 的 Extension Host 内启动一个本地 HTTP 服务（端口 `17666`）。
 聊天页面通过一组基于 Extensions SDK 的工具与所选模型（Claude / Codex / Gemini）
 对话 —— `get_song_overview`、`write_midi_clip`、`write_session_clip`、
-`load_drum_kit`、`search_samples`、`import_audio_clip`、`insert_device`、
-`set_device_parameter`、`set_track_mixer`、场景与速度工具等。
+`load_drum_kit`、`search_samples`、`import_audio_clip`、`generate_audio`、
+`insert_device`、`set_device_parameter`、`set_track_mixer`、场景与速度工具等。
 每一句回答都可以直接读写当前打开的 Live Set。
 
 ```
@@ -169,14 +169,23 @@ cd AIbletonBar/windows
 │ 聊天界面           │      │ 助手服务             │      │ 模型 API       │
 │（对话框 / 浏览器   │─────▶│ localhost:17666      │─────▶│ Claude / Codex │
 │  / AIbletonBar）   │      │ + 约 20 个 Live 工具 │◀─────│ / Gemini       │
-└────────────────────┘      └──────────┬───────────┘      └────────────────┘
-                                       │ Extensions SDK
-                                       ▼
-                              ┌──────────────────┐
+└────────────────────┘      │                      │      └────────────────┘
+                            │                      │      ┌────────────────┐
+                            │                      │─────▶│ 音频 API       │
+                            │                      │◀─────│ Stable Audio / │
+                            └──────────┬───────────┘      │ ElevenLabs /   │
+                                       │ Extensions SDK   │ MiniMax /      │
+                                       ▼                  │ 自定义 HTTP    │
+                              ┌──────────────────┐        └────────────────┘
                               │ Ableton Live 12  │
                               │ （当前 Live Set）│
                               └──────────────────┘
 ```
+
+`generate_audio` 是独立于聊天模型的另一套 provider 体系：独立密钥
+（设置 → 音频生成），由服务端直接调用，不经过 LLM 转发。渲染结果存入
+User Library › AIbleton，再由模型用 `import_audio_clip` / `load_sample`
+放进工程。
 
 ## 项目结构
 
@@ -184,6 +193,7 @@ cd AIbletonBar/windows
 AIbleton/          Live 扩展（TypeScript）
 ├── src/extension.ts   入口 —— 注册右键菜单动作，启动服务
 ├── src/server.ts      助手服务 + 工具实现（Claude / Codex / Gemini）
+├── src/audiogen.ts    音频生成 provider（Stable Audio / ElevenLabs / MiniMax / 自定义 HTTP）
 ├── src/fileparsers.ts 把 .mid / .als 附件解析成文本摘要供模型阅读
 ├── ui/interface.html  聊天界面
 ├── scripts/           冒烟测试（npx tsx scripts/test-fileparsers.ts）
