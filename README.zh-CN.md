@@ -6,7 +6,7 @@
 
 <p align="center">
   住在 <b>Ableton Live 12</b> 里的 AI 助手 —— Claude、Codex 或 Gemini 随你选。<br>
-  聊天、生成 MIDI、装载鼓组、搜索采样、直接控制设备与轨道，全程不用离开 Live。
+  聊天、生成 MIDI 或音频、装载鼓组、搜索采样、直接控制设备与轨道，全程不用离开 Live。
 </p>
 
 <p align="center">

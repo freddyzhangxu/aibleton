@@ -6,8 +6,8 @@
 
 <p align="center">
   An AI assistant inside <b>Ableton Live 12</b> — Claude, Codex, or Gemini, your call.<br>
-  Chat, generate MIDI, load drum kits, search samples, and control devices &<br>
-  tracks without leaving your session.
+  Chat, generate MIDI or audio, load drum kits, search samples,<br>
+  and control devices & tracks without leaving your session.
 </p>
 
 <p align="center">
