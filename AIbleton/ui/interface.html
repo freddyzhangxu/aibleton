@@ -212,6 +212,30 @@
       padding: 0 6px;
     }
     .cfg-fields input::placeholder { color: var(--c-text-dim); }
+    .cfg-fields select {
+      width: 100%;
+      background: var(--c-input-bg);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      border-radius: 3px;
+      height: 22px;
+      padding: 0 4px;
+    }
+    .cfg-fields textarea {
+      width: 100%;
+      background: var(--c-input-bg);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      border-radius: 3px;
+      padding: 4px 6px;
+      font-family: inherit;
+      font-size: 11px;
+      resize: vertical;
+    }
+    .cfg-fields .cst-pair { display: flex; gap: 4px; }
+    .cfg-fields .cst-pair input { flex: 1; min-width: 0; }
+    #customFields { display: flex; flex-direction: column; gap: 8px; }
+    #customFields.hidden { display: none; }
     .cfg-hint { font-size: 10px; color: var(--c-text-dim); line-height: 1.45; }
 
     #log {
@@ -488,7 +512,33 @@
         <div id="audioProviderList"></div>
         <div class="cfg-fields">
           <label><span data-i18n="apiKey">API Key</span><input id="audioCfgKey" type="password" autocomplete="off"></label>
-          <label><span data-i18n="baseUrl">API 地址</span><input id="audioCfgBase" autocomplete="off" spellcheck="false"></label>
+          <label><span id="audioBaseLabel" data-i18n="baseUrl">API 地址</span><input id="audioCfgBase" autocomplete="off" spellcheck="false"></label>
+          <div id="customFields" class="hidden">
+            <label><span>Auth</span>
+              <select id="cstAuth">
+                <option value="bearer">Authorization: Bearer</option>
+                <option value="x-api-key">x-api-key</option>
+                <option value="none">None</option>
+              </select>
+            </label>
+            <label><span>Body template (JSON)</span><textarea id="cstBody" rows="4" spellcheck="false" placeholder='{"prompt": "{{prompt}}", "duration": {{duration}}}'></textarea></label>
+            <label><span>Response type</span>
+              <select id="cstRespType">
+                <option value="bytes">bytes — raw audio</option>
+                <option value="url">url — JSON with audio URL</option>
+                <option value="base64">base64 — JSON field</option>
+                <option value="hex">hex — JSON field</option>
+              </select>
+            </label>
+            <label><span>Audio field path</span><input id="cstAudioPath" autocomplete="off" spellcheck="false" placeholder="data.audio_url"></label>
+            <label><span>Format (ext)</span><input id="cstFormat" autocomplete="off" spellcheck="false" placeholder="wav / mp3(可选)"></label>
+            <label><span>Poll URL(async,可选)</span><input id="cstPollUrl" autocomplete="off" spellcheck="false" placeholder="https://…/tasks/{taskId}"></label>
+            <label><span>Poll: task id path</span><input id="cstPollTaskId" autocomplete="off" spellcheck="false" placeholder="data.task_id"></label>
+            <label><span>Poll: status path → done value</span>
+              <div class="cst-pair"><input id="cstPollStatusPath" autocomplete="off" spellcheck="false" placeholder="data.status"><input id="cstPollDoneValue" autocomplete="off" spellcheck="false" placeholder="succeeded"></div>
+            </label>
+            <label><span>Poll: audio url path</span><input id="cstPollAudioPath" autocomplete="off" spellcheck="false" placeholder="data.audio_url"></label>
+          </div>
           <div class="cfg-hint" id="audioCfgHint"></div>
         </div>
       </div>
@@ -570,6 +620,8 @@
         apiKey: 'API Key', baseUrl: 'API 地址', model: '模型',
         apiKeyPh: '可选，留空跟随本机 CLI 配置',
         audioCfgHint: '在 {site} 申请 key；生成按次计费',
+        customRequestUrl: 'Request URL',
+        customHint: 'POST 该地址；body 模板用 {{prompt}} {{duration}} 占位。响应：bytes=音频流；url/base64/hex=JSON，填字段路径。异步任务填轮询 URL，{taskId} 占位',
         cfgHint: '留空将自动使用本机 CLI 配置与默认值',
         effortDefault: '默认 Effort',
         effortTitle: '思考强度：更高 = 推理更深但更慢',
@@ -593,6 +645,8 @@
         apiKey: 'API Key', baseUrl: 'Base URL', model: 'Model',
         apiKeyPh: 'Optional — empty uses local CLI config',
         audioCfgHint: 'Get a key at {site} — billed per generation',
+        customRequestUrl: 'Request URL',
+        customHint: 'POSTs the request URL; {{prompt}} {{duration}} in the body template. Response: bytes = raw audio; url/base64/hex = JSON field path. Async: poll URL with {taskId}',
         cfgHint: 'Leave empty to use local CLI config and defaults',
         effortDefault: 'Default effort',
         effortTitle: 'Reasoning effort: higher = deeper but slower',
@@ -616,6 +670,8 @@
         apiKey: 'API-Schlüssel', baseUrl: 'API-Adresse', model: 'Modell',
         apiKeyPh: 'Optional – leer = lokale CLI-Konfiguration',
         audioCfgHint: 'Schlüssel auf {site} — Abrechnung pro Generierung',
+        customRequestUrl: 'Request-URL',
+        customHint: 'POST an die Request-URL; {{prompt}} {{duration}} im Body-Template. Antwort: bytes = rohes Audio; url/base64/hex = JSON-Feldpfad. Asynchron: Poll-URL mit {taskId}',
         cfgHint: 'Leer lassen = lokale CLI-Konfiguration und Standardwerte',
         effortDefault: 'Standard-Effort',
         effortTitle: 'Denktiefe: höher = gründlicher, aber langsamer',
@@ -639,6 +695,8 @@
         apiKey: 'Clé API', baseUrl: 'Adresse API', model: 'Modèle',
         apiKeyPh: 'Optionnel — vide = config CLI locale',
         audioCfgHint: 'Clé sur {site} — facturation par génération',
+        customRequestUrl: 'URL de requête',
+        customHint: "POST vers l'URL ; {{prompt}} {{duration}} dans le template. Réponse : bytes = audio brut ; url/base64/hex = chemin du champ JSON. Asynchrone : URL de polling avec {taskId}",
         cfgHint: 'Laisser vide = config CLI locale et valeurs par défaut',
         effortDefault: 'Effort par défaut',
         effortTitle: 'Intensité de raisonnement : plus haut = plus profond mais plus lent',
@@ -662,6 +720,8 @@
         apiKey: 'API キー', baseUrl: 'API アドレス', model: 'モデル',
         apiKeyPh: '省略可 — 空欄ならローカル CLI 設定を使用',
         audioCfgHint: '{site} でキー取得 — 生成ごとに課金',
+        customRequestUrl: 'リクエスト URL',
+        customHint: 'リクエスト URL に POST;ボディテンプレートで {{prompt}} {{duration}} を使用。応答: bytes=生音声、url/base64/hex=JSON フィールドパス。非同期: {taskId} 入りポーリング URL',
         cfgHint: '空欄ならローカル CLI 設定とデフォルト値を使用します',
         effortDefault: 'デフォルト',
         effortTitle: '思考の強さ：高いほど深く推論しますが遅くなります',
@@ -685,6 +745,8 @@
         apiKey: 'API Key', baseUrl: 'Dirección API', model: 'Modelo',
         apiKeyPh: 'Opcional — vacío = config CLI local',
         audioCfgHint: 'Consigue una clave en {site} — cobro por generación',
+        customRequestUrl: 'URL de solicitud',
+        customHint: 'POST a la URL; {{prompt}} {{duration}} en la plantilla. Respuesta: bytes = audio crudo; url/base64/hex = ruta del campo JSON. Asíncrono: URL de sondeo con {taskId}',
         cfgHint: 'Vacío = config CLI local y valores por defecto',
         effortDefault: 'Effort por defecto',
         effortTitle: 'Intensidad de razonamiento: mayor = más profundo pero más lento',
@@ -708,6 +770,8 @@
         apiKey: 'API Key', baseUrl: 'Indirizzo API', model: 'Modello',
         apiKeyPh: 'Opzionale — vuoto = config CLI locale',
         audioCfgHint: 'Chiave su {site} — addebito per generazione',
+        customRequestUrl: 'URL richiesta',
+        customHint: "POST all'URL; {{prompt}} {{duration}} nel template. Risposta: bytes = audio grezzo; url/base64/hex = percorso del campo JSON. Asincrono: URL di polling con {taskId}",
         cfgHint: 'Vuoto = config CLI locale e valori predefiniti',
         effortDefault: 'Effort predefinito',
         effortTitle: 'Intensità di ragionamento: più alta = più profonda ma più lenta',
@@ -862,6 +926,7 @@
       'stable-audio': { name: 'Stable Audio', base: 'https://api.stability.ai', site: 'platform.stability.ai' },
       'elevenlabs':   { name: 'ElevenLabs',   base: 'https://api.elevenlabs.io', site: 'elevenlabs.io' },
       'minimax':      { name: 'MiniMax',      base: 'https://api.minimaxi.com',  site: 'platform.minimaxi.com' },
+      'custom':       { name: 'Custom (HTTP)', base: '', site: '' },
     };
     let currentAudioProvider = localStorage.getItem('ai.audio.provider') || 'stable-audio';
     if (!AUDIO_PROVIDERS[currentAudioProvider]) currentAudioProvider = 'stable-audio';
@@ -872,19 +937,46 @@
     };
     const audioVal = document.getElementById('audioVal');
     const audioCfgHint = document.getElementById('audioCfgHint');
+    const audioBaseLabel = document.getElementById('audioBaseLabel');
+    const customFields = document.getElementById('customFields');
+    // Keys map 1:1 to the server-side CustomAudioTemplate fields.
+    const customInputs = {
+      authHeader: document.getElementById('cstAuth'),
+      bodyTemplate: document.getElementById('cstBody'),
+      responseType: document.getElementById('cstRespType'),
+      audioPath: document.getElementById('cstAudioPath'),
+      format: document.getElementById('cstFormat'),
+      pollUrl: document.getElementById('cstPollUrl'),
+      pollTaskId: document.getElementById('cstPollTaskId'),
+      pollStatusPath: document.getElementById('cstPollStatusPath'),
+      pollDoneValue: document.getElementById('cstPollDoneValue'),
+      pollAudioPath: document.getElementById('cstPollAudioPath'),
+    };
 
     function loadAudioFields() {
       for (const f of Object.keys(audioCfgInputs)) {
         audioCfgInputs[f].value = localStorage.getItem(`ai.audio.${currentAudioProvider}.${f}`) || '';
       }
       const p = AUDIO_PROVIDERS[currentAudioProvider];
-      audioCfgInputs.apiKey.placeholder = p.name + ' API key';
-      audioCfgInputs.baseUrl.placeholder = p.base;
-      audioCfgHint.textContent = t('audioCfgHint').replace('{site}', p.site);
+      const isCustom = currentAudioProvider === 'custom';
+      customFields.classList.toggle('hidden', !isCustom);
+      audioCfgInputs.apiKey.placeholder = isCustom ? '(optional)' : p.name + ' API key';
+      audioCfgInputs.baseUrl.placeholder = isCustom ? 'https://api.example.com/v1/generate' : p.base;
+      audioBaseLabel.textContent = isCustom ? t('customRequestUrl') : t('baseUrl');
+      audioCfgHint.textContent = isCustom ? t('customHint') : t('audioCfgHint').replace('{site}', p.site);
+      if (isCustom) {
+        for (const f of Object.keys(customInputs)) {
+          customInputs[f].value = localStorage.getItem(`ai.audio.custom.${f}`) || '';
+        }
+      }
     }
     for (const f of Object.keys(audioCfgInputs)) {
       audioCfgInputs[f].addEventListener('change', () =>
         localStorage.setItem(`ai.audio.${currentAudioProvider}.${f}`, audioCfgInputs[f].value));
+    }
+    for (const f of Object.keys(customInputs)) {
+      customInputs[f].addEventListener('change', () =>
+        localStorage.setItem(`ai.audio.custom.${f}`, customInputs[f].value));
     }
 
     const audioProviderList = document.getElementById('audioProviderList');
@@ -1421,13 +1513,30 @@
             effort: effortSel.value || undefined,
             yolo: yoloToggle.checked,
             attachments: attachments.length ? attachments : undefined,
-            audio: audioCfgInputs.apiKey.value
-              ? {
-                  provider: currentAudioProvider,
-                  apiKey: audioCfgInputs.apiKey.value,
-                  baseUrl: audioCfgInputs.baseUrl.value || undefined,
+            audio: (() => {
+              if (currentAudioProvider === 'custom') {
+                const url = audioCfgInputs.baseUrl.value.trim();
+                if (!url) return undefined;
+                const custom = {};
+                for (const f of Object.keys(customInputs)) {
+                  const v = customInputs[f].value.trim();
+                  if (v) custom[f] = v;
                 }
-              : undefined,
+                return {
+                  provider: 'custom',
+                  apiKey: audioCfgInputs.apiKey.value.trim() || undefined,
+                  baseUrl: url,
+                  custom,
+                };
+              }
+              return audioCfgInputs.apiKey.value
+                ? {
+                    provider: currentAudioProvider,
+                    apiKey: audioCfgInputs.apiKey.value,
+                    baseUrl: audioCfgInputs.baseUrl.value || undefined,
+                  }
+                : undefined;
+            })(),
           }),
         });
         const data = await res.json();
