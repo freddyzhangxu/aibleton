@@ -792,9 +792,10 @@
     const PROVIDERS = {
       claude: { name: 'Claude Code', base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
       codex:  { name: 'Codex',       base: 'https://api.openai.com/v1', model: 'gpt-5-codex' },
-      gemini: { name: 'Gemini',      base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.5-pro' },
+      gemini: { name: 'Gemini',      base: 'https://generativelanguage.googleapis.com', model: 'gemini-flash-latest' },
     };
-    let currentProvider = localStorage.getItem('ai.provider') || 'claude';
+    const savedProvider = localStorage.getItem('ai.provider');
+    let currentProvider = savedProvider || 'claude';
     if (!PROVIDERS[currentProvider]) currentProvider = 'claude';
 
     // Migrate pre-settings localStorage keys (they belonged to the Claude config).
@@ -810,7 +811,23 @@
       model: document.getElementById('cfgModel'),
     };
 
-    // Settings persist across dialog openings (same webview origin = same localStorage)
+    // Settings persist across dialog openings (same webview origin = same localStorage).
+    // Live 内置 webview 的 localStorage 不持久：服务端 providers.json 才是权威副本，
+    // localStorage 只是缓存 —— 字段改动同步 POST，启动时用服务端值补全空字段。
+    function saveProviderFields() {
+      fetch('/api/provider-config', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          provider: currentProvider,
+          config: {
+            apiKey: cfgInputs.apiKey.value,
+            baseUrl: cfgInputs.baseUrl.value,
+            model: cfgInputs.model.value,
+          },
+        }),
+      }).catch(() => {});
+    }
     function loadProviderFields() {
       for (const f of Object.keys(cfgInputs)) {
         cfgInputs[f].value = localStorage.getItem(`ai.${currentProvider}.${f}`) || '';
@@ -818,10 +835,26 @@
       cfgInputs.apiKey.placeholder = t('apiKeyPh');
       cfgInputs.baseUrl.placeholder = PROVIDERS[currentProvider].base;
       cfgInputs.model.placeholder = PROVIDERS[currentProvider].model;
+      const p = currentProvider;
+      fetch('/api/provider-config?provider=' + p).then(r => r.json()).then(s => {
+        // 只补全仍为空的字段：不覆盖用户正在输入的内容或其他窗口的新值。
+        if (p !== currentProvider || !s || !s.manual) return;
+        let filled = false;
+        for (const f of Object.keys(cfgInputs)) {
+          const v = s.manual[f];
+          if (typeof v === 'string' && v && !cfgInputs[f].value) {
+            cfgInputs[f].value = v;
+            localStorage.setItem(`ai.${p}.${f}`, v);
+            filled = true;
+          }
+        }
+        if (filled) updateModelName();
+      }).catch(() => {});
     }
     for (const f of Object.keys(cfgInputs)) {
       cfgInputs[f].addEventListener('change', () => {
         localStorage.setItem(`ai.${currentProvider}.${f}`, cfgInputs[f].value);
+        saveProviderFields();
         refreshHealth();
       });
     }
@@ -910,6 +943,13 @@
           if (code !== currentProvider) {
             currentProvider = code;
             localStorage.setItem('ai.provider', code);
+            // Live 内置 webview 的 localStorage 不持久：同时上报服务端，
+            // 下次打开（本地记录丢失时）以服务端记住的为准。
+            fetch('/api/last-provider', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ provider: code }),
+            }).catch(() => {});
             loadProviderFields();
             renderEfforts();
             refreshHealth();
@@ -928,7 +968,8 @@
       'minimax':      { name: 'MiniMax',      base: 'https://api.minimaxi.com',  site: 'platform.minimaxi.com' },
       'custom':       { name: 'Custom (HTTP)', base: '', site: '' },
     };
-    let currentAudioProvider = localStorage.getItem('ai.audio.provider') || 'stable-audio';
+    const savedAudioProvider = localStorage.getItem('ai.audio.provider');
+    let currentAudioProvider = savedAudioProvider || 'stable-audio';
     if (!AUDIO_PROVIDERS[currentAudioProvider]) currentAudioProvider = 'stable-audio';
 
     const audioCfgInputs = {
@@ -953,6 +994,30 @@
       pollAudioPath: document.getElementById('cstPollAudioPath'),
     };
 
+    // 与 AI provider 相同：Live 内置 webview 的 localStorage 不持久，音频设置
+    // 也持久化到服务端 providers.json（/api/audio-config），localStorage 只作缓存。
+    function saveAudioFields() {
+      fetch('/api/audio-config', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          provider: currentAudioProvider,
+          config: {
+            apiKey: audioCfgInputs.apiKey.value,
+            baseUrl: audioCfgInputs.baseUrl.value,
+          },
+        }),
+      }).catch(() => {});
+    }
+    function saveCustomFields() {
+      const custom = {};
+      for (const f of Object.keys(customInputs)) custom[f] = customInputs[f].value;
+      fetch('/api/audio-config', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ custom }),
+      }).catch(() => {});
+    }
     function loadAudioFields() {
       for (const f of Object.keys(audioCfgInputs)) {
         audioCfgInputs[f].value = localStorage.getItem(`ai.audio.${currentAudioProvider}.${f}`) || '';
@@ -969,14 +1034,39 @@
           customInputs[f].value = localStorage.getItem(`ai.audio.custom.${f}`) || '';
         }
       }
+      // 服务端副本回填空字段（竞态守卫：拉取期间切了 provider 则丢弃）。
+      const code = currentAudioProvider;
+      fetch('/api/audio-config').then(r => r.json()).then(s => {
+        if (code !== currentAudioProvider || !s) return;
+        const saved = (s.fields && s.fields[code]) || {};
+        for (const f of Object.keys(audioCfgInputs)) {
+          if (typeof saved[f] === 'string' && saved[f] && !audioCfgInputs[f].value) {
+            audioCfgInputs[f].value = saved[f];
+            localStorage.setItem(`ai.audio.${code}.${f}`, saved[f]);
+          }
+        }
+        if (code === 'custom' && s.custom) {
+          for (const f of Object.keys(customInputs)) {
+            const v = s.custom[f];
+            if (typeof v === 'string' && v && !customInputs[f].value) {
+              customInputs[f].value = v;
+              localStorage.setItem(`ai.audio.custom.${f}`, v);
+            }
+          }
+        }
+      }).catch(() => {});
     }
     for (const f of Object.keys(audioCfgInputs)) {
-      audioCfgInputs[f].addEventListener('change', () =>
-        localStorage.setItem(`ai.audio.${currentAudioProvider}.${f}`, audioCfgInputs[f].value));
+      audioCfgInputs[f].addEventListener('change', () => {
+        localStorage.setItem(`ai.audio.${currentAudioProvider}.${f}`, audioCfgInputs[f].value);
+        saveAudioFields();
+      });
     }
     for (const f of Object.keys(customInputs)) {
-      customInputs[f].addEventListener('change', () =>
-        localStorage.setItem(`ai.audio.custom.${f}`, customInputs[f].value));
+      customInputs[f].addEventListener('change', () => {
+        localStorage.setItem(`ai.audio.custom.${f}`, customInputs[f].value);
+        saveCustomFields();
+      });
     }
 
     const audioProviderList = document.getElementById('audioProviderList');
@@ -995,6 +1085,11 @@
           e.stopPropagation();
           currentAudioProvider = code;
           localStorage.setItem('ai.audio.provider', code);
+          fetch('/api/audio-config', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ selected: code }),
+          }).catch(() => {});
           audioVal.textContent = p.name;
           loadAudioFields();
           renderAudioProviders();
@@ -1625,6 +1720,34 @@
     renderLangs();
     renderProviders();
     applyLang();
+    // Live 内置 webview 的 localStorage 不持久：本地没有记录时，回读服务端
+    // 记住的"上次使用的 provider"。
+    if (!savedProvider) {
+      fetch('/api/last-provider').then(r => r.json()).then(s => {
+        if (s && PROVIDERS[s.provider] && s.provider !== currentProvider) {
+          currentProvider = s.provider;
+          localStorage.setItem('ai.provider', currentProvider);
+          providerVal.textContent = PROVIDERS[currentProvider].name;
+          loadProviderFields();
+          renderProviders();
+          renderEfforts();
+          refreshHealth();
+        }
+      }).catch(() => {});
+    }
+    // 音频 provider 同理：本地无记录时采用服务端记住的选择（字段回填由
+    // loadAudioFields 内部的 GET 完成，无需在此重复）。
+    if (!savedAudioProvider) {
+      fetch('/api/audio-config').then(r => r.json()).then(s => {
+        if (s && AUDIO_PROVIDERS[s.selected] && s.selected !== currentAudioProvider) {
+          currentAudioProvider = s.selected;
+          localStorage.setItem('ai.audio.provider', currentAudioProvider);
+          audioVal.textContent = AUDIO_PROVIDERS[currentAudioProvider].name;
+          loadAudioFields();
+          renderAudioProviders();
+        }
+      }).catch(() => {});
+    }
     // 恢复上次未发送的草稿，光标放到末尾。
     input.value = localStorage.getItem(DRAFT_KEY) || '';
     if (input.value) {

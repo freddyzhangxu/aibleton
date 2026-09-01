@@ -15,6 +15,9 @@ import {
   generateAudio,
   resolveAudioConfig,
   type AudioGenConfig,
+  type AudioProvider,
+  type AudioRequestConfig,
+  type CustomAudioTemplate,
 } from "./audiogen.js";
 import {
   AUDIO_EXT,
@@ -233,6 +236,46 @@ function loadLocalConfig(provider: Provider): LocalConfig | null {
  */
 let manualConfigs: Partial<Record<Provider, LocalConfig>> = {};
 let manualConfigPath: string | null = null;
+/** Last-used provider, persisted alongside manualConfigs — the in-Live
+ * webview's localStorage doesn't survive reopening, so the UI asks the
+ * server which provider to default to. */
+let lastProvider: Provider = "claude";
+
+/** Audio-generation settings from the settings UI, persisted in the same
+ * providers.json (same localStorage-loss problem as lastProvider). */
+type PersistedAudio = {
+  selected?: AudioProvider;
+  fields: Partial<Record<AudioProvider, { apiKey?: string; baseUrl?: string }>>;
+  custom: CustomAudioTemplate;
+};
+let audioSettings: PersistedAudio = { fields: {}, custom: {} };
+
+const AUDIO_PROVIDERS_ALL: AudioProvider[] = ["stable-audio", "elevenlabs", "minimax", "custom"];
+
+/**
+ * Merge a chat request's audio overrides with the persisted settings:
+ * per-request fields win, saved settings fill the gaps (and pick the
+ * provider when the request says nothing).
+ */
+function mergeAudioRequest(audio: AudioRequestConfig | undefined): AudioRequestConfig | undefined {
+  const sel = audio?.provider ?? audioSettings.selected;
+  if (!sel || !AUDIO_PROVIDERS_ALL.includes(sel as AudioProvider)) return audio;
+  const p = sel as AudioProvider;
+  const f = audioSettings.fields[p] ?? {};
+  if (p === "custom") {
+    return {
+      provider: "custom",
+      apiKey: audio?.apiKey || f.apiKey || undefined,
+      baseUrl: audio?.baseUrl || f.baseUrl || undefined,
+      custom: { ...audioSettings.custom, ...(audio?.custom ?? {}) },
+    };
+  }
+  return {
+    provider: p,
+    apiKey: audio?.apiKey || f.apiKey || undefined,
+    baseUrl: audio?.baseUrl || f.baseUrl || undefined,
+  };
+}
 
 function loadManualConfigs(context: Ctx): void {
   // Same directory as chats.json (storage dir, or the fallback it picked).
@@ -244,11 +287,28 @@ function loadManualConfigs(context: Ctx): void {
     const raw = readHomeFile(manualConfigPath);
     if (!raw) throw new Error("unreadable");
     const data = JSON.parse(raw) as
-      Partial<Record<Provider, LocalConfig>>;
+      Partial<Record<Provider, LocalConfig>> & {
+        lastProvider?: unknown;
+        audio?: Partial<PersistedAudio>;
+      };
     manualConfigs = {};
     for (const p of ["claude", "codex", "gemini"] as Provider[]) {
       const cfg = data[p];
       if (cfg && typeof cfg === "object") manualConfigs[p] = cfg;
+    }
+    if (data.lastProvider === "claude" || data.lastProvider === "codex" ||
+        data.lastProvider === "gemini") {
+      lastProvider = data.lastProvider;
+    }
+    const a = data.audio;
+    if (a && typeof a === "object") {
+      audioSettings = {
+        selected: AUDIO_PROVIDERS_ALL.includes(a.selected as AudioProvider)
+          ? (a.selected as AudioProvider)
+          : undefined,
+        fields: (a.fields ?? {}) as PersistedAudio["fields"],
+        custom: (a.custom ?? {}) as CustomAudioTemplate,
+      };
     }
   } catch {
     manualConfigs = {};
@@ -261,7 +321,8 @@ function saveManualConfigs(): void {
   if (!manualConfigPath) return;
   try {
     mkdirOutsideSandbox(path.dirname(manualConfigPath));
-    writeHomeFile(manualConfigPath, JSON.stringify(manualConfigs, null, 2));
+    writeHomeFile(manualConfigPath,
+      JSON.stringify({ ...manualConfigs, lastProvider, audio: audioSettings }, null, 2));
   } catch {
     // In-memory copy still works for this run.
   }
@@ -1344,7 +1405,7 @@ function resolveConfig(req: ChatRequest): ResolvedConfig {
       provider,
       baseUrl: (req.baseUrl || local.baseUrl || "https://generativelanguage.googleapis.com").replace(/\/$/, ""),
       authToken: req.apiKey || local.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "",
-      model: req.model || local.model || "gemini-2.5-pro",
+      model: req.model || local.model || "gemini-flash-latest",
       fromLocal,
       effort: req.effort,
     };
@@ -2157,6 +2218,74 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       });
       return;
     }
+    if (req.method === "GET" && req.url === "/api/last-provider") {
+      send(200, JSON.stringify({ provider: lastProvider }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/last-provider") {
+      readBody((parsed) => {
+        const p = parsed.provider;
+        if (p === "claude" || p === "codex" || p === "gemini") {
+          if (p !== lastProvider) {
+            lastProvider = p;
+            saveManualConfigs();
+          }
+          send(200, JSON.stringify({ ok: true, provider: lastProvider }));
+        } else {
+          send(400, JSON.stringify({ error: "unknown provider" }));
+        }
+      });
+      return;
+    }
+    if (req.method === "GET" && req.url === "/api/audio-config") {
+      send(200, JSON.stringify(audioSettings));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/audio-config") {
+      readBody((parsed) => {
+        // Three merge-style variants (the UI sends whichever changed):
+        //   { selected }                    — last picked audio provider
+        //   { provider, config }            — that provider's key/baseUrl ("" deletes)
+        //   { custom }                      — custom-template fields ("" deletes)
+        let changed = false;
+        if (AUDIO_PROVIDERS_ALL.includes(parsed.selected as AudioProvider)) {
+          if (audioSettings.selected !== parsed.selected) {
+            audioSettings.selected = parsed.selected as AudioProvider;
+            changed = true;
+          }
+        }
+        if (AUDIO_PROVIDERS_ALL.includes(parsed.provider as AudioProvider) &&
+            parsed.config && typeof parsed.config === "object") {
+          const p = parsed.provider as AudioProvider;
+          const cur = { ...(audioSettings.fields[p] ?? {}) } as Record<string, unknown>;
+          for (const key of ["apiKey", "baseUrl"] as const) {
+            const fields = parsed.config as Record<string, unknown>;
+            const v = fields[key];
+            if (typeof v === "string" && v.trim()) cur[key] = v.trim();
+            else if (key in fields) delete cur[key];
+          }
+          if (Object.keys(cur).length) audioSettings.fields[p] = cur;
+          else delete audioSettings.fields[p];
+          changed = true;
+        }
+        if (parsed.custom && typeof parsed.custom === "object") {
+          const fields = parsed.custom as Record<string, unknown>;
+          for (const key of ["authHeader", "bodyTemplate", "responseType", "audioPath",
+            "format", "pollUrl", "pollTaskId", "pollStatusPath", "pollDoneValue",
+            "pollAudioPath"] as const) {
+            const v = fields[key];
+            if (typeof v === "string" && v.trim())
+              (audioSettings.custom as Record<string, unknown>)[key] = v.trim();
+            else if (key in fields)
+              delete (audioSettings.custom as Record<string, unknown>)[key];
+          }
+          changed = true;
+        }
+        if (changed) saveManualConfigs();
+        send(200, JSON.stringify({ ok: true, audio: audioSettings }));
+      });
+      return;
+    }
     if (req.method === "GET" && req.url === "/api/open") {
       if (selfUrl) {
         void context.ui.showModalDialog(selfUrl, 560, 680).catch(() => {});
@@ -2284,11 +2413,22 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         if (session.title === "新对话") session.title = text.slice(0, 24);
         session.updatedAt = Date.now();
         saveStore(context);
+        // Remember the provider actually chatted with, so a reopened window
+        // (whose localStorage may be empty) defaults to it.
+        const chatProvider: Provider =
+          parsed.provider === "codex" || parsed.provider === "gemini"
+            ? parsed.provider
+            : "claude";
+        if (chatProvider !== lastProvider) {
+          lastProvider = chatProvider;
+          saveManualConfigs();
+        }
         busy = true;
         lastError = null;
         stopRequested = false;
         abortCtl = new AbortController();
-        activeAudioConfig = resolveAudioConfig(parsed.audio as Parameters<typeof resolveAudioConfig>[0]);
+        activeAudioConfig = resolveAudioConfig(
+          mergeAudioRequest(parsed.audio as AudioRequestConfig | undefined));
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT
         // stop it. Clients poll /api/status and then read /api/history.
