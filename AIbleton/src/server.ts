@@ -668,6 +668,7 @@ Samples and audio files:
 - search with specific keywords ("deep house loop 124", "909 snare"); if total is huge, refine the query instead of paging.
 
 AI audio generation:
+- Priority rule: NEVER call generate_audio speculatively. Call it only when (a) the user explicitly asks to AI-generate/create new audio, or (b) search_samples already ran, found nothing suitable, and the user agreed to generate. For everything else prefer MIDI instruments or local samples — they are free and instant. Every generate_audio call is confirmed by the user before it runs.
 - generate_audio(prompt, duration_seconds) creates NEW audio with the configured provider (Stable Audio / ElevenLabs / MiniMax) and saves it into the User Library's "AIbleton" folder. It costs API credits and takes ~10–60 s — write a precise English prompt (genre, BPM, key, mood; add "seamless loop" for loops) and keep loops short (4–16 s).
 - Vocals: generated audio is instrumental by default. Only add lyrics when the user explicitly asks for a sung vocal (MiniMax).
 - Workflow: generate_audio → import_audio_clip (loops/stems onto an audio track) or load_sample (one-shots into a Simpler). Generated files also become searchable via search_samples afterwards.
@@ -1451,17 +1452,39 @@ const READ_ONLY_TOOLS = new Set([
 ]);
 
 /**
+ * Tools that spend real money (API credits). YOLO exempts Set-modifying
+ * tools from confirmation, but never these — a billing action always asks.
+ */
+const COSTLY_TOOLS = new Set(["generate_audio"]);
+
+/** What a costly tool call will spend, shown in the confirm bar. */
+function costlyDetail(
+  name: string,
+  input: Record<string, unknown>,
+): { provider: string; duration: number } | undefined {
+  if (!COSTLY_TOOLS.has(name)) return undefined;
+  return {
+    provider: activeAudioConfig ? AUDIO_PROVIDER_NAMES[activeAudioConfig.provider] : "?",
+    duration: Math.min(190, Math.max(1, Number(input.duration_seconds ?? 8) || 8)),
+  };
+}
+
+/**
  * A tool call waiting for the user's Allow/Deny click in the UI (YOLO off).
  * The UI polls /api/status for it and answers via POST /api/confirm.
  */
 let pendingConfirm: {
   tool: string;
   input: unknown;
+  costly?: { provider: string; duration: number };
   resolve: (allow: boolean) => void;
 } | null = null;
 
 /** Ask the user before a Set-modifying tool call; false = denied or timed out. */
-function askConfirmation(tool: string, input: unknown): Promise<boolean> {
+function askConfirmation(
+  tool: string,
+  input: Record<string, unknown>,
+): Promise<boolean> {
   return new Promise((resolve) => {
     // Safety net: a forgotten dialog must not wedge the background task forever.
     const timer = setTimeout(() => {
@@ -1471,6 +1494,7 @@ function askConfirmation(tool: string, input: unknown): Promise<boolean> {
     pendingConfirm = {
       tool,
       input,
+      costly: costlyDetail(tool, input),
       resolve: (allow) => {
         clearTimeout(timer);
         pendingConfirm = null;
@@ -1488,7 +1512,7 @@ async function callTool(
   input: Record<string, unknown>,
   yolo: boolean,
 ): Promise<string> {
-  if (!yolo && !READ_ONLY_TOOLS.has(name)) {
+  if (!READ_ONLY_TOOLS.has(name) && (!yolo || COSTLY_TOOLS.has(name))) {
     const allowed = await askConfirmation(name, input);
     if (!allowed) {
       const denied = { error: "用户拒绝了该操作 / user denied this action" };
@@ -2341,7 +2365,9 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       send(200, JSON.stringify({
         busy,
         error: lastError,
-        pending: pendingConfirm ? { tool: pendingConfirm.tool, input: pendingConfirm.input } : null,
+        pending: pendingConfirm
+          ? { tool: pendingConfirm.tool, input: pendingConfirm.input, costly: pendingConfirm.costly }
+          : null,
       }));
       return;
     }
