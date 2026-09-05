@@ -9,6 +9,7 @@ import { URL } from "node:url";
 import { Buffer } from "node:buffer";
 import { describeBinaryAttachment } from "./fileparsers.js";
 import { detectProxy, rawPost, readAll } from "./http.js";
+import { webFetch, webSearch } from "./websearch.js";
 import {
   AUDIO_PROVIDER_NAMES,
   audioProviderEnv,
@@ -250,6 +251,11 @@ type PersistedAudio = {
 };
 let audioSettings: PersistedAudio = { fields: {}, custom: {} };
 
+/** Web-search toggle from the settings UI, persisted in providers.json.
+ * Default OFF: web_search/web_fetch are advertised to the model (and allowed
+ * to run) only when the user explicitly turns this on. */
+let webSettings = { enabled: false };
+
 const AUDIO_PROVIDERS_ALL: AudioProvider[] = ["stable-audio", "elevenlabs", "minimax", "custom"];
 
 /**
@@ -290,6 +296,7 @@ function loadManualConfigs(context: Ctx): void {
       Partial<Record<Provider, LocalConfig>> & {
         lastProvider?: unknown;
         audio?: Partial<PersistedAudio>;
+        web?: { enabled?: unknown };
       };
     manualConfigs = {};
     for (const p of ["claude", "codex", "gemini"] as Provider[]) {
@@ -310,6 +317,7 @@ function loadManualConfigs(context: Ctx): void {
         custom: (a.custom ?? {}) as CustomAudioTemplate,
       };
     }
+    webSettings.enabled = data.web?.enabled === true;
   } catch {
     manualConfigs = {};
   }
@@ -322,7 +330,7 @@ function saveManualConfigs(): void {
   try {
     mkdirOutsideSandbox(path.dirname(manualConfigPath));
     writeHomeFile(manualConfigPath,
-      JSON.stringify({ ...manualConfigs, lastProvider, audio: audioSettings }, null, 2));
+      JSON.stringify({ ...manualConfigs, lastProvider, audio: audioSettings, web: webSettings }, null, 2));
   } catch {
     // In-memory copy still works for this run.
   }
@@ -338,6 +346,10 @@ type Ctx = ExtensionContext<"1.0.0">;
  * resolved once per /api/chat — `busy` guarantees a single task at a time.
  */
 let activeAudioConfig: AudioGenConfig | null = null;
+
+/** UI language of the running chat task — feeds the web tools' search locale
+ * (same per-request lifetime as activeAudioConfig; busy = one task at a time). */
+let activeLanguage: string | undefined;
 
 // ---------- Claude tool definitions ----------
 
@@ -467,6 +479,28 @@ const TOOLS = [
       type: "object",
       properties: { query: { type: "string" } },
       required: ["query"],
+    },
+  },
+  {
+    name: "web_search",
+    description:
+      "Search the web for CURRENT information — software versions and release notes, prices, tutorials, news, facts you don't know. Free and keyless. Returns up to 8 results with title/URL/snippet. For LOCAL sample files on the user's disk use search_samples instead.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: 'Specific keywords, e.g. "Ableton Live 12.3 release notes"' },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "web_fetch",
+    description:
+      "Fetch a web page and return its readable text (static HTML only — JS-rendered pages may return little). Use after web_search to read the most promising result in full, or on a URL the user pasted.",
+    input_schema: {
+      type: "object",
+      properties: { url: { type: "string", description: "Full http(s) URL" } },
+      required: ["url"],
     },
   },
   {
@@ -690,7 +724,28 @@ Controlling instruments and effects (Operator, Auto Filter, …):
 Compression and sidechain:
 - You CAN fully control Compressor parameters: Threshold (-60–0 dB), Ratio, Attack, Release, Makeup gain, Dry/Wet. Typical sidechain-pump settings for techno/house: Ratio 8–20, Attack 0.1–3 ms, Release 100–300 ms, Threshold low enough for 6–10 dB gain reduction per kick hit.
 - You CANNOT select the sidechain input source ("Audio From" track) — the SDK has no routing API. Never claim you did it. Instead: insert the Compressor, dial in the pump settings above, then tell the user to finish the last 2 clicks manually: open the Compressor's sidechain section (◁ arrow / headphone icon), enable it, and pick the kick track as "Audio From".
-- Send amounts are not controllable either; volume/pan only via set_track_mixer.`;
+- Send amounts are not controllable either; volume/pan only via set_track_mixer.
+
+Web access:
+- If web_search/web_fetch are NOT among your tools, web access is OFF: NEVER pretend to search or claim you checked something online — say web search is disabled and the user can turn it on in Settings (gear icon) → 联网搜索 / Web Search.`;
+
+/** Appended to the system prompt only when the user enabled web search —
+ * weak relay models imitate prompt text, so the ON workflow must not be
+ * visible while the tools are withheld. */
+const WEB_PROMPT = `
+
+Web access is ON:
+- web_search(query) searches the web (free, keyless) and returns title/URL/snippet hits; web_fetch(url) reads one page's text. Both are read-only and run without confirmation.
+- Use them for current or external information: software versions and release notes, prices, tutorials, news, facts you don't know, or a URL the user pasted. Don't use them for Ableton how-to you already know or for local files.
+- Workflow: web_search → web_fetch the 1–2 most promising hits for details → answer with the source URL(s) so the user can verify.
+- If a web tool returns an error or empty/irrelevant results, say the search failed — NEVER invent facts, version numbers, or URLs.`;
+
+/** Web tools leave the tools list entirely when the toggle is off, so the
+ * model can't call them (and weak relay models can't imitate them). */
+function activeTools(): typeof TOOLS {
+  if (webSettings.enabled) return TOOLS;
+  return TOOLS.filter((t) => t.name !== "web_search" && t.name !== "web_fetch");
+}
 
 // ---------- Tool execution against the Live Set ----------
 
@@ -993,6 +1048,21 @@ async function runTool(
       });
       return { total: matches.length, results: matches.slice(0, 30) };
     }
+    case "web_search": {
+      // Should be unreachable (the tools list already hides it when off) —
+      // this is the safety net, e.g. a stale request mid-toggle.
+      if (!webSettings.enabled) {
+        throw new Error("联网搜索已关闭：设置(齿轮) → 联网搜索 打开后可用 / Web search is off — enable it in Settings → Web Search");
+      }
+      const results = await webSearch(String(input.query ?? ""), abortCtl?.signal ?? undefined, activeLanguage);
+      return { total: results.length, results };
+    }
+    case "web_fetch": {
+      if (!webSettings.enabled) {
+        throw new Error("联网搜索已关闭：设置(齿轮) → 联网搜索 打开后可用 / Web search is off — enable it in Settings → Web Search");
+      }
+      return await webFetch(String(input.url ?? ""), abortCtl?.signal ?? undefined, activeLanguage);
+    }
     case "import_audio_clip": {
       const track = trackAt(context, Number(input.track_index));
       if (!(track instanceof AudioTrack)) {
@@ -1182,9 +1252,14 @@ const LANG_NAMES: Record<string, string> = {
 
 function systemPromptFor(language?: string): string {
   const name = LANG_NAMES[language ?? ""] ?? "English";
+  // The date anchors "latest/recent" web searches — the model's training
+  // cutoff alone can't resolve them.
+  const today = new Date().toISOString().slice(0, 10);
   return (
     SYSTEM_PROMPT +
-    `\n\nThe user's UI language is ${name} — use it as the default reply language unless they write in a different language.`
+    (webSettings.enabled ? WEB_PROMPT : "") +
+    `\n\nToday's date: ${today}.` +
+    `\nThe user's UI language is ${name} — use it as the default reply language unless they write in a different language.`
   );
 }
 
@@ -1443,12 +1518,16 @@ function truncateResult(resultJson: string): string {
   );
 }
 
-/** Tools that only read the Set — always allowed, even with YOLO off. */
+/** Tools that only read the Set — always allowed, even with YOLO off.
+ * web_search/web_fetch are read-only too: free, keyless, and they touch
+ * nothing local, so they never need a confirmation. */
 const READ_ONLY_TOOLS = new Set([
   "get_song_overview",
   "get_device_parameters",
   "get_clip_notes",
   "search_samples",
+  "web_search",
+  "web_fetch",
 ]);
 
 /**
@@ -1717,6 +1796,7 @@ async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest
   const thinking = claudeEffort
     ? { type: "enabled", budget_tokens: claudeEffort.budget }
     : undefined;
+  const chatTools = activeTools();
 
   // Bounded retries when max_tokens truncates a text-only answer (see below).
   let continuations = 0;
@@ -1738,7 +1818,7 @@ async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest
       model,
       max_tokens: claudeEffort ? claudeEffort.maxTokens : 4096,
       system: systemPromptFor(req.language),
-      tools: TOOLS,
+      tools: chatTools,
       messages,
       ...(thinking ? { thinking } : {}),
     });
@@ -1758,7 +1838,7 @@ async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest
       if (!res.ok) {
         console.error(
           `[ai-assistant] API ${res.status} · 请求 ${requestBody.length} 字符 · ` +
-            `messages=${messages.length} tools=${TOOLS.length} · 响应: ${JSON.stringify(data).slice(0, 500)}`,
+            `messages=${messages.length} tools=${chatTools.length} · 响应: ${JSON.stringify(data).slice(0, 500)}`,
         );
         throw new Error(data.error?.message || `Claude API 错误 (${res.status})`);
       }
@@ -1927,7 +2007,7 @@ async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
       })),
     );
   });
-  const tools = TOOLS.map((tool) => ({
+  const tools = activeTools().map((tool) => ({
     type: "function",
     name: tool.name,
     description: tool.description,
@@ -2070,7 +2150,7 @@ async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
   });
   const tools = [
     {
-      functionDeclarations: TOOLS.map((tool) => ({
+      functionDeclarations: activeTools().map((tool) => ({
         name: tool.name,
         description: tool.description,
         parameters: toGeminiSchema(tool.input_schema),
@@ -2310,6 +2390,18 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       });
       return;
     }
+    if (req.method === "GET" && req.url === "/api/web-config") {
+      send(200, JSON.stringify(webSettings));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/web-config") {
+      readBody((parsed) => {
+        webSettings.enabled = parsed.enabled === true;
+        saveManualConfigs();
+        send(200, JSON.stringify({ ok: true, web: webSettings }));
+      });
+      return;
+    }
     if (req.method === "GET" && req.url === "/api/open") {
       if (selfUrl) {
         void context.ui.showModalDialog(selfUrl, 560, 680).catch(() => {});
@@ -2455,6 +2547,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         abortCtl = new AbortController();
         activeAudioConfig = resolveAudioConfig(
           mergeAudioRequest(parsed.audio as AudioRequestConfig | undefined));
+        activeLanguage = typeof parsed.language === "string" ? parsed.language : undefined;
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT
         // stop it. Clients poll /api/status and then read /api/history.
@@ -2472,6 +2565,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
           } finally {
             busy = false;
             abortCtl = null;
+            activeLanguage = undefined;
             // Never leave a confirmation dangling past its task's lifetime.
             if (pendingConfirm) pendingConfirm.resolve(false);
           }

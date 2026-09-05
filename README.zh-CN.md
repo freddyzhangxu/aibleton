@@ -79,6 +79,10 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 - **AI 音频生成** —— 用 Stable Audio、ElevenLabs、MiniMax 或任意自定义 HTTP API
   （中转站、自托管 MusicGen、Suno 类服务，同步异步皆可）把文字描述渲染成音频并
   直接进工程：loop 上编排、one-shot 进 Simpler；文件落在 User Library，随取随用。
+- **联网搜索（默认关闭）** —— 在 设置 → 联网搜索 打开后，助手可以搜网页
+  （`web_search`，Bing 主引擎 + DuckDuckGo 自动兜底，均免 key，搜索语言跟随
+  界面语言）并读取页面正文（`web_fetch`）：版本更新、价格、教程等时效问题
+  直接查，粘贴的 URL 也能总结，回答附来源链接。只读、免确认，自动走系统代理。
 - **设备控制** —— 插入设备（Operator、Auto Filter……），按模糊名称读写参数
   （"freq" → Filter Freq）。
 - **轨道与场景操作** —— 创建 / 重命名 / 静音 / 独奏 / 布防轨道，调节音量与声像，
@@ -163,7 +167,8 @@ cd AIbletonBar/windows
 聊天页面通过一组基于 Extensions SDK 的工具与所选模型（Claude / Codex / Gemini）
 对话 —— `get_song_overview`、`write_midi_clip`、`write_session_clip`、
 `load_drum_kit`、`search_samples`、`import_audio_clip`、`generate_audio`、
-`insert_device`、`set_device_parameter`、`set_track_mixer`、场景与速度工具等。
+`insert_device`、`set_device_parameter`、`set_track_mixer`、场景与速度工具等，
+外加免 key 联网的 `web_search` / `web_fetch`。
 每一句回答都可以直接读写当前打开的 Live Set。
 
 ```
@@ -196,6 +201,7 @@ AIbleton/          Live 扩展（TypeScript）
 ├── src/extension.ts   入口 —— 注册右键菜单动作，启动服务
 ├── src/server.ts      助手服务 + 工具实现（Claude / Codex / Gemini）
 ├── src/audiogen.ts    音频生成 provider（Stable Audio / ElevenLabs / MiniMax / 自定义 HTTP）
+├── src/websearch.ts   web_search（Bing + DuckDuckGo 兜底，免 key）+ web_fetch，代理感知
 ├── src/fileparsers.ts 把 .mid / .als 附件解析成文本摘要供模型阅读
 ├── ui/interface.html  聊天界面
 ├── scripts/           冒烟测试（npx tsx scripts/test-fileparsers.ts）

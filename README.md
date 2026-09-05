@@ -87,6 +87,12 @@ The project has two parts:
   Suno-style services — sync or async) and drops the result straight into your
   Set: loops onto the arrangement, one-shots into a Simpler. Files land in your
   User Library, ready to reuse and search.
+- **Web access (opt-in)** — off by default; flip it on in Settings → Web
+  Search and the assistant can search the web (`web_search`, keyless — Bing
+  with DuckDuckGo fallback, localized to your UI language) and read pages
+  (`web_fetch`), so it answers current-info questions — release notes, prices,
+  tutorials — and summarizes URLs you paste, with sources cited. Read-only and
+  confirmation-free; honors your proxy settings.
 - **Device control** — insert devices (Operator, Auto Filter, …), read and set parameters
   by fuzzy name ("freq" → Filter Freq).
 - **Track & scene operations** — create / rename / mute / solo / arm tracks, set volume
@@ -176,8 +182,8 @@ The chat page talks to the selected provider — Claude, Codex, or Gemini — wi
 set backed by the Extensions SDK: `get_song_overview`, `write_midi_clip`,
 `write_session_clip`, `load_drum_kit`, `search_samples`, `import_audio_clip`,
 `generate_audio`, `insert_device`, `set_device_parameter`, `set_track_mixer`,
-scene & tempo tools, and more. Every answer can directly read and modify the
-open Live Set.
+scene & tempo tools, and more — plus `web_search` / `web_fetch` for keyless
+web access. Every answer can directly read and modify the open Live Set.
 
 ```
 ┌────────────────────┐      ┌──────────────────────┐      ┌────────────────┐
@@ -209,6 +215,7 @@ AIbleton/          Live extension (TypeScript)
 ├── src/extension.ts   entry point — registers context-menu actions, starts server
 ├── src/server.ts      assistant server + tool implementations (Claude / Codex / Gemini)
 ├── src/audiogen.ts    audio generation providers (Stable Audio / ElevenLabs / MiniMax / custom HTTP)
+├── src/websearch.ts   web_search (Bing + DuckDuckGo fallback, keyless) + web_fetch, proxy-aware
 ├── src/fileparsers.ts parses .mid / .als attachments into text summaries for the model
 ├── ui/interface.html  chat UI
 ├── scripts/           smoke tests (npx tsx scripts/test-fileparsers.ts)
