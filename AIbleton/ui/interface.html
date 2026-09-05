@@ -494,6 +494,10 @@
           <span data-i18n="audioConfig">音频生成</span>
           <span class="val"><span id="audioVal">Stable Audio</span> ›</span>
         </div>
+        <div class="menu-row" data-goto="viewWeb">
+          <span data-i18n="webConfig">联网搜索</span>
+          <span class="val"><span id="webVal">已关闭</span> ›</span>
+        </div>
         <div id="appVersion">v__APP_VERSION__</div>
       </div>
       <div class="set-view hidden" id="viewLang">
@@ -544,6 +548,19 @@
           </div>
           <div class="cfg-hint" id="audioCfgHint"></div>
         </div>
+      </div>
+      <div class="set-view hidden" id="viewWeb">
+        <div class="menu-row back" data-goto="viewMain"><span class="chev">‹</span><span data-i18n="webConfig">联网搜索</span></div>
+        <div class="menu-row">
+          <span data-i18n="webEnable">启用联网搜索</span>
+          <span class="val">
+            <label class="yolo">
+              <input type="checkbox" id="webToggle">
+              <span class="sw"></span>
+            </label>
+          </span>
+        </div>
+        <div class="cfg-hint" style="padding: 4px 10px 10px;" data-i18n="webDesc"></div>
       </div>
     </div>
     <div id="historyPanel" class="hidden"></div>
@@ -633,6 +650,8 @@
         yoloTitle: 'YOLO 模式：开启 = AI 直接执行所有操作；关闭 = 修改 Set 前需你确认',
         allow: '允许', deny: '拒绝', confirmAsk: 'AI 请求执行', confirmCostly: '消耗 API 额度',
         fileTooBig: '文件过大：', fileUnsupported: '不支持的文件类型：',
+        webConfig: '联网搜索', webEnable: '启用联网搜索', webOn: '已开启', webOff: '已关闭',
+        webDesc: '开启后 AI 可用 web_search 搜索网页（Bing / DuckDuckGo，免 key）、用 web_fetch 读取页面正文。搜索词与抓取的地址会发送到对应网站（无账号、无 Cookie）。不需要时建议保持关闭。',
         welcome: '你好！我是 Live 里的 AI 助手。\n可以直接问我制作问题，也可以让我操作当前 Set，例如：\n· 「把速度改成 128」\n· 「新建一条 MIDI 轨道叫 Bass，加个 Operator」\n· 「现在有哪些轨道？把第 2 条静音」',
       },
       en: {
@@ -658,6 +677,8 @@
         yoloTitle: 'YOLO: on = AI runs every action directly; off = confirm before modifying the Set',
         allow: 'Allow', deny: 'Deny', confirmAsk: 'AI wants to run', confirmCostly: 'uses API credits',
         fileTooBig: 'File too large: ', fileUnsupported: 'Unsupported file type: ',
+        webConfig: 'Web Search', webEnable: 'Enable web access', webOn: 'On', webOff: 'Off',
+        webDesc: 'When on, the AI can search the web (web_search, keyless via Bing / DuckDuckGo) and read pages (web_fetch). Queries and fetched URLs are sent to those sites — no account, no cookies. Keep it off when not needed.',
         welcome: 'Hi! I’m your AI assistant inside Live.\nAsk me production questions, or let me operate the current Set:\n· “Set the tempo to 128”\n· “Create a MIDI track called Bass and add an Operator”\n· “What tracks are there? Mute track 2”',
       },
       de: {
@@ -683,6 +704,8 @@
         yoloTitle: 'YOLO: ein = KI führt alles direkt aus; aus = Bestätigung vor Set-Änderungen',
         allow: 'Erlauben', deny: 'Ablehnen', confirmAsk: 'KI möchte ausführen', confirmCostly: 'verbraucht API-Guthaben',
         fileTooBig: 'Datei zu groß: ', fileUnsupported: 'Nicht unterstützter Dateityp: ',
+        webConfig: 'Websuche', webEnable: 'Webzugriff aktivieren', webOn: 'Ein', webOff: 'Aus',
+        webDesc: 'Wenn aktiv, kann die KI im Web suchen (web_search, schlüssellos über Bing / DuckDuckGo) und Seiten lesen (web_fetch). Suchbegriffe und abgerufene URLs werden an diese Seiten gesendet — kein Konto, keine Cookies. Bei Nichtgebrauch deaktiviert lassen.',
         welcome: 'Hallo! Ich bin dein AI-Assistent in Live.\nStell mir Fragen zum Produzieren oder lass mich das aktuelle Set bedienen:\n· „Stell das Tempo auf 128“\n· „Erstelle eine MIDI-Spur namens Bass und füge Operator hinzu“\n· „Welche Spuren gibt es? Schalte Spur 2 stumm“',
       },
       fr: {
@@ -708,6 +731,8 @@
         yoloTitle: 'YOLO : activé = l’IA exécute tout directement ; désactivé = confirmation avant de modifier le Set',
         allow: 'Autoriser', deny: 'Refuser', confirmAsk: 'L’IA veut exécuter', confirmCostly: 'consomme des crédits API',
         fileTooBig: 'Fichier trop volumineux : ', fileUnsupported: 'Type de fichier non pris en charge : ',
+        webConfig: 'Recherche Web', webEnable: 'Activer l’accès Web', webOn: 'Activé', webOff: 'Désactivé',
+        webDesc: 'Quand activé, l’IA peut chercher sur le Web (web_search, sans clé via Bing / DuckDuckGo) et lire des pages (web_fetch). Les requêtes et URL visitées sont envoyées à ces sites — sans compte ni cookies. Laissez désactivé si inutile.',
         welcome: 'Bonjour ! Je suis votre assistant IA dans Live.\nPosez-moi des questions de production ou laissez-moi piloter le Set actuel :\n· « Règle le tempo à 128 »\n· « Crée une piste MIDI nommée Bass et ajoute un Operator »\n· « Quelles pistes y a-t-il ? Mettez la piste 2 en sourdine »',
       },
       ja: {
@@ -733,6 +758,8 @@
         yoloTitle: 'YOLO：オン = AI がすべて直接実行、オフ = Set 変更前に確認',
         allow: '許可', deny: '拒否', confirmAsk: 'AI が実行を要求', confirmCostly: 'API クレジットを消費',
         fileTooBig: 'ファイルが大きすぎます：', fileUnsupported: '未対応のファイル形式：',
+        webConfig: 'ウェブ検索', webEnable: 'ウェブアクセスを有効化', webOn: 'オン', webOff: 'オフ',
+        webDesc: 'オンにすると AI がウェブ検索（web_search・Bing / DuckDuckGo 経由、キー不要）とページ読み取り（web_fetch）を使えます。検索語と取得先 URL は各サイトに送信されます（アカウント・Cookie なし）。使わないときはオフのままを推奨。',
         welcome: 'こんにちは！Live 内の AI アシスタントです。\n制作の質問や、現在の Set の操作ができます。例：\n· 「テンポを 128 にして」\n· 「Bass という MIDI トラックを作って Operator を追加」\n· 「今どんなトラックがある？2 番目をミュートして」',
       },
       es: {
@@ -758,6 +785,8 @@
         yoloTitle: 'YOLO: activado = la IA ejecuta todo directamente; desactivado = confirmar antes de modificar el Set',
         allow: 'Permitir', deny: 'Denegar', confirmAsk: 'La IA quiere ejecutar', confirmCostly: 'consume créditos de API',
         fileTooBig: 'Archivo demasiado grande: ', fileUnsupported: 'Tipo de archivo no admitido: ',
+        webConfig: 'Búsqueda web', webEnable: 'Activar acceso web', webOn: 'Activado', webOff: 'Desactivado',
+        webDesc: 'Si está activo, la IA puede buscar en la web (web_search, sin clave vía Bing / DuckDuckGo) y leer páginas (web_fetch). Las consultas y las URL visitadas se envían a esos sitios — sin cuenta ni cookies. Manténlo apagado si no lo necesitas.',
         welcome: '¡Hola! Soy tu asistente de IA dentro de Live.\nPregúntame sobre producción o deja que maneje el Set actual:\n· «Pon el tempo a 128»\n· «Crea una pista MIDI llamada Bass y añade un Operator»\n· «¿Qué pistas hay? Silencia la pista 2»',
       },
       it: {
@@ -783,6 +812,8 @@
         yoloTitle: 'YOLO: attivo = l’IA esegue tutto direttamente; spento = conferma prima di modificare il Set',
         allow: 'Consenti', deny: 'Nega', confirmAsk: 'L’IA vuole eseguire', confirmCostly: 'consuma crediti API',
         fileTooBig: 'File troppo grande: ', fileUnsupported: 'Tipo di file non supportato: ',
+        webConfig: 'Ricerca web', webEnable: 'Attiva accesso web', webOn: 'Attivo', webOff: 'Disattivo',
+        webDesc: 'Se attivo, l’IA può cercare sul web (web_search, senza chiave tramite Bing / DuckDuckGo) e leggere pagine (web_fetch). Le query e gli URL visitati vengono inviati a quei siti — senza account né cookie. Tienilo spento se non serve.',
         welcome: 'Ciao! Sono il tuo assistente AI dentro Live.\nFammi domande sulla produzione o lasciami operare sul Set corrente:\n· «Imposta il tempo a 128»\n· «Crea una traccia MIDI chiamata Bass e aggiungi un Operator»\n· «Quali tracce ci sono? Silenzia la traccia 2»',
       },
     };
@@ -1109,6 +1140,39 @@
       }
     }
 
+    // ---------- Web search toggle (Settings → 联网搜索) ----------
+    // 与音频设置同一规则：开关状态以服务端 providers.json 为准（/api/web-config），
+    // localStorage 只作缓存。默认关闭。
+    const webToggle = document.getElementById('webToggle');
+    const webVal = document.getElementById('webVal');
+    function renderWebVal() {
+      webVal.textContent = webToggle.checked ? t('webOn') : t('webOff');
+    }
+    webToggle.checked = localStorage.getItem('ai.web.enabled') === '1'; // 默认关
+    renderWebVal();
+    webToggle.addEventListener('change', () => {
+      localStorage.setItem('ai.web.enabled', webToggle.checked ? '1' : '0');
+      renderWebVal();
+      fetch('/api/web-config', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled: webToggle.checked }),
+      }).catch(() => {});
+    });
+    // 服务端为准做镜像：本地记录丢失（Live webview 不持久）时恢复，两个壳显示统一。
+    function loadWebConfig() {
+      fetch('/api/web-config').then(r => r.json()).then(s => {
+        if (!s) return;
+        const v = s.enabled === true;
+        if (webToggle.checked !== v) {
+          webToggle.checked = v;
+          localStorage.setItem('ai.web.enabled', v ? '1' : '0');
+        }
+        renderWebVal();
+      }).catch(() => {});
+    }
+    loadWebConfig();
+
     document.getElementById('showSettings').addEventListener('click', (e) => {
       e.stopPropagation();
       const opening = settingsPanel.classList.contains('hidden');
@@ -1122,6 +1186,7 @@
         renderAudioProviders();
         loadProviderFields();
         loadAudioFields();
+        loadWebConfig();
         showView('viewMain');
       }
     });
@@ -1143,6 +1208,13 @@
         renderProviders();
         renderEfforts();
         refreshHealth();
+      }
+      if (e.key === 'ai.web.enabled' && e.newValue !== null) {
+        const v = e.newValue === '1';
+        if (webToggle.checked !== v) {
+          webToggle.checked = v;
+          renderWebVal();
+        }
       }
     });
 
@@ -1166,6 +1238,7 @@
       langVal.textContent = LANGS.find(l => l.code === currentLang).name;
       providerVal.textContent = PROVIDERS[currentProvider].name;
       audioVal.textContent = AUDIO_PROVIDERS[currentAudioProvider].name;
+      renderWebVal();
       loadProviderFields();
       loadAudioFields();
       renderEfforts();
