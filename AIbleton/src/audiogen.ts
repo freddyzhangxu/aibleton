@@ -495,7 +495,7 @@ async function pollCustom(
  * browser under the User Library and indexed by search_samples (the handler
  * drops the index cache after each generation).
  */
-function generatedAudioDir(): string {
+export function generatedAudioDir(): string {
   const lib = resolveAbletonLibraryPaths();
   const userLib =
     lib.userLibraries[0] ??

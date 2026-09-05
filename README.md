@@ -24,14 +24,14 @@
 
 ## Download
 
-**Current version: v0.9.2** (pre-release) — get it from the
+**Current version: v0.9.3** (pre-release) — get it from the
 [**Releases page**](https://github.com/freddyzhangxu/aibleton/releases):
 
 | File | What it is |
 |---|---|
-| [AIbleton-0.9.2.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.2/AIbleton-0.9.2.ablx) | The Live extension — **required**. Drop it onto Live's **Settings → Extensions** page. |
-| [AIbletonBar-0.9.2-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.2/AIbletonBar-0.9.2-macOS.zip) | Optional macOS floating sidebar app (version kept in sync with the extension). |
-| [AIbletonBar-0.9.2-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.2/AIbletonBar-0.9.2-Windows.zip) | Optional Windows floating sidebar app — toggle with Win+Alt+A (version kept in sync with the extension). |
+| [AIbleton-0.9.3.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.3/AIbleton-0.9.3.ablx) | The Live extension — **required**. Drop it onto Live's **Settings → Extensions** page. |
+| [AIbletonBar-0.9.3-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.3/AIbletonBar-0.9.3-macOS.zip) | Optional macOS floating sidebar app (version kept in sync with the extension). |
+| [AIbletonBar-0.9.3-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.3/AIbletonBar-0.9.3-Windows.zip) | Optional Windows floating sidebar app — toggle with Win+Alt+A (version kept in sync with the extension). |
 
 No Node.js needed for end users — the extension runs inside Live's own Extension Host.
 
@@ -97,6 +97,12 @@ The project has two parts:
   by fuzzy name ("freq" → Filter Freq).
 - **Track & scene operations** — create / rename / mute / solo / arm tracks, set volume
   & pan, create and rename scenes, set tempo.
+- **Ableton Move support** — two-way integration with the Move hardware:
+  `create_move_track` sets up a MIDI track that sequences a Move over USB-C
+  (firmware ≥ 1.5, Standalone Mode), and a WiFi file pipeline (`move_pair` /
+  `move_upload_sample` / `move_download_set` / list tools) pushes AI-generated
+  samples straight onto the device and pulls Sets back — stock firmware, no SSH.
+  One-time manual output routing per Set — see [docs/move.md](docs/move.md).
 - **Operation guidance** — answers how-to questions about Live itself (mixing, warping,
   routing, shortcuts…) with step-by-step instructions, right where you're working.
 - **Localized UI** — the chat interface speaks English, 中文, Deutsch, Français,
@@ -121,7 +127,7 @@ The project has two parts:
 ### For users — install the `.ablx`
 
 Requires **Ableton Live 12.4.5 beta** or later. Download
-[AIbleton-0.9.2.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.2/AIbleton-0.9.2.ablx),
+[AIbleton-0.9.3.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.3/AIbleton-0.9.3.ablx),
 then open Live's **Settings → Extensions** page and drag the `.ablx` file onto it —
 no Node.js, no terminal.
 

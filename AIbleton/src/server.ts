@@ -14,6 +14,7 @@ import {
   AUDIO_PROVIDER_NAMES,
   audioProviderEnv,
   generateAudio,
+  generatedAudioDir,
   resolveAudioConfig,
   type AudioGenConfig,
   type AudioProvider,
@@ -29,8 +30,20 @@ import {
   readHomeFile,
   sampleRoots,
   storeFallbackPath,
+  writeHomeBinary,
   writeHomeFile,
 } from "./paths.js";
+import {
+  MoveError,
+  downloadSet,
+  listFiles,
+  listSets,
+  moveHost,
+  pairComplete,
+  pairStart,
+  systemVersion,
+  uploadFile,
+} from "./move.js";
 import {
   AudioTrack,
   DrumChain,
@@ -256,6 +269,10 @@ let audioSettings: PersistedAudio = { fields: {}, custom: {} };
  * to run) only when the user explicitly turns this on. */
 let webSettings = { enabled: false };
 
+/** Ableton Move pairing state (host + challenge-response token), persisted in
+ * providers.json under "move" — same localStorage-loss problem as lastProvider. */
+let moveSettings: { host?: string; token?: string } = {};
+
 const AUDIO_PROVIDERS_ALL: AudioProvider[] = ["stable-audio", "elevenlabs", "minimax", "custom"];
 
 /**
@@ -297,6 +314,7 @@ function loadManualConfigs(context: Ctx): void {
         lastProvider?: unknown;
         audio?: Partial<PersistedAudio>;
         web?: { enabled?: unknown };
+        move?: { host?: unknown; token?: unknown };
       };
     manualConfigs = {};
     for (const p of ["claude", "codex", "gemini"] as Provider[]) {
@@ -318,6 +336,13 @@ function loadManualConfigs(context: Ctx): void {
       };
     }
     webSettings.enabled = data.web?.enabled === true;
+    const mv = data.move;
+    if (mv && typeof mv === "object") {
+      moveSettings = {
+        host: typeof mv.host === "string" && mv.host ? mv.host : undefined,
+        token: typeof mv.token === "string" && mv.token ? mv.token : undefined,
+      };
+    }
   } catch {
     manualConfigs = {};
   }
@@ -330,7 +355,7 @@ function saveManualConfigs(): void {
   try {
     mkdirOutsideSandbox(path.dirname(manualConfigPath));
     writeHomeFile(manualConfigPath,
-      JSON.stringify({ ...manualConfigs, lastProvider, audio: audioSettings, web: webSettings }, null, 2));
+      JSON.stringify({ ...manualConfigs, lastProvider, audio: audioSettings, web: webSettings, move: moveSettings }, null, 2));
   } catch {
     // In-memory copy still works for this run.
   }
@@ -383,6 +408,82 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: { name: { type: "string" } },
+    },
+  },
+  {
+    name: "create_move_track",
+    description:
+      "Create a MIDI track for sequencing an Ableton Move hardware unit over USB-C (firmware ≥1.5, Standalone Mode). The SDK cannot set MIDI output routing — the returned message contains one-time manual routing steps that MUST be relayed to the user. Afterwards, write clips into this track with write_midi_clip / write_session_clip as usual.",
+    input_schema: {
+      type: "object",
+      properties: {
+        channel: {
+          type: "number",
+          description:
+            "MIDI channel the Move track listens on (1–16, default 1). On Move, a track's MIDI In channel is set via Shift + track button; 'Auto' accepts all channels not explicitly assigned to other tracks.",
+        },
+        name: { type: "string", description: "Track name (default: 'Move Ch <channel>')" },
+      },
+    },
+  },
+  {
+    name: "move_status",
+    description:
+      "Check the connection to an Ableton Move on the local network: reachability, pairing state and firmware version.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "move_pair",
+    description:
+      "Pair with an Ableton Move over WiFi. Without `code`: makes the Move display a 6-digit pairing code — ask the user to read it off the device screen. With `code`: completes pairing and remembers the token for future sessions.",
+    input_schema: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "6-digit code shown on the Move's display" },
+        host: { type: "string", description: "Hostname or IP (default: move.local)" },
+      },
+    },
+  },
+  {
+    name: "move_list_sets",
+    description: "List the Sets stored on the paired Ableton Move (id, name, modified date).",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "move_list_files",
+    description:
+      "List folders and files in the Move's user storage (samples, recordings). Without `path`, lists the root folders.",
+    input_schema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Folder path, e.g. \"Samples\" or \"Samples/Drums\"" },
+      },
+    },
+  },
+  {
+    name: "move_upload_sample",
+    description:
+      "Upload a local audio file (WAV/AIFF/MP3/FLAC/OGG/M4A) to the paired Move — e.g. a file just created by generate_audio. Lands in the given folder on the device (default \"Samples\"), ready to load into a drum pad or melodic track.",
+    input_schema: {
+      type: "object",
+      properties: {
+        file_path: { type: "string", description: "Absolute path of the local audio file" },
+        folder: { type: "string", description: "Target folder on the Move (default \"Samples\")" },
+        overwrite: { type: "boolean", description: "Replace an existing file with the same name (default false)" },
+      },
+      required: ["file_path"],
+    },
+  },
+  {
+    name: "move_download_set",
+    description:
+      "Download a Set (.ablbundle) from the paired Move into the User Library's AIbleton folder.",
+    input_schema: {
+      type: "object",
+      properties: {
+        set_id: { type: "string", description: "Set id from move_list_sets" },
+      },
+      required: ["set_id"],
     },
   },
   {
@@ -696,6 +797,19 @@ Making music that actually produces sound:
 - Classic 4-bar techno pattern: kick (36) on every beat 0..15; clap (39) or snare (38) on beats 1 and 3 of each bar (i.e. 1,3,5,7...); closed hat (42) on offbeats 0.5,1.5,...; open hat (46) sparingly; toms (41/43/45) as fills in the last bar. Vary velocity for groove.
 - After writing, remind the user to press play / trigger the clip to hear it.
 
+Sequencing an Ableton Move (hardware) from Live:
+- Workflow: create_move_track(channel) → relay the returned routing steps to the user verbatim (the SDK cannot set output routing; it is a one-time manual step per Set) → then write clips into that track as usual.
+- Requirements: Move firmware ≥1.5, Standalone Mode (NOT Control Live Mode), USB-C to the computer. If "Ableton Move" doesn't appear as a MIDI port on macOS, the user may need to delete a stale entry in Audio MIDI Setup → MIDI Studio and reconnect.
+- Move receives notes, velocity, poly aftertouch and MIDI clock; MIDI CC does NOT reach it — never promise CC automation on Move.
+- Move drum pads follow the Drum Rack layout starting at note 36 (C1); melodic tracks play normal pitched notes.
+- For tempo sync without MIDI clock, Ableton Link over WiFi also works (Live and Move on the same network).
+
+Move file transfer (WiFi, stock firmware API — pairing required once):
+- Pair: move_pair (no code) → the Move shows a 6-digit code on its display → ask the user for it → move_pair({code}). The token persists across sessions; if a call fails with 401, pair again.
+- move_list_sets / move_list_files browse the device; move_upload_sample sends a local audio file to the Move (default folder "Samples"), move_download_set pulls a Set (.ablbundle) into the User Library's AIbleton folder.
+- Typical flow: generate_audio → move_upload_sample → the sample appears under Samples on the Move, ready to load into a drum pad or a melodic track. Say so when it lands.
+- move_status reports reachability/pairing/firmware; use it when a Move call fails or the user asks.
+
 Samples and audio files:
 - Workflow: search_samples(query) → import_audio_clip (loops/stems onto an audio track's arrangement) or load_sample (one-shots into a Simpler for pitched play).
 - search_samples covers the Splice folder if the Splice app is installed and synced, plus Ableton User Library, Factory Packs and Core Library. Splice's online catalog is NOT browsable — only local files.
@@ -862,6 +976,12 @@ function applySwing(notes: NoteDescription[], swingPct: number): NoteDescription
   });
 }
 
+function requireMovePaired(): void {
+  if (!moveSettings.token) {
+    throw new Error("Move 尚未配对 — 先调用 move_pair（不带 code）获取屏幕上的配对码。");
+  }
+}
+
 async function runTool(
   context: Ctx,
   name: string,
@@ -903,6 +1023,87 @@ async function runTool(
       const track = await context.withinTransaction(() => song.createAudioTrack());
       if (input.name) track.name = String(input.name);
       return { created: track.name, type: "Audio" };
+    }
+    case "create_move_track": {
+      const channel = Math.min(16, Math.max(1, Math.round(Number(input.channel) || 1)));
+      const track = await context.withinTransaction(() => song.createMidiTrack());
+      track.name = String(input.name || `Move Ch ${channel}`);
+      return {
+        created: track.name,
+        type: "MIDI",
+        routing_setup_required:
+          `One-time manual routing (the SDK cannot set this): 1) In Live, set this track's Output Type to "Ableton Move" and Output Channel to ${channel}. ` +
+          `2) On Move: firmware ≥1.5, Standalone Mode (NOT Control Live), USB-C to this computer; hold Shift + press a track button and set that track's MIDI In to channel ${channel} (or Auto). ` +
+          `Notes, velocity and poly aftertouch reach Move; MIDI CC does not. From then on, any clip you write into this track plays on Move.`,
+      };
+    }
+    case "move_status": {
+      try {
+        const version = await systemVersion(moveSettings);
+        return { connected: true, paired: true, host: moveHost(moveSettings), firmware: version };
+      } catch (e) {
+        if (e instanceof MoveError && e.status === 401) {
+          return {
+            connected: true,
+            paired: false,
+            host: moveHost(moveSettings),
+            hint: "设备可达，但尚未配对 — 调用 move_pair（不带 code）让 Move 显示配对码。",
+          };
+        }
+        throw e;
+      }
+    }
+    case "move_pair": {
+      const host = typeof input.host === "string" && input.host.trim() ? input.host.trim() : undefined;
+      if (host) moveSettings.host = host;
+      const code = typeof input.code === "string" ? input.code.trim() : "";
+      if (!code) {
+        await pairStart(moveSettings);
+        return {
+          pairing: "code_shown",
+          message:
+            "Move 屏幕上现在显示一个 6 位配对码。请让用户报出这串数字，然后用 move_pair({ code }) 完成配对。",
+        };
+      }
+      moveSettings.token = await pairComplete(moveSettings, code);
+      saveManualConfigs();
+      return { paired: true, host: moveHost(moveSettings) };
+    }
+    case "move_list_sets": {
+      requireMovePaired();
+      return { sets: await listSets(moveSettings) };
+    }
+    case "move_list_files": {
+      requireMovePaired();
+      const dir = typeof input.path === "string" && input.path.trim() ? input.path.trim() : undefined;
+      return { path: dir ?? "/", entries: await listFiles(moveSettings, dir) };
+    }
+    case "move_upload_sample": {
+      requireMovePaired();
+      const filePath = String(input.file_path || "");
+      if (!filePath) throw new Error("file_path 不能为空");
+      const folder =
+        typeof input.folder === "string" && input.folder.trim() ? input.folder.trim() : "Samples";
+      const result = await uploadFile(moveSettings, filePath, folder, input.overwrite === true);
+      return {
+        ...result,
+        message: `${result.uploaded} 已上传到 Move 的 ${result.folder} 文件夹（${Math.round(result.size / 1024)} KB）— 在 Move 上即可找到，可装入鼓垫或旋律轨道。`,
+      };
+    }
+    case "move_download_set": {
+      requireMovePaired();
+      const setId = String(input.set_id || "");
+      if (!setId) throw new Error("set_id 不能为空");
+      const { filename, data } = await downloadSet(moveSettings, setId);
+      const dir = generatedAudioDir();
+      mkdirOutsideSandbox(dir);
+      const target = path.join(dir, filename);
+      writeHomeBinary(target, data);
+      return {
+        saved: target,
+        size: data.length,
+        message: `Set 已下载到 ${target}（${Math.round(data.length / 1024)} KB）。`,
+      };
     }
     case "rename_track": {
       const track = trackAt(context, Number(input.index));
@@ -1528,6 +1729,10 @@ const READ_ONLY_TOOLS = new Set([
   "search_samples",
   "web_search",
   "web_fetch",
+  "move_status",
+  "move_pair",
+  "move_list_sets",
+  "move_list_files",
 ]);
 
 /**
