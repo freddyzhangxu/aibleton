@@ -45,7 +45,7 @@ export interface RawResponse {
 
 interface RawInit {
   headers: Record<string, string>;
-  body?: string;
+  body?: string | Buffer;
   proxy: string | null;
   signal?: AbortSignal;
 }
@@ -85,8 +85,12 @@ export function rawRequest(
         path: target.pathname + target.search,
         method,
         headers: {
-          ...(typeof init.body === "string"
-            ? { "content-length": String(Buffer.byteLength(init.body)) }
+          ...(init.body !== undefined
+            ? {
+                "content-length": String(
+                  Buffer.isBuffer(init.body) ? init.body.length : Buffer.byteLength(init.body),
+                ),
+              }
             : {}),
           ...init.headers,
         },
@@ -104,7 +108,7 @@ export function rawRequest(
       });
       current = req;
       req.on("error", fail);
-      if (typeof init.body === "string") req.write(init.body);
+      if (init.body !== undefined) req.write(init.body);
       req.end();
     };
     if (!init.proxy || target.protocol === "http:") {
@@ -156,7 +160,7 @@ export function rawRequest(
 
 export function rawPost(
   target: URL,
-  init: RawInit & { body: string },
+  init: RawInit & { body: string | Buffer },
 ): Promise<RawResponse> {
   return rawRequest("POST", target, init);
 }

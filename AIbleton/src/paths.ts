@@ -14,6 +14,7 @@
  */
 
 import { execFileSync, execSync } from "node:child_process";
+import { Buffer } from "node:buffer";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -67,6 +68,51 @@ export function readHomeFile(p: string): string | null {
       timeout: 5000,
       stdio: ["ignore", "pipe", "ignore"],
     });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Binary counterpart of readHomeFile (e.g. uploading a local sample to an
+ * Ableton Move). The sandbox fallback base64-encodes through a child process
+ * and decodes back in-process — the inverse of writeHomeBinary's escape.
+ */
+export function readHomeBinary(p: string): Buffer | null {
+  try {
+    return fs.readFileSync(p);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") return null;
+  }
+  try {
+    let b64: string;
+    if (process.platform === "win32") {
+      const psPath = `'${p.replace(/'/g, "''")}'`;
+      b64 = execFileSync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          `[Convert]::ToBase64String([IO.File]::ReadAllBytes(${psPath}))`,
+        ],
+        {
+          encoding: "utf8",
+          timeout: 120000,
+          maxBuffer: 256 * 1024 * 1024,
+          stdio: ["ignore", "pipe", "ignore"],
+          windowsHide: true,
+        },
+      );
+    } else {
+      b64 = execFileSync("/usr/bin/base64", ["-i", p], {
+        encoding: "utf8",
+        timeout: 120000,
+        maxBuffer: 256 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    }
+    return Buffer.from(b64.replace(/\s+/g, ""), "base64");
   } catch {
     return null;
   }
