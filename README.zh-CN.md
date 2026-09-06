@@ -5,8 +5,8 @@
 <h1 align="center">AIbleton</h1>
 
 <p align="center">
-  住在 <b>Ableton Live 12</b> 里的 AI 助手 —— Claude、Codex 或 Gemini 随你选。<br>
-  聊天、生成 MIDI 或音频、装载鼓组、搜索采样、直接控制设备与轨道，全程不用离开 Live。
+  面向 Ableton Live 的开源智能体音乐制作平台。<br>
+  用 AI 聊天、创作、编曲、编辑、控制你的音乐 —— Claude、Codex、Gemini，或你自己的模型。
 </p>
 
 <p align="center">
