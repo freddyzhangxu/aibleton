@@ -5,9 +5,8 @@
 <h1 align="center">AIbleton</h1>
 
 <p align="center">
-  An AI assistant inside <b>Ableton Live 12</b> — Claude, Codex, or Gemini, your call.<br>
-  Chat, generate MIDI or audio, load drum kits, search samples,<br>
-  and control devices & tracks without leaving your session.
+  An open-source agentic music production platform for Ableton Live.<br>
+  Chat, create, arrange, edit, and control your music with AI — Claude, Codex, Gemini, or your own.
 </p>
 
 <p align="center">
