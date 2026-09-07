@@ -36,7 +36,7 @@ No Node.js needed for end users — the extension runs inside Live's own Extensi
 
 ## Overview
 
-AIbleton brings an AI chat assistant directly into Ableton Live. Ask it to *"make a
+AIbleton puts an AI production agent directly inside Ableton Live. Ask it to *"make a
 4-bar 808 pattern at 140 BPM"*, *"add an Auto Filter on track 2 and sweep the cutoff
 to 800 Hz"*, or *"find a tech-house loop in my samples and drop it on the arrangement"* —
 and it happens in your Live Set.
@@ -52,12 +52,12 @@ The project has two parts:
 
 | Component | What it is |
 |---|---|
-| **[AIbleton/](AIbleton/)** | The Live 12 extension: chat UI + a local assistant server with 30+ tools that read and control the Live Set |
+| **[AIbleton/](AIbleton/)** | The Live 12 extension: chat UI + a local agent server with 30+ tools that read and control the Live Set |
 | **[AIbletonBar/](AIbletonBar/)** | A native floating sidebar (macOS & Windows) that hosts the same chat UI next to Live — IDE-style, toggled with **⌥⌘A** / **Win+Alt+A** |
 
 ## Screenshots
 
-| AI assistant dialog inside Live | AIbletonBar floating sidebar |
+| AI agent dialog inside Live | AIbletonBar floating sidebar |
 |:---:|:---:|
 | ![AIbleton chat dialog inside Ableton Live](docs/screenshots/aibleton-dialog.png) | ![AIbletonBar sidebar docked next to Ableton Live](docs/screenshots/aibletonbar-sidebar.png) |
 | **AI finds samples and pushes them to the Move over Wi-Fi** | **…and they land on the device (move.local)** |
@@ -66,7 +66,7 @@ The project has two parts:
 ## Features
 
 - **Chat inside Live** — right-click any track / scene / clip → Extensions →
-  **AIbleton: Open** opens the assistant in a modal dialog. The same UI is also reachable at `http://localhost:17666` from any
+  **AIbleton: Open** opens the agent in a modal dialog. The same UI is also reachable at `http://localhost:17666` from any
   browser, and from AIbletonBar.
 - **Your choice of model** — OpenAI Codex, Claude, Google Gemini, or any
   OpenAI-compatible endpoint (Grok, DeepSeek, OpenRouter, Ollama…), switchable in
@@ -75,11 +75,11 @@ The project has two parts:
   by hand; the Custom slot takes a base URL + model and speaks plain
   `/chat/completions` (API key optional for local servers). A reasoning-effort
   selector trades speed for deeper thinking when you need it.
-- **Artist memory** — tell the assistant about your style once (*"I make melodic
+- **Artist memory** — tell the agent about your style once (*"I make melodic
   techno around 124, A minor, warm analog pads"*) and it remembers across chats:
   the memory lives in a plain `memory.json` next to the settings file, is
   injected into every conversation as the defaults for musical decisions, and the
-  assistant adds to it itself via the `update_memory` tool whenever you state a
+  agent adds to it itself via the `update_memory` tool whenever you state a
   durable preference. View and edit it anytime in Settings → Artist Memory, or
   hand-edit and share the file directly.
 - **File attachments** — attach images or text files, or drop in a `.mid` file or a whole
@@ -108,7 +108,7 @@ The project has two parts:
   Set: loops onto the arrangement, one-shots into a Simpler. Files land in your
   User Library, ready to reuse and search.
 - **Web access (opt-in)** — off by default; flip it on in Settings → Web
-  Search and the assistant can search the web (`web_search`, keyless — Bing
+  Search and the agent can search the web (`web_search`, keyless — Bing
   with DuckDuckGo fallback, localized to your UI language) and read pages
   (`web_fetch`), so it answers current-info questions — release notes, prices,
   tutorials — and summarizes URLs you paste, with sources cited. Read-only and
@@ -220,7 +220,7 @@ open Live Set.
 
 ```
 ┌────────────────────┐      ┌──────────────────────┐      ┌────────────────┐
-│ Chat UI            │      │ Assistant server     │      │ Model API      │
+│ Chat UI            │      │ Agent server         │      │ Model API      │
 │ (dialog / browser  │─────▶│ localhost:17666      │─────▶│ Codex / Claude │
 │  / AIbletonBar)    │      │ + 30+ Live tools     │◀─────│ Gemini / any   │
 └────────────────────┘      │                      │      │ OpenAI-compat. │
@@ -247,7 +247,7 @@ them into the Set with `import_audio_clip` / `load_sample`.
 ```
 AIbleton/          Live extension (TypeScript)
 ├── src/extension.ts   entry point — registers context-menu actions, starts server
-├── src/server.ts      assistant server + tool implementations (Codex / Claude / Gemini / OpenAI-compatible)
+├── src/server.ts      agent server + tool implementations (Codex / Claude / Gemini / OpenAI-compatible)
 ├── src/analysis.ts    analyze_song engine — key/role/issue detection + the clip map arrange_song plans against
 ├── src/audiogen.ts    audio generation providers (Stable Audio / ElevenLabs / MiniMax / custom HTTP)
 ├── src/websearch.ts   web_search (Bing + DuckDuckGo fallback, keyless) + web_fetch, proxy-aware
