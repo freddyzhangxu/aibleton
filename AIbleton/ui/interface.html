@@ -828,8 +828,8 @@
 
     // ---------- AI providers ----------
     const PROVIDERS = {
-      claude: { name: 'Claude Code', base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
       codex:  { name: 'Codex',       base: 'https://api.openai.com/v1', model: 'gpt-5-codex' },
+      claude: { name: 'Claude Code', base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
       gemini: { name: 'Gemini',      base: 'https://generativelanguage.googleapis.com', model: 'gemini-flash-latest' },
     };
     const savedProvider = localStorage.getItem('ai.provider');
