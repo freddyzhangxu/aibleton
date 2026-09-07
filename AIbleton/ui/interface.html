@@ -519,7 +519,7 @@
           <label><span data-i18n="apiKey">API Key</span><input id="cfgKey" type="password" autocomplete="off"></label>
           <label><span data-i18n="baseUrl">API 地址</span><input id="cfgBase" autocomplete="off" spellcheck="false"></label>
           <label><span data-i18n="model">模型</span><input id="cfgModel" autocomplete="off" spellcheck="false"></label>
-          <div class="cfg-hint" data-i18n="cfgHint">留空将自动使用本机 CLI 配置与默认值</div>
+          <div class="cfg-hint" id="cfgHint" data-i18n="cfgHint">留空将自动使用本机 CLI 配置与默认值</div>
         </div>
       </div>
       <div class="set-view hidden" id="viewAudio">
@@ -666,6 +666,8 @@
         customRequestUrl: 'Request URL',
         customHint: 'POST 该地址；body 模板用 {{prompt}} {{duration}} 占位。响应：bytes=音频流；url/base64/hex=JSON，填字段路径。异步任务填轮询 URL，{taskId} 占位',
         cfgHint: '留空将自动使用本机 CLI 配置与默认值',
+        cfgHintCustom: 'Custom：API 地址与模型必填；本地服务（如 Ollama）可留空 API Key',
+        apiKeyPhCustom: '可选，本地服务可留空',
         effortDefault: '默认 Effort',
         effortTitle: '思考强度：更高 = 推理更深但更慢',
         attachTitle: '上传文件给 AI：图片/文本 ≤2MB，MIDI/Ableton 工程 ≤5MB；点击选择、拖入窗口或 ⌘V 粘贴',
@@ -696,6 +698,8 @@
         customRequestUrl: 'Request URL',
         customHint: 'POSTs the request URL; {{prompt}} {{duration}} in the body template. Response: bytes = raw audio; url/base64/hex = JSON field path. Async: poll URL with {taskId}',
         cfgHint: 'Leave empty to use local CLI config and defaults',
+        cfgHintCustom: 'Custom: Base URL and model are required; local servers (e.g. Ollama) may leave the API Key empty',
+        apiKeyPhCustom: 'Optional — local servers may leave empty',
         effortDefault: 'Default effort',
         effortTitle: 'Reasoning effort: higher = deeper but slower',
         attachTitle: 'Attach images/text (≤2MB), MIDI/Live sets (≤5MB): click, drag in, or paste',
@@ -726,6 +730,8 @@
         customRequestUrl: 'Request-URL',
         customHint: 'POST an die Request-URL; {{prompt}} {{duration}} im Body-Template. Antwort: bytes = rohes Audio; url/base64/hex = JSON-Feldpfad. Asynchron: Poll-URL mit {taskId}',
         cfgHint: 'Leer lassen = lokale CLI-Konfiguration und Standardwerte',
+        cfgHintCustom: 'Custom: API-Adresse und Modell erforderlich; lokale Server (z. B. Ollama) können ohne API-Schlüssel laufen',
+        apiKeyPhCustom: 'Optional — lokale Server können leer bleiben',
         effortDefault: 'Standard-Effort',
         effortTitle: 'Denktiefe: höher = gründlicher, aber langsamer',
         attachTitle: 'Dateien anhängen: Bilder/Text ≤2MB, MIDI/Live-Sets ≤5MB — klicken, ziehen oder einfügen',
@@ -756,6 +762,8 @@
         customRequestUrl: 'URL de requête',
         customHint: "POST vers l'URL ; {{prompt}} {{duration}} dans le template. Réponse : bytes = audio brut ; url/base64/hex = chemin du champ JSON. Asynchrone : URL de polling avec {taskId}",
         cfgHint: 'Laisser vide = config CLI locale et valeurs par défaut',
+        cfgHintCustom: 'Custom : adresse API et modèle requis ; les serveurs locaux (ex. Ollama) peuvent laisser la clé API vide',
+        apiKeyPhCustom: 'Optionnel — les serveurs locaux peuvent laisser vide',
         effortDefault: 'Effort par défaut',
         effortTitle: 'Intensité de raisonnement : plus haut = plus profond mais plus lent',
         attachTitle: 'Joindre images/texte (≤2Mo), MIDI/Live Sets (≤5Mo) : cliquer, glisser ou coller',
@@ -786,6 +794,8 @@
         customRequestUrl: 'リクエスト URL',
         customHint: 'リクエスト URL に POST;ボディテンプレートで {{prompt}} {{duration}} を使用。応答: bytes=生音声、url/base64/hex=JSON フィールドパス。非同期: {taskId} 入りポーリング URL',
         cfgHint: '空欄ならローカル CLI 設定とデフォルト値を使用します',
+        cfgHintCustom: 'Custom：API アドレスとモデルは必須です。ローカルサーバー（Ollama 等）は API キー空欄可',
+        apiKeyPhCustom: '任意 — ローカルサーバーは空欄可',
         effortDefault: 'デフォルト',
         effortTitle: '思考の強さ：高いほど深く推論しますが遅くなります',
         attachTitle: 'ファイル添付：画像/テキスト ≤2MB、MIDI/Live Set ≤5MB。クリック、ドラッグ、または貼り付け',
@@ -816,6 +826,8 @@
         customRequestUrl: 'URL de solicitud',
         customHint: 'POST a la URL; {{prompt}} {{duration}} en la plantilla. Respuesta: bytes = audio crudo; url/base64/hex = ruta del campo JSON. Asíncrono: URL de sondeo con {taskId}',
         cfgHint: 'Vacío = config CLI local y valores por defecto',
+        cfgHintCustom: 'Custom: la dirección API y el modelo son obligatorios; los servidores locales (p. ej. Ollama) pueden dejar la API Key vacía',
+        apiKeyPhCustom: 'Opcional — los servidores locales pueden dejarlo vacío',
         effortDefault: 'Effort por defecto',
         effortTitle: 'Intensidad de razonamiento: mayor = más profundo pero más lento',
         attachTitle: 'Adjuntar imágenes/texto (≤2MB), MIDI/Sets de Live (≤5MB): clic, arrastrar o pegar',
@@ -846,6 +858,8 @@
         customRequestUrl: 'URL richiesta',
         customHint: "POST all'URL; {{prompt}} {{duration}} nel template. Risposta: bytes = audio grezzo; url/base64/hex = percorso del campo JSON. Asincrono: URL di polling con {taskId}",
         cfgHint: 'Vuoto = config CLI locale e valori predefiniti',
+        cfgHintCustom: 'Custom: indirizzo API e modello obbligatori; i server locali (es. Ollama) possono lasciare vuota la API Key',
+        apiKeyPhCustom: 'Opzionale — i server locali possono lasciarlo vuoto',
         effortDefault: 'Effort predefinito',
         effortTitle: 'Intensità di ragionamento: più alta = più profonda ma più lenta',
         attachTitle: 'Allega immagini/testo (≤2MB), MIDI/Live Set (≤5MB): clic, trascina o incolla',
@@ -913,7 +927,13 @@
       for (const f of Object.keys(cfgInputs)) {
         cfgInputs[f].value = localStorage.getItem(`ai.${currentProvider}.${f}`) || '';
       }
-      cfgInputs.apiKey.placeholder = t('apiKeyPh');
+      // Custom 端点没有 CLI 配置可跟随、也没有默认值 —— 换专用提示，别让人
+      // 以为留空能自动加载什么。dataset.i18n 一并换，applyLang 切语言不会冲掉。
+      const isCustom = currentProvider === 'custom';
+      const hintEl = document.getElementById('cfgHint');
+      hintEl.dataset.i18n = isCustom ? 'cfgHintCustom' : 'cfgHint';
+      hintEl.textContent = t(hintEl.dataset.i18n);
+      cfgInputs.apiKey.placeholder = t(isCustom ? 'apiKeyPhCustom' : 'apiKeyPh');
       cfgInputs.baseUrl.placeholder = PROVIDERS[currentProvider].base;
       cfgInputs.model.placeholder = PROVIDERS[currentProvider].model;
       // 服务端 providers.json 是唯一权威（= 内置界面显示的内容）：完整镜像
