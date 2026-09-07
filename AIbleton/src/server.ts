@@ -378,6 +378,11 @@ let activeLanguage: string | undefined;
 
 // ---------- Claude tool definitions ----------
 
+/** Shared description for the optional track_name param on every track tool. */
+const TRACK_NAME_DESC =
+  "Track name as listed by get_song_overview. Always pass it together with the index: " +
+  "the pair is verified and the track is re-resolved by name if the index has shifted since.";
+
 const TOOLS = [
   {
     name: "get_song_overview",
@@ -493,9 +498,10 @@ const TOOLS = [
       type: "object",
       properties: {
         index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC + " (its CURRENT name, before the rename)" },
         name: { type: "string" },
       },
-      required: ["index", "name"],
+      required: ["name"],
     },
   },
   {
@@ -505,11 +511,11 @@ const TOOLS = [
       type: "object",
       properties: {
         index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         mute: { type: "boolean" },
         solo: { type: "boolean" },
         arm: { type: "boolean" },
       },
-      required: ["index"],
     },
   },
   {
@@ -520,9 +526,10 @@ const TOOLS = [
       type: "object",
       properties: {
         index: { type: "number", description: "0-based track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         device_name: { type: "string" },
       },
-      required: ["index", "device_name"],
+      required: ["device_name"],
     },
   },
   {
@@ -533,11 +540,11 @@ const TOOLS = [
       type: "object",
       properties: {
         track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         device_index: { type: "number", description: "0-based device index on the track" },
         device_name: { type: "string", description: 'Device name, e.g. "Operator" (alternative to device_index)' },
         filter: { type: "string", description: "Optional case-insensitive name filter" },
       },
-      required: ["track_index"],
     },
   },
   {
@@ -548,6 +555,7 @@ const TOOLS = [
       type: "object",
       properties: {
         track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         device_index: { type: "number" },
         device_name: { type: "string", description: 'Device name (alternative to device_index)' },
         parameter: {
@@ -559,7 +567,7 @@ const TOOLS = [
           description: 'A number as a string (e.g. "800") or, for enum parameters, the option name',
         },
       },
-      required: ["track_index", "parameter", "value"],
+      required: ["parameter", "value"],
     },
   },
   {
@@ -568,8 +576,10 @@ const TOOLS = [
       'Load Ableton\'s factory 808 drum kit into a track: builds a Drum Rack with Simpler pads loaded with real 808 samples (from the Drum Essentials pack). Reuses an existing EMPTY Drum Rack on the track if present, otherwise creates one. Pad note map (use these pitches in write_midi_clip): 36=Kick, 37=Rim, 38=Snare, 39=Clap, 41=Tom Low, 42=Hihat Closed, 43=Tom Mid, 45=Tom Hi, 46=Hihat Open, 49=Cymbal, 75=Clave. THIS is the way to make drums audible — prefer it over insert_device for drums.',
     input_schema: {
       type: "object",
-      properties: { track_index: { type: "number" } },
-      required: ["track_index"],
+      properties: {
+        track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+      },
     },
   },
   {
@@ -612,12 +622,13 @@ const TOOLS = [
       type: "object",
       properties: {
         track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         file_path: { type: "string", description: "Full path from search_samples" },
         start_beat: { type: "number", description: "Arrangement position in beats (default 0)" },
         duration_beats: { type: "number", description: "Optional clip length in beats" },
         warped: { type: "boolean", description: "Enable warping (default: Live's auto-warp setting)" },
       },
-      required: ["track_index", "file_path"],
+      required: ["file_path"],
     },
   },
   {
@@ -628,9 +639,10 @@ const TOOLS = [
       type: "object",
       properties: {
         track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         file_path: { type: "string", description: "Full path from search_samples" },
       },
-      required: ["track_index", "file_path"],
+      required: ["file_path"],
     },
   },
   {
@@ -666,6 +678,7 @@ const TOOLS = [
       type: "object",
       properties: {
         track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         start_beat: { type: "number", description: "Clip position in the arrangement, in beats (default 0)" },
         length_beats: { type: "number", description: "Clip length in beats (default 16 = 4 bars)" },
         name: { type: "string" },
@@ -688,7 +701,7 @@ const TOOLS = [
           },
         },
       },
-      required: ["track_index", "notes"],
+      required: ["notes"],
     },
   },
   {
@@ -699,6 +712,7 @@ const TOOLS = [
       type: "object",
       properties: {
         track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         scene_index: { type: "number" },
         length_beats: { type: "number", description: "Clip length in beats (default 16)" },
         name: { type: "string" },
@@ -708,7 +722,7 @@ const TOOLS = [
         },
         notes: { type: "array", items: { type: "object" } },
       },
-      required: ["track_index", "scene_index", "notes"],
+      required: ["scene_index", "notes"],
     },
   },
   {
@@ -718,9 +732,10 @@ const TOOLS = [
       type: "object",
       properties: {
         track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         clip_index: { type: "number" },
       },
-      required: ["track_index", "clip_index"],
+      required: ["clip_index"],
     },
   },
   {
@@ -730,10 +745,11 @@ const TOOLS = [
       type: "object",
       properties: {
         track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         clip_index: { type: "number" },
         notes: { type: "array", items: { type: "object" } },
       },
-      required: ["track_index", "clip_index", "notes"],
+      required: ["clip_index", "notes"],
     },
   },
   {
@@ -744,10 +760,10 @@ const TOOLS = [
       type: "object",
       properties: {
         track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
         volume: { type: "number" },
         pan: { type: "number" },
       },
-      required: ["track_index"],
     },
   },
   {
@@ -783,6 +799,7 @@ Rules:
 - Be concise and practical. No fluff.
 - Before calling tools that modify the Set, briefly say what you are about to do.
 - Track indices are 0-based, matching get_song_overview output. Call get_song_overview first whenever you need current track/scene info.
+- Track indices SHIFT when tracks are added, removed or reordered (by you or the user). On every track tool call, pass track_name (copied from get_song_overview) together with the index — the server verifies the pair and re-resolves by name when the index has drifted, so a stale index never hits the wrong track.
 - You CAN adjust device parameters (Operator, Reverb, Auto Filter, …) and track volume/pan — see the device-control section below.
 - You cannot delete anything, load third-party plugins, or do realtime audio/MIDI processing. Say so if asked.
 - After tools run, confirm what changed in one short sentence.
@@ -879,7 +896,7 @@ function midiTrackAt(context: Ctx, index: number): MidiTrack<"1.0.0"> {
   return track;
 }
 
-function matchByName<T extends { name: string }>(items: T[], ref: string, what: string): T {
+function matchByName<T extends { name: string }>(items: readonly T[], ref: string, what: string): T {
   const q = ref.trim().toLowerCase();
   const exact = items.find((i) => i.name.toLowerCase() === q);
   if (exact) return exact;
@@ -889,6 +906,59 @@ function matchByName<T extends { name: string }>(items: T[], ref: string, what: 
     throw new Error(`${what}名称“${ref}”匹配到多个，请精确指定: ${partial.map((p) => p.name).join(", ")}`);
   }
   throw new Error(`找不到${what}“${ref}”，可选: ${items.map((i) => i.name).join(", ")}`);
+}
+
+/** Lightweight stable track reference. Every track tool accepts track_name
+ * alongside its index; the name is authoritative — when the index no longer
+ * points at a track with that name (tracks were added/removed/reordered
+ * since the model last called get_song_overview), the track is re-resolved
+ * by name instead of silently hitting the wrong track. */
+interface TrackRef {
+  track: Track<"1.0.0">;
+  index: number;
+  /** The stale index the caller passed, when it had drifted. */
+  refreshedFrom?: number;
+}
+
+function resolveTrack(
+  context: Ctx,
+  input: Record<string, unknown>,
+  indexKey: "index" | "track_index",
+): TrackRef {
+  const tracks = context.application.song.tracks;
+  const raw = input[indexKey];
+  const hasIndex = typeof raw === "number" && Number.isInteger(raw);
+  const name = typeof input.track_name === "string" ? input.track_name.trim() : "";
+
+  if (name) {
+    if (
+      hasIndex && raw >= 0 && raw < tracks.length &&
+      tracks[raw].name.trim().toLowerCase() === name.toLowerCase()
+    ) {
+      return { track: tracks[raw], index: raw };
+    }
+    // Index missing or drifted — resolve fresh by name.
+    const track = matchByName(tracks, name, "轨道");
+    const index = tracks.indexOf(track);
+    return hasIndex && index !== raw ? { track, index, refreshedFrom: raw } : { track, index };
+  }
+  if (!hasIndex) throw new Error(`请提供 ${indexKey}（0 起计）或 track_name`);
+  if (raw < 0 || raw >= tracks.length) {
+    throw new Error(`轨道序号 ${raw} 无效，当前共 ${tracks.length} 条轨道（0 起计）`);
+  }
+  return { track: tracks[raw], index: raw };
+}
+
+/** Adds the fresh index (and a drift note) to a track tool's result so the
+ * model can correct its bookkeeping for follow-up calls. */
+function trackResult(ref: TrackRef, extra: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...extra,
+    track_index: ref.index,
+    ...(ref.refreshedFrom !== undefined
+      ? { index_refreshed: `轨道索引已漂移（${ref.refreshedFrom} → ${ref.index}），已按名称“${ref.track.name}”重新定位` }
+      : {}),
+  };
 }
 
 function deviceAt(context: Ctx, trackIndex: number, ref: unknown): Device<"1.0.0"> {
@@ -1106,24 +1176,26 @@ async function runTool(
       };
     }
     case "rename_track": {
-      const track = trackAt(context, Number(input.index));
-      const oldName = track.name;
-      track.name = String(input.name);
-      return { renamed: oldName, to: track.name };
+      const ref = resolveTrack(context, input, "index");
+      const oldName = ref.track.name;
+      ref.track.name = String(input.name);
+      return trackResult(ref, { renamed: oldName, to: ref.track.name });
     }
     case "set_track_state": {
-      const track = trackAt(context, Number(input.index));
+      const ref = resolveTrack(context, input, "index");
+      const track = ref.track;
       if (typeof input.mute === "boolean") track.mute = input.mute;
       if (typeof input.solo === "boolean") track.solo = input.solo;
       if (typeof input.arm === "boolean") track.arm = input.arm;
-      return { track: track.name, mute: track.mute, solo: track.solo, arm: track.arm };
+      return trackResult(ref, { track: track.name, mute: track.mute, solo: track.solo, arm: track.arm });
     }
     case "insert_device": {
-      const track = trackAt(context, Number(input.index));
+      const ref = resolveTrack(context, input, "index");
+      const track = ref.track;
       const device = await context.withinTransaction(() =>
         track.insertDevice(String(input.device_name), track.devices.length),
       );
-      return { inserted: device.name, into: track.name };
+      return trackResult(ref, { inserted: device.name, into: track.name });
     }
     case "create_scene": {
       const index = typeof input.index === "number" ? input.index : -1;
@@ -1132,7 +1204,8 @@ async function runTool(
       return { created: scene.name };
     }
     case "get_device_parameters": {
-      const device = deviceAt(context, Number(input.track_index), deviceRefFrom(input));
+      const tref = resolveTrack(context, input, "track_index");
+      const device = deviceAt(context, tref.index, deviceRefFrom(input));
       const filter = typeof input.filter === "string" ? input.filter.toLowerCase() : "";
       const all = await Promise.all(
         device.parameters.map(async (p, i) => {
@@ -1158,17 +1231,18 @@ async function runTool(
         params = params.slice(0, cap);
         truncated = true;
       }
-      return {
+      return trackResult(tref, {
         device: device.name,
         parameterCount: device.parameters.length,
         ...(truncated
           ? { note: `仅返回前 ${cap} 个参数。请用 filter 按名称精确查询（如 "freq"、"reso"、"coarse"、"lfo"）` }
           : {}),
         parameters: params,
-      };
+      });
     }
     case "set_device_parameter": {
-      const device = deviceAt(context, Number(input.track_index), deviceRefFrom(input));
+      const tref = resolveTrack(context, input, "track_index");
+      const device = deviceAt(context, tref.index, deviceRefFrom(input));
       const rawParam = String(input.parameter ?? "").trim();
       const param = paramAt(device, /^-?\d+$/.test(rawParam) ? Number(rawParam) : rawParam);
 
@@ -1194,10 +1268,11 @@ async function runTool(
         param.isQuantized && param.valueItems[value]
           ? param.valueItems[value].name
           : value;
-      return { device: device.name, parameter: param.name, value: display, range: [param.min, param.max] };
+      return trackResult(tref, { device: device.name, parameter: param.name, value: display, range: [param.min, param.max] });
     }
     case "set_track_mixer": {
-      const track = trackAt(context, Number(input.track_index));
+      const ref = resolveTrack(context, input, "track_index");
+      const track = ref.track;
       const out: Record<string, unknown> = { track: track.name };
       if (typeof input.volume !== "undefined") {
         out.volume = await setParamValue(track.mixer.volume, Number(input.volume));
@@ -1205,10 +1280,11 @@ async function runTool(
       if (typeof input.pan !== "undefined") {
         out.pan = await setParamValue(track.mixer.panning, Number(input.pan));
       }
-      return out;
+      return trackResult(ref, out);
     }
     case "load_drum_kit": {
-      const track = trackAt(context, Number(input.track_index));
+      const ref = resolveTrack(context, input, "track_index");
+      const track = ref.track;
       const roots = kitRoots();
       const root = roots.find((r) => pathExists(r));
       if (!root) {
@@ -1237,7 +1313,7 @@ async function runTool(
         return pads;
       };
       const pads = await context.withinTransaction(build);
-      return { track: track.name, kit: "808", pads };
+      return trackResult(ref, { track: track.name, kit: "808", pads });
     }
     case "search_samples": {
       const q = String(input.query ?? "").toLowerCase().trim();
@@ -1265,9 +1341,10 @@ async function runTool(
       return await webFetch(String(input.url ?? ""), abortCtl?.signal ?? undefined, activeLanguage);
     }
     case "import_audio_clip": {
-      const track = trackAt(context, Number(input.track_index));
+      const ref = resolveTrack(context, input, "track_index");
+      const track = ref.track;
       if (!(track instanceof AudioTrack)) {
-        throw new Error(`轨道 ${input.track_index}（${track.name}）不是音频轨道，先用 create_audio_track 建一条`);
+        throw new Error(`轨道 ${ref.index}（${track.name}）不是音频轨道，先用 create_audio_track 建一条`);
       }
       const filePath = String(input.file_path ?? "");
       if (!pathExists(filePath)) throw new Error(`文件不存在: ${filePath}`);
@@ -1280,10 +1357,11 @@ async function runTool(
           ...(typeof input.warped === "boolean" ? { isWarped: input.warped } : {}),
         }),
       );
-      return { clip: clip.name, file: managed };
+      return trackResult(ref, { clip: clip.name, file: managed });
     }
     case "load_sample": {
-      const track = trackAt(context, Number(input.track_index));
+      const ref = resolveTrack(context, input, "track_index");
+      const track = ref.track;
       const filePath = String(input.file_path ?? "");
       if (!pathExists(filePath)) throw new Error(`文件不存在: ${filePath}`);
       const managed = await context.resources.importIntoProject(filePath);
@@ -1294,7 +1372,7 @@ async function runTool(
         )) as Simpler<"1.0.0">;
       }
       await simpler.replaceSample(managed);
-      return { track: track.name, device: "Simpler", file: managed };
+      return trackResult(ref, { track: track.name, device: "Simpler", file: managed });
     }
     case "generate_audio": {
       const cfg = activeAudioConfig;
@@ -1326,7 +1404,8 @@ async function runTool(
       };
     }
     case "write_midi_clip": {
-      const track = midiTrackAt(context, Number(input.track_index));
+      const ref = resolveTrack(context, input, "track_index");
+      const track = midiTrackAt(context, ref.index);
       const start = Number(input.start_beat ?? 0);
       const length = Number(input.length_beats ?? 16);
       if (!(length > 0)) throw new Error("length_beats 必须大于 0");
@@ -1336,10 +1415,11 @@ async function runTool(
       );
       clip.notes = notes;
       if (input.name) clip.name = String(input.name);
-      return { clip: clip.name, start, length, noteCount: notes.length, swing: Number(input.swing ?? 0) };
+      return trackResult(ref, { clip: clip.name, start, length, noteCount: notes.length, swing: Number(input.swing ?? 0) });
     }
     case "write_session_clip": {
-      const track = midiTrackAt(context, Number(input.track_index));
+      const ref = resolveTrack(context, input, "track_index");
+      const track = midiTrackAt(context, ref.index);
       const sceneIndex = Number(input.scene_index);
       const slot = track.clipSlots[sceneIndex];
       if (!slot) throw new Error(`场景序号 ${sceneIndex} 无效`);
@@ -1351,14 +1431,15 @@ async function runTool(
       );
       clip.notes = notes;
       if (input.name) clip.name = String(input.name);
-      return { clip: clip.name, length, noteCount: notes.length, swing: Number(input.swing ?? 0) };
+      return trackResult(ref, { clip: clip.name, length, noteCount: notes.length, swing: Number(input.swing ?? 0) });
     }
     case "get_clip_notes": {
-      const track = trackAt(context, Number(input.track_index));
+      const ref = resolveTrack(context, input, "track_index");
+      const track = ref.track;
       const clip = track.arrangementClips[Number(input.clip_index)];
       if (!clip) throw new Error("clip 序号无效");
       if (!(clip instanceof MidiClip)) throw new Error("该 clip 不是 MIDI clip");
-      return {
+      return trackResult(ref, {
         name: clip.name,
         start: clip.startTime,
         duration: clip.duration,
@@ -1368,16 +1449,17 @@ async function runTool(
           duration: n.duration,
           velocity: n.velocity,
         })),
-      };
+      });
     }
     case "set_clip_notes": {
-      const track = trackAt(context, Number(input.track_index));
+      const ref = resolveTrack(context, input, "track_index");
+      const track = ref.track;
       const clip = track.arrangementClips[Number(input.clip_index)];
       if (!clip) throw new Error("clip 序号无效");
       if (!(clip instanceof MidiClip)) throw new Error("该 clip 不是 MIDI clip");
       const notes = parseNotes(input.notes, clip.duration);
       clip.notes = notes;
-      return { clip: clip.name, noteCount: notes.length };
+      return trackResult(ref, { clip: clip.name, noteCount: notes.length });
     }
     case "rename_scene": {
       const scenes = song.scenes;
