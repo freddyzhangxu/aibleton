@@ -23,14 +23,14 @@
 
 ## 下载
 
-**当前版本：v0.9.3**（预发布）—— 前往
+**当前版本：v0.9.4**（预发布）—— 前往
 [**Releases 页面**](https://github.com/freddyzhangxu/aibleton/releases) 下载：
 
 | 文件 | 说明 |
 |---|---|
-| [AIbleton-0.9.3.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.3/AIbleton-0.9.3.ablx) | Live 扩展本体 —— **必装**。拖进 Live 的 **设置 → Extensions** 页面即可。 |
-| [AIbletonBar-0.9.3-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.3/AIbletonBar-0.9.3-macOS.zip) | 可选的 macOS 悬浮侧边栏（版本号与扩展保持同步）。 |
-| [AIbletonBar-0.9.3-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.3/AIbletonBar-0.9.3-Windows.zip) | 可选的 Windows 悬浮侧边栏 —— Win+Alt+A 呼出（版本号与扩展保持同步）。 |
+| [AIbleton-0.9.4.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.4/AIbleton-0.9.4.ablx) | Live 扩展本体 —— **必装**。拖进 Live 的 **设置 → Extensions** 页面即可。 |
+| [AIbletonBar-0.9.4-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.4/AIbletonBar-0.9.4-macOS.zip) | 可选的 macOS 悬浮侧边栏（版本号与扩展保持同步）。 |
+| [AIbletonBar-0.9.4-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.4/AIbletonBar-0.9.4-Windows.zip) | 可选的 Windows 悬浮侧边栏 —— Win+Alt+A 呼出（版本号与扩展保持同步）。 |
 
 用户无需安装 Node.js —— 扩展运行在 Live 自带的 Extension Host 中。
 
@@ -120,7 +120,7 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 ### 普通用户 —— 直接安装 `.ablx`
 
 需要 **Ableton Live 12.4.5 beta** 或更高版本。下载
-[AIbleton-0.9.3.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.3/AIbleton-0.9.3.ablx) 后，
+[AIbleton-0.9.4.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.4/AIbleton-0.9.4.ablx) 后，
 打开 Live 的 **设置 → Extensions** 页面，把 `.ablx` 文件拖进去即可 —— 无需 Node.js、无需命令行。
 
 安装完成后：右键轨道、场景或 Clip → Extensions → **AIbleton: Open** —— 或在浏览器打开
