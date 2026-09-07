@@ -111,7 +111,9 @@ async function main() {
   const req1 = JSON.parse(captured[0]) as { tools?: { name: string }[]; system?: string };
   const tools = (req1.tools ?? []).map((t) => t.name);
   check(tools.includes("analyze_song"), "analyze_song present in tools list");
+  check(tools.includes("arrange_song"), "arrange_song present in tools list");
   check((req1.system ?? "").includes("Song analysis (read-only)"), "system prompt has Song analysis block");
+  check((req1.system ?? "").includes("Arranging the Set"), "system prompt has Arranging block");
 
   // The follow-up request carries the tool_result back to the model.
   check(!captured[1].includes("Cannot mix BigInt"), "no BigInt arithmetic crash (host regression)");
