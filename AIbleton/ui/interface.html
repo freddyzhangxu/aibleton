@@ -871,6 +871,9 @@
       codex:  { name: 'Codex',       base: 'https://api.openai.com/v1', model: 'gpt-5-codex' },
       claude: { name: 'Claude Code', base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
       gemini: { name: 'Gemini',      base: 'https://generativelanguage.googleapis.com', model: 'gemini-flash-latest' },
+      // OpenAI 兼容端点（Grok / DeepSeek / Kimi / OpenRouter / Ollama…）：
+      // 无内置默认，base/model 必须手填，本地服务可免 key。
+      custom: { name: 'Custom',      base: 'https://api.example.com/v1', model: '' },
     };
     const savedProvider = localStorage.getItem('ai.provider');
     let currentProvider = savedProvider || 'claude';
@@ -1597,10 +1600,14 @@
       claude: ['low', 'medium', 'high', 'xhigh', 'max'],
       codex:  ['minimal', 'low', 'medium', 'high', 'xhigh'],
       gemini: ['low', 'medium', 'high', 'max'],
+      // Custom 端点没有统一的 effort 概念（xAI 收到 reasoning_effort 还会报错）
+      // —— 空档 = 隐藏下拉。
+      custom: [],
     };
     const effortSel = document.getElementById('effortSel');
     function renderEfforts() {
-      const levels = EFFORT_LEVELS[currentProvider];
+      const levels = EFFORT_LEVELS[currentProvider] ?? [];
+      effortSel.style.display = levels.length ? '' : 'none';
       const saved = localStorage.getItem('ai.effort') || '';
       effortSel.innerHTML = '';
       const dflt = document.createElement('option');
