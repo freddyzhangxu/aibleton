@@ -130,12 +130,13 @@ import chatInterface from "../ui/interface.html";
 
 // ---------- Local CLI configs (Claude Code / Codex / Gemini) ----------
 
-type Provider = "claude" | "codex" | "gemini";
+type Provider = "claude" | "codex" | "gemini" | "custom";
 
 const PROVIDER_NAMES: Record<Provider, string> = {
   claude: "Claude Code",
   codex: "Codex",
   gemini: "Gemini",
+  custom: "Custom",
 };
 
 interface LocalConfig {
@@ -248,6 +249,8 @@ function loadGeminiConfig(): LocalConfig | null {
 function loadLocalConfig(provider: Provider): LocalConfig | null {
   if (provider === "codex") return loadCodexConfig();
   if (provider === "gemini") return loadGeminiConfig();
+  // Custom endpoints have no CLI to autodetect from — settings-UI config only.
+  if (provider === "custom") return null;
   return loadClaudeCodeConfig();
 }
 
@@ -403,12 +406,12 @@ function loadManualConfigs(context: Ctx): void {
         move?: { host?: unknown; token?: unknown };
       };
     manualConfigs = {};
-    for (const p of ["claude", "codex", "gemini"] as Provider[]) {
+    for (const p of ["claude", "codex", "gemini", "custom"] as Provider[]) {
       const cfg = data[p];
       if (cfg && typeof cfg === "object") manualConfigs[p] = cfg;
     }
     if (data.lastProvider === "claude" || data.lastProvider === "codex" ||
-        data.lastProvider === "gemini") {
+        data.lastProvider === "gemini" || data.lastProvider === "custom") {
       lastProvider = data.lastProvider;
     }
     const a = data.audio;
@@ -2223,6 +2226,16 @@ function systemPromptFor(language?: string): string {
   );
 }
 
+const CUSTOM_INCOMPLETE_HINT: Record<string, string> = {
+  zh: "Custom 需要填写 API 地址和模型：设置（齿轮图标）→ Custom（本地服务可留空 API Key）",
+  en: "Custom needs a Base URL and a model: Settings (gear icon) → Custom (local servers may leave the API Key empty)",
+  de: "Custom benötigt API-Adresse und Modell: Einstellungen (Zahnrad) → Custom (lokale Server können ohne API-Schlüssel laufen)",
+  fr: "Custom nécessite une adresse API et un modèle : paramètres (icône engrenage) → Custom (les serveurs locaux peuvent laisser la clé API vide)",
+  ja: "Custom には API アドレスとモデルが必要です：設定（歯車アイコン）→ Custom（ローカルサーバーは API キー空欄可）",
+  es: "Custom necesita una dirección API y un modelo: Ajustes (icono de engranaje) → Custom (los servidores locales pueden dejar la API Key vacía)",
+  it: "Custom richiede un indirizzo API e un modello: Impostazioni (icona ingranaggio) → Custom (i server locali possono lasciare vuota la API Key)",
+};
+
 const NO_AUTH_HINT: Record<string, string> = {
   zh: "未找到 {p} 认证信息：请在设置（齿轮图标）里填 API Key，或配置本机 CLI",
   en: "No {p} credentials found: add an API Key in Settings (gear icon) or set up the local CLI",
@@ -2410,11 +2423,26 @@ function saveStore(context: Ctx) {
 
 function resolveConfig(req: ChatRequest): ResolvedConfig {
   const provider: Provider =
-    req.provider === "codex" || req.provider === "gemini" ? req.provider : "claude";
+    req.provider === "codex" || req.provider === "gemini" || req.provider === "custom"
+      ? req.provider
+      : "claude";
   // Manual settings-UI config wins over CLI autodetect; per-request fields win over both.
   const local: LocalConfig = { ...(loadLocalConfig(provider) ?? {}), ...(manualConfigs[provider] ?? {}) };
   const fromLocal = !req.apiKey && Boolean(local.authToken || local.apiKey);
 
+  if (provider === "custom") {
+    // Generic OpenAI-compatible endpoint (Grok / DeepSeek / Kimi / OpenRouter /
+    // Ollama / vLLM …): chat/completions protocol. No CLI autodetect, no
+    // effort mapping, no built-in defaults — baseUrl and model are required,
+    // the key may stay empty for local servers that don't check it.
+    return {
+      provider,
+      baseUrl: (req.baseUrl || local.baseUrl || "").replace(/\/$/, ""),
+      authToken: req.apiKey || local.apiKey || local.authToken || "",
+      model: req.model || local.model || "",
+      fromLocal,
+    };
+  }
   if (provider === "codex") {
     // ChatGPT-account tokens only work against the chatgpt.com backend;
     // plain API keys go to api.openai.com (or a user-supplied relay).
@@ -2706,6 +2734,9 @@ async function ensureCodexAuth(cfg: ResolvedConfig): Promise<void> {
 
 async function chat(context: Ctx, req: ChatRequest) {
   const cfg = resolveConfig(req);
+  // Custom endpoints may legitimately need no key (Ollama & co.) — they get
+  // their own validation (baseUrl + model) inside chatCustom instead.
+  if (cfg.provider === "custom") return chatCustom(context, cfg, req);
   if (!cfg.authToken && !cfg.refreshToken) {
     const hint = NO_AUTH_HINT[req.language ?? ""] ?? NO_AUTH_HINT.en;
     throw new Error(hint.replace("{p}", PROVIDER_NAMES[cfg.provider]));
@@ -3072,6 +3103,132 @@ async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
   throw new Error("工具调用次数过多，已中止");
 }
 
+// ---------- OpenAI-compatible chat/completions (custom endpoint) ----------
+
+interface ChatCompletionsData {
+  choices?: {
+    message?: {
+      content?: string | null;
+      tool_calls?: {
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }[];
+    };
+  }[];
+  error?: { message?: string };
+}
+
+/**
+ * Generic OpenAI-compatible endpoint. Speaks plain /chat/completions (the
+ * flavor every third-party relay, OpenRouter and local server implements —
+ * unlike /responses, which most of them lack) with no instructions field and
+ * no effort mapping, so Grok- or DeepSeek-style backends accept the request
+ * verbatim. Same 12-round tool loop as chatOpenAI.
+ */
+async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
+  if (!cfg.baseUrl || !cfg.model) {
+    throw new Error(
+      CUSTOM_INCOMPLETE_HINT[req.language ?? ""] ?? CUSTOM_INCOMPLETE_HINT.en);
+  }
+  const messages: unknown[] = [
+    { role: "system", content: systemPromptFor(req.language) },
+    ...historyWithTools(currentSession(), {
+      userText: (text) => ({ role: "user", content: text }),
+      assistantText: (text) => ({ role: "assistant", content: text }),
+      toolRound: (acts, p) =>
+        acts.flatMap((a, i) => [
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: p + i,
+                type: "function",
+                function: { name: a.tool, arguments: JSON.stringify(a.input ?? {}) },
+              },
+            ],
+          },
+          { role: "tool", tool_call_id: p + i, content: truncateResult(JSON.stringify(a.result)) },
+        ]),
+    }),
+  ];
+  const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  attachImages(messages, req, (last, images) => {
+    last.content = [
+      { type: "text", text: typeof last.content === "string" ? last.content : "" },
+      ...images.map((im) => ({
+        type: "image_url",
+        image_url: { url: `data:${im.mime};base64,${im.data}` },
+      })),
+    ];
+  });
+  const tools = activeTools().map((tool) => ({
+    type: "function",
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema,
+    },
+  }));
+
+  for (let round = 0; round < 12; round++) {
+    if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+    const requestBody = JSON.stringify({ model: cfg.model, messages, tools });
+    let data: ChatCompletionsData;
+    let status: number;
+    try {
+      const res = await rawPost(new URL(`${cfg.baseUrl}/chat/completions`), {
+        headers: {
+          "content-type": "application/json",
+          ...(cfg.authToken ? { authorization: `Bearer ${cfg.authToken}` } : {}),
+        },
+        body: requestBody,
+        proxy: detectProxy(),
+        signal: abortCtl?.signal,
+      });
+      status = res.status;
+      data = JSON.parse(await readAll(res.stream)) as ChatCompletionsData;
+    } catch (err) {
+      // Aborted mid-request by /api/stop — keep the partial work, no error.
+      if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+      throw err;
+    }
+    if (status < 200 || status >= 300) {
+      console.error(
+        `[ai-assistant] custom API ${status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
+      );
+      throw new Error(data.error?.message || `自定义端点错误 (${status})`);
+    }
+    const msg = data.choices?.[0]?.message ?? {};
+    const calls = (msg.tool_calls ?? []).filter((c) => c.function?.name);
+    debugLog(context,
+      `ROUND ${round}: content=${(msg.content ?? "").length} chars, tool_calls=${calls.length}`);
+    if (!calls.length) {
+      const reply =
+        (typeof msg.content === "string" ? msg.content : "").trim() || "（无文本回复）";
+      return finishChat(context, actions, reply);
+    }
+    // Echo the model's message (with its tool_calls verbatim), then append results.
+    messages.push({
+      role: "assistant",
+      content: msg.content ?? null,
+      tool_calls: msg.tool_calls,
+    });
+    for (const call of calls) {
+      if (stopRequested) return finishChat(context, actions, stopNote(req.language));
+      let toolInput: Record<string, unknown> = {};
+      try {
+        toolInput = JSON.parse(call.function!.arguments || "{}") as Record<string, unknown>;
+      } catch {
+        // Malformed arguments — run with empty input, the tool error explains.
+      }
+      const resultJson = await callTool(context, actions, call.function!.name!, toolInput, req.yolo !== false);
+      messages.push({ role: "tool", tool_call_id: call.id ?? "", content: resultJson });
+    }
+  }
+  throw new Error("工具调用次数过多，已中止");
+}
+
 // ---------- Gemini generateContent API ----------
 
 /** Gemini wants OpenAPI-style uppercase types (OBJECT/STRING/…) in schemas. */
@@ -3232,11 +3389,14 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       const providerParam =
         new URL(req.url, "http://127.0.0.1").searchParams.get("provider") ?? undefined;
       const provider: Provider =
-        providerParam === "codex" || providerParam === "gemini" ? providerParam : "claude";
+        providerParam === "codex" || providerParam === "gemini" || providerParam === "custom"
+          ? providerParam
+          : "claude";
       const cfg = resolveConfig({ provider });
       const manual = manualConfigs[provider];
       const source =
-        manual && (manual.apiKey || manual.authToken || manual.refreshToken)
+        manual && (manual.apiKey || manual.authToken || manual.refreshToken ||
+                   (provider === "custom" && manual.baseUrl))
           ? "manual"
           : loadLocalConfig(provider)
             ? "cli"
@@ -3244,7 +3404,10 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       send(200, JSON.stringify({
         ok: true,
         provider: cfg.provider,
-        hasAuth: Boolean(cfg.authToken),
+        // Custom endpoints may run keyless — "configured" means baseUrl + model.
+        hasAuth: provider === "custom"
+          ? Boolean(cfg.baseUrl && cfg.model)
+          : Boolean(cfg.authToken),
         baseUrl: cfg.baseUrl,
         model: cfg.model,
         source,
@@ -3255,7 +3418,9 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       const providerParam =
         new URL(req.url, "http://127.0.0.1").searchParams.get("provider") ?? undefined;
       const provider: Provider =
-        providerParam === "codex" || providerParam === "gemini" ? providerParam : "claude";
+        providerParam === "codex" || providerParam === "gemini" || providerParam === "custom"
+          ? providerParam
+          : "claude";
       const cli = loadLocalConfig(provider);
       send(200, JSON.stringify({
         provider,
@@ -3273,7 +3438,8 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     if (req.method === "POST" && req.url === "/api/provider-config") {
       readBody((parsed) => {
         const provider: Provider =
-          parsed.provider === "codex" || parsed.provider === "gemini"
+          parsed.provider === "codex" || parsed.provider === "gemini" ||
+          parsed.provider === "custom"
             ? parsed.provider
             : "claude";
         const fields = (parsed.config ?? {}) as Record<string, unknown>;
@@ -3297,7 +3463,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     if (req.method === "POST" && req.url === "/api/last-provider") {
       readBody((parsed) => {
         const p = parsed.provider;
-        if (p === "claude" || p === "codex" || p === "gemini") {
+        if (p === "claude" || p === "codex" || p === "gemini" || p === "custom") {
           if (p !== lastProvider) {
             lastProvider = p;
             saveManualConfigs();
@@ -3528,7 +3694,8 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         // Remember the provider actually chatted with, so a reopened window
         // (whose localStorage may be empty) defaults to it.
         const chatProvider: Provider =
-          parsed.provider === "codex" || parsed.provider === "gemini"
+          parsed.provider === "codex" || parsed.provider === "gemini" ||
+          parsed.provider === "custom"
             ? parsed.provider
             : "claude";
         if (chatProvider !== lastProvider) {
