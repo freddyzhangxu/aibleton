@@ -60,6 +60,8 @@ The project has two parts:
 | AI assistant dialog inside Live | AIbletonBar floating sidebar |
 |:---:|:---:|
 | ![AIbleton chat dialog inside Ableton Live](docs/screenshots/aibleton-dialog.png) | ![AIbletonBar sidebar docked next to Ableton Live](docs/screenshots/aibletonbar-sidebar.png) |
+| **AI finds samples and pushes them to the Move over Wi-Fi** | **…and they land on the device (move.local)** |
+| ![AIbleton uploading reggae drum samples to Ableton Move](docs/screenshots/move-upload-samples.png) | ![Reggae Drum sample folder on the Move, seen in move.local](docs/screenshots/move-samples-webui.png) |
 
 ## Features
 
