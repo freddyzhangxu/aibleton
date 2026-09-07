@@ -62,12 +62,13 @@ import {
   type ClipLoopSettings,
 } from "@ableton-extensions/sdk";
 import { analyzeSong, tileClipNotes, type SnapshotClip, type SongSnapshot } from "./analysis.js";
+import { searchSampleIndex, toSampleEntry, type SampleEntry } from "./samplemeta.js";
 
 // ---------- Local sample library search ----------
 
-let sampleIndex: string[] | null = null;
+let sampleIndex: SampleEntry[] | null = null;
 
-function buildSampleIndex(): string[] {
+function buildSampleIndex(): SampleEntry[] {
   if (sampleIndex) return sampleIndex;
   const roots = sampleRoots();
   const out: string[] = [];
@@ -99,9 +100,13 @@ function buildSampleIndex(): string[] {
     }
     out.push(...(denied ? listAudioFilesViaFind(root, 200000 - out.length) : fromRoot));
   }
-  sampleIndex = out;
-  console.log(`[ai-assistant] 采样索引: ${out.length} 个文件，来源: ${roots.join(" | ")}`);
-  return out;
+  // Parse BPM/key from file & folder names once — search time is then pure matching.
+  const t0 = Date.now();
+  sampleIndex = out.map(toSampleEntry);
+  console.log(
+    `[ai-assistant] 采样索引: ${out.length} 个文件 (+${Date.now() - t0}ms 元数据解析)，来源: ${roots.join(" | ")}`,
+  );
+  return sampleIndex;
 }
 
 // ---------- Factory 808 drum kit (Drum Essentials pack) ----------
@@ -735,7 +740,7 @@ const TOOLS = [
   {
     name: "search_samples",
     description:
-      'Search local sample libraries by keywords — Splice folder (if the Splice app is installed and synced), Ableton User Library, Factory Packs, and Live\'s Core Library. All keywords must match (case-insensitive, matched against the full path, so folder names count). Returns up to 30 full file paths. Use specific queries like "808 kick", "tech house loop", "vocal chop 124". Note: Splice\'s online catalog cannot be browsed — only locally synced files are searchable.',
+      'Search local sample libraries — Splice folder (if the Splice app is installed and synced), Ableton User Library, Factory Packs, and Live\'s Core Library. Understands musical metadata in file names: BPM ("124 bpm" or a bare "124"), key ("Am", "F#", "Bb major"), instruments (kick, pad, 808, vocal…) and vibe words — synonyms are built in, so "dark" also matches rumble/industrial/sub, "warm" → analog/tape/mellow, "punchy" → punch/tight. All keywords must match; results are RANKED — exact BPM/key matches first, then relative major/minor, then relevance. Returns up to 30 full file paths plus how the query was parsed. Queries like "dark pad 124 bpm am", "808 kick", "tech house loop". Note: Splice\'s online catalog cannot be browsed — only locally synced files are searchable.',
     input_schema: {
       type: "object",
       properties: { query: { type: "string" } },
@@ -981,6 +986,7 @@ Samples and audio files:
 - Workflow: search_samples(query) → import_audio_clip (loops/stems onto an audio track's arrangement) or load_sample (one-shots into a Simpler for pitched play).
 - search_samples covers the Splice folder if the Splice app is installed and synced, plus Ableton User Library, Factory Packs and Core Library. Splice's online catalog is NOT browsable — only local files.
 - search with specific keywords ("deep house loop 124", "909 snare"); if total is huge, refine the query instead of paging.
+- search_samples parses BPM ("124 bpm" / bare "124") and key ("Am", "F#") from the query and ranks exact matches first — include them when the user names a tempo or key. Vibe words work too ("dark", "warm", "punchy") via built-in synonyms. The response echoes how the query was parsed — if it misread something (e.g. "124" as BPM when it was a catalog number), rephrase and search again.
 
 AI audio generation:
 - Priority rule: NEVER call generate_audio speculatively. Call it only when (a) the user explicitly asks to AI-generate/create new audio, or (b) search_samples already ran, found nothing suitable, and the user agreed to generate. For everything else prefer MIDI instruments or local samples — they are free and instant. Every generate_audio call is confirmed by the user before it runs.
@@ -1919,14 +1925,9 @@ async function runTool(
       return trackResult(ref, { track: track.name, kit: "808", pads });
     }
     case "search_samples": {
-      const q = String(input.query ?? "").toLowerCase().trim();
+      const q = String(input.query ?? "").trim();
       if (!q) throw new Error("query 不能为空");
-      const terms = q.split(/\s+/);
-      const matches = buildSampleIndex().filter((p) => {
-        const lp = p.toLowerCase();
-        return terms.every((t) => lp.includes(t));
-      });
-      return { total: matches.length, results: matches.slice(0, 30) };
+      return searchSampleIndex(buildSampleIndex(), q, 30);
     }
     case "web_search": {
       // Should be unreachable (the tools list already hides it when off) —
