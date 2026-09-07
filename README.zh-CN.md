@@ -57,6 +57,8 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 | Live 内置 AI 助手对话框 | AIbletonBar 悬浮侧边栏 |
 |:---:|:---:|
 | ![Ableton Live 中的 AIbleton 对话框](docs/screenshots/aibleton-dialog.png) | ![停靠在 Ableton Live 旁的 AIbletonBar 侧边栏](docs/screenshots/aibletonbar-sidebar.png) |
+| **AI 找采样并经 Wi-Fi 推送到 Move** | **……随即出现在设备上（move.local）** |
+| ![AIbleton 向 Ableton Move 上传雷鬼鼓采样](docs/screenshots/move-upload-samples.png) | ![move.local 中看到的 Move 上 Reggae Drum 采样文件夹](docs/screenshots/move-samples-webui.png) |
 
 ## 功能
 
