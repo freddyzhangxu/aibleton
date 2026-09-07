@@ -5,12 +5,14 @@
  * All fixtures are plain SongSnapshot objects — no Live, no SDK.
  */
 import {
+  analyzeMusicState,
   analyzeSong,
   type SnapshotClip,
   type SnapshotNote,
   type SnapshotTrack,
   type SongSnapshot,
 } from "../src/analysis.js";
+import { buildMusicState } from "../src/musicstate/builder.js";
 
 // ---------------------------------------------------------------------------
 // Builders
@@ -405,6 +407,32 @@ console.log(`  output ${out19.length} chars, tracks ${r19.tracks.length}, omitte
 check("fits under 6000", out19.length < 6000, `${out19.length}`);
 check("tracks truncated to 12", r19.tracks.length === 12, String(r19.tracks.length));
 check("tracksOmitted = 20", r19.tracksOmitted === 20, String(r19.tracksOmitted));
+
+// ---------------------------------------------------------------------------
+// 21. Two-stage pipeline: analyzeMusicState(buildMusicState(f)) ≡ analyzeSong(f)
+// (analyze_song calls the two stages explicitly — pin the contract)
+// ---------------------------------------------------------------------------
+console.log("== two-stage equivalence ==");
+{
+  const fixtures: [string, SongSnapshot][] = [
+    ["fsMinor", fsMinor],
+    ["cMaj", cMaj],
+    ["session-only", sess],
+    ["cue sections", cues],
+    ["looped clip", looped],
+    ["muted content", mutedSet],
+    ["drum rack", rack],
+    ["6/8", waltz],
+    ["duplicates", dupSet],
+    ["empty", song([])],
+    ["budget 32 tracks", song(bigTracks)],
+  ];
+  for (const [label, fx] of fixtures) {
+    const direct = JSON.stringify(analyzeSong(fx));
+    const staged = JSON.stringify(analyzeMusicState(buildMusicState(fx)));
+    check(`${label}: staged ≡ direct`, staged === direct, `${staged.length} vs ${direct.length} chars`);
+  }
+}
 
 // ---------------------------------------------------------------------------
 console.log(failed ? `\n${failed} 项失败 / ${passed + failed}` : `\n全部通过 (${passed})`);

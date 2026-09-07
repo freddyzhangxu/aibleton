@@ -26,6 +26,7 @@ import {
 } from "./musicstate/builder.js";
 import type {
   ClipWindow,
+  MusicState,
   SnapshotClip,
   SnapshotNote,
   SnapshotTrack,
@@ -681,13 +682,13 @@ function fitBudget(analysis: SongAnalysis, budget = 5800): SongAnalysis {
 }
 
 // ---------------------------------------------------------------------------
-// Entry point
+// Entry points
 // ---------------------------------------------------------------------------
 
-export function analyzeSong(input: SongSnapshot): SongAnalysis {
-  // Facts first: normalization, clip materialization and measurements all
-  // happen in buildMusicState; interpretation below reads only MusicState.
-  const state = buildMusicState(input);
+/** Interpretation entry point: MusicState -> SongAnalysis. Tools that already
+ * have a MusicState (or want the state for themselves) call this directly —
+ * analyze_song runs buildMusicState -> analyzeMusicState as two stages. */
+export function analyzeMusicState(state: MusicState): SongAnalysis {
   const snap = state.snapshot;
   const num = snap.timeSig.numerator || 4;
   const den = snap.timeSig.denominator || 4;
@@ -906,4 +907,11 @@ export function analyzeSong(input: SongSnapshot): SongAnalysis {
     caveat: CAVEAT,
   };
   return fitBudget(analysis);
+}
+
+/** One-call wrapper: snapshot -> facts -> interpretation. Kept for consumers
+ * with no use for the intermediate MusicState (move_analyze_set, offline
+ * fixture tests); analyze_song calls the two stages explicitly. */
+export function analyzeSong(input: SongSnapshot): SongAnalysis {
+  return analyzeMusicState(buildMusicState(input));
 }
