@@ -502,6 +502,10 @@
           <span data-i18n="webConfig">联网搜索</span>
           <span class="val"><span id="webVal">已关闭</span> ›</span>
         </div>
+        <div class="menu-row" data-goto="viewMemory">
+          <span data-i18n="memoryConfig">音乐人记忆</span>
+          <span class="val"><span id="memoryVal"></span> ›</span>
+        </div>
         <div id="appVersion">v__APP_VERSION__</div>
       </div>
       <div class="set-view hidden" id="viewLang">
@@ -565,6 +569,21 @@
           </span>
         </div>
         <div class="cfg-hint" style="padding: 4px 10px 10px;" data-i18n="webDesc"></div>
+      </div>
+      <div class="set-view hidden" id="viewMemory">
+        <div class="menu-row back" data-goto="viewMain"><span class="chev">‹</span><span data-i18n="memoryConfig">音乐人记忆</span></div>
+        <div class="cfg-fields">
+          <label><span data-i18n="memName">艺名</span><input id="memName" autocomplete="off"></label>
+          <label><span data-i18n="memGenres">风格（逗号分隔）</span><input id="memGenres" autocomplete="off" spellcheck="false" placeholder="melodic techno, deep house"></label>
+          <label><span data-i18n="memBpm">BPM 范围</span>
+            <div class="cst-pair"><input id="memBpmMin" type="number" min="20" max="999" placeholder="124"><input id="memBpmMax" type="number" min="20" max="999" placeholder="128"></div>
+          </label>
+          <label><span data-i18n="memKeys">常用调性</span><input id="memKeys" autocomplete="off" spellcheck="false" placeholder="A minor, F# minor"></label>
+          <label><span data-i18n="memSound">音色偏好</span><input id="memSound" autocomplete="off" spellcheck="false" placeholder="909 drums, warm analog pads"></label>
+          <label><span data-i18n="memArtists">参考艺人</span><input id="memArtists" autocomplete="off" spellcheck="false"></label>
+          <label><span data-i18n="memNotes">备注</span><textarea id="memNotes" rows="2" spellcheck="false"></textarea></label>
+          <div class="cfg-hint" data-i18n="memHint">AI 每次对话都会带上这些记忆作为默认风格依据；聊天里说「记住我……」可新增。</div>
+        </div>
       </div>
     </div>
     <div id="historyPanel" class="hidden"></div>
@@ -656,6 +675,9 @@
         fileTooBig: '文件过大：', fileUnsupported: '不支持的文件类型：',
         webConfig: '联网搜索', webEnable: '启用联网搜索', webOn: '已开启', webOff: '已关闭',
         webDesc: '开启后 AI 可用 web_search 搜索网页（Bing / DuckDuckGo，免 key）、用 web_fetch 读取页面正文。搜索词与抓取的地址会发送到对应网站（无账号、无 Cookie）。不需要时建议保持关闭。',
+        memoryConfig: '音乐人记忆', memName: '艺名', memGenres: '风格（逗号分隔）', memBpm: 'BPM 范围',
+        memKeys: '常用调性', memSound: '音色偏好', memArtists: '参考艺人', memNotes: '备注',
+        memHint: 'AI 每次对话都会带上这些记忆作为默认风格依据；聊天里说「记住我……」可新增。',
         welcome: '你好！我是 Live 里的 AI 助手。\n可以直接问我制作问题，也可以让我操作当前 Set，例如：\n· 「把速度改成 128」\n· 「新建一条 MIDI 轨道叫 Bass，加个 Operator」\n· 「现在有哪些轨道？把第 2 条静音」',
       },
       en: {
@@ -683,6 +705,9 @@
         fileTooBig: 'File too large: ', fileUnsupported: 'Unsupported file type: ',
         webConfig: 'Web Search', webEnable: 'Enable web access', webOn: 'On', webOff: 'Off',
         webDesc: 'When on, the AI can search the web (web_search, keyless via Bing / DuckDuckGo) and read pages (web_fetch). Queries and fetched URLs are sent to those sites — no account, no cookies. Keep it off when not needed.',
+        memoryConfig: 'Artist Memory', memName: 'Artist name', memGenres: 'Genres (comma-separated)', memBpm: 'BPM range',
+        memKeys: 'Preferred keys', memSound: 'Sound preferences', memArtists: 'Reference artists', memNotes: 'Notes',
+        memHint: 'The AI carries these memories into every chat as its default style context; say “remember I…” in chat to add one.',
         welcome: 'Hi! I’m your AI assistant inside Live.\nAsk me production questions, or let me operate the current Set:\n· “Set the tempo to 128”\n· “Create a MIDI track called Bass and add an Operator”\n· “What tracks are there? Mute track 2”',
       },
       de: {
@@ -710,6 +735,9 @@
         fileTooBig: 'Datei zu groß: ', fileUnsupported: 'Nicht unterstützter Dateityp: ',
         webConfig: 'Websuche', webEnable: 'Webzugriff aktivieren', webOn: 'Ein', webOff: 'Aus',
         webDesc: 'Wenn aktiv, kann die KI im Web suchen (web_search, schlüssellos über Bing / DuckDuckGo) und Seiten lesen (web_fetch). Suchbegriffe und abgerufene URLs werden an diese Seiten gesendet — kein Konto, keine Cookies. Bei Nichtgebrauch deaktiviert lassen.',
+        memoryConfig: 'Künstlergedächtnis', memName: 'Künstlername', memGenres: 'Genres (kommagetrennt)', memBpm: 'BPM-Bereich',
+        memKeys: 'Bevorzugte Tonarten', memSound: 'Klangpräferenzen', memArtists: 'Referenzkünstler', memNotes: 'Notizen',
+        memHint: 'Die KI nimmt diese Erinnerungen in jeden Chat als Standard-Stilkontext mit; „Merke dir, ich …“ im Chat fügt eine hinzu.',
         welcome: 'Hallo! Ich bin dein AI-Assistent in Live.\nStell mir Fragen zum Produzieren oder lass mich das aktuelle Set bedienen:\n· „Stell das Tempo auf 128“\n· „Erstelle eine MIDI-Spur namens Bass und füge Operator hinzu“\n· „Welche Spuren gibt es? Schalte Spur 2 stumm“',
       },
       fr: {
@@ -737,6 +765,9 @@
         fileTooBig: 'Fichier trop volumineux : ', fileUnsupported: 'Type de fichier non pris en charge : ',
         webConfig: 'Recherche Web', webEnable: 'Activer l’accès Web', webOn: 'Activé', webOff: 'Désactivé',
         webDesc: 'Quand activé, l’IA peut chercher sur le Web (web_search, sans clé via Bing / DuckDuckGo) et lire des pages (web_fetch). Les requêtes et URL visitées sont envoyées à ces sites — sans compte ni cookies. Laissez désactivé si inutile.',
+        memoryConfig: 'Mémoire d’artiste', memName: 'Nom d’artiste', memGenres: 'Genres (séparés par des virgules)', memBpm: 'Plage de BPM',
+        memKeys: 'Tonalités préférées', memSound: 'Préférences sonores', memArtists: 'Artistes de référence', memNotes: 'Notes',
+        memHint: 'L’IA emporte ces souvenirs dans chaque conversation comme contexte de style par défaut ; « retiens que je… » dans le chat en ajoute un.',
         welcome: 'Bonjour ! Je suis votre assistant IA dans Live.\nPosez-moi des questions de production ou laissez-moi piloter le Set actuel :\n· « Règle le tempo à 128 »\n· « Crée une piste MIDI nommée Bass et ajoute un Operator »\n· « Quelles pistes y a-t-il ? Mettez la piste 2 en sourdine »',
       },
       ja: {
@@ -764,6 +795,9 @@
         fileTooBig: 'ファイルが大きすぎます：', fileUnsupported: '未対応のファイル形式：',
         webConfig: 'ウェブ検索', webEnable: 'ウェブアクセスを有効化', webOn: 'オン', webOff: 'オフ',
         webDesc: 'オンにすると AI がウェブ検索（web_search・Bing / DuckDuckGo 経由、キー不要）とページ読み取り（web_fetch）を使えます。検索語と取得先 URL は各サイトに送信されます（アカウント・Cookie なし）。使わないときはオフのままを推奨。',
+        memoryConfig: 'アーティストメモリー', memName: 'アーティスト名', memGenres: 'ジャンル（カンマ区切り）', memBpm: 'BPM 範囲',
+        memKeys: 'よく使う調', memSound: '音色の好み', memArtists: '参考アーティスト', memNotes: 'メモ',
+        memHint: 'AI は毎回のチャットでこれらの記憶をデフォルトのスタイル情報として使います。チャットで「覚えて：私は…」と言うと追加できます。',
         welcome: 'こんにちは！Live 内の AI アシスタントです。\n制作の質問や、現在の Set の操作ができます。例：\n· 「テンポを 128 にして」\n· 「Bass という MIDI トラックを作って Operator を追加」\n· 「今どんなトラックがある？2 番目をミュートして」',
       },
       es: {
@@ -791,6 +825,9 @@
         fileTooBig: 'Archivo demasiado grande: ', fileUnsupported: 'Tipo de archivo no admitido: ',
         webConfig: 'Búsqueda web', webEnable: 'Activar acceso web', webOn: 'Activado', webOff: 'Desactivado',
         webDesc: 'Si está activo, la IA puede buscar en la web (web_search, sin clave vía Bing / DuckDuckGo) y leer páginas (web_fetch). Las consultas y las URL visitadas se envían a esos sitios — sin cuenta ni cookies. Manténlo apagado si no lo necesitas.',
+        memoryConfig: 'Memoria de artista', memName: 'Nombre artístico', memGenres: 'Géneros (separados por comas)', memBpm: 'Rango de BPM',
+        memKeys: 'Tonalidades preferidas', memSound: 'Preferencias de sonido', memArtists: 'Artistas de referencia', memNotes: 'Notas',
+        memHint: 'La IA lleva estos recuerdos a cada chat como contexto de estilo por defecto; di «recuerda que yo…» en el chat para añadir uno.',
         welcome: '¡Hola! Soy tu asistente de IA dentro de Live.\nPregúntame sobre producción o deja que maneje el Set actual:\n· «Pon el tempo a 128»\n· «Crea una pista MIDI llamada Bass y añade un Operator»\n· «¿Qué pistas hay? Silencia la pista 2»',
       },
       it: {
@@ -818,6 +855,9 @@
         fileTooBig: 'File troppo grande: ', fileUnsupported: 'Tipo di file non supportato: ',
         webConfig: 'Ricerca web', webEnable: 'Attiva accesso web', webOn: 'Attivo', webOff: 'Disattivo',
         webDesc: 'Se attivo, l’IA può cercare sul web (web_search, senza chiave tramite Bing / DuckDuckGo) e leggere pagine (web_fetch). Le query e gli URL visitati vengono inviati a quei siti — senza account né cookie. Tienilo spento se non serve.',
+        memoryConfig: 'Memoria artista', memName: 'Nome d’arte', memGenres: 'Generi (separati da virgola)', memBpm: 'Intervallo BPM',
+        memKeys: 'Tonalità preferite', memSound: 'Preferenze timbriche', memArtists: 'Artisti di riferimento', memNotes: 'Note',
+        memHint: 'L’IA porta questi ricordi in ogni chat come contesto di stile predefinito; dì «ricorda che io…» in chat per aggiungerne uno.',
         welcome: 'Ciao! Sono il tuo assistente AI dentro Live.\nFammi domande sulla produzione o lasciami operare sul Set corrente:\n· «Imposta il tempo a 128»\n· «Crea una traccia MIDI chiamata Bass e aggiungi un Operator»\n· «Quali tracce ci sono? Silenzia la traccia 2»',
       },
     };
@@ -1177,6 +1217,61 @@
     }
     loadWebConfig();
 
+    // ---------- Artist memory (Settings → 音乐人记忆) ----------
+    // 内容型数据以服务端 memory.json 为唯一来源（/api/memory），不走
+    // localStorage —— 每次打开面板直接拉取；输入即存（400ms 防抖，无保存按钮）。
+    const memoryVal = document.getElementById('memoryVal');
+    const memFields = {
+      name: document.getElementById('memName'),
+      genres: document.getElementById('memGenres'),
+      bpmMin: document.getElementById('memBpmMin'),
+      bpmMax: document.getElementById('memBpmMax'),
+      keys: document.getElementById('memKeys'),
+      sound: document.getElementById('memSound'),
+      artists: document.getElementById('memArtists'),
+      notes: document.getElementById('memNotes'),
+    };
+    function renderMemoryVal(p) {
+      memoryVal.textContent = (p && (p.name || (p.genres && p.genres[0]))) || '';
+    }
+    function loadMemory() {
+      fetch('/api/memory').then(r => r.json()).then(p => {
+        if (!p) return;
+        memFields.name.value = p.name ?? '';
+        memFields.genres.value = (p.genres ?? []).join(', ');
+        memFields.bpmMin.value = p.bpmMin ?? '';
+        memFields.bpmMax.value = p.bpmMax ?? '';
+        memFields.keys.value = (p.keys ?? []).join(', ');
+        memFields.sound.value = (p.sound ?? []).join(', ');
+        memFields.artists.value = (p.artists ?? []).join(', ');
+        memFields.notes.value = p.notes ?? '';
+        renderMemoryVal(p);
+      }).catch(() => {});
+    }
+    let memSaveTimer = null;
+    function saveMemory() {
+      clearTimeout(memSaveTimer);
+      memSaveTimer = setTimeout(() => {
+        const list = (s) => s.split(',').map(x => x.trim()).filter(Boolean);
+        const num = (s) => { const v = s.trim(); const n = Number(v); return v && n >= 20 && n <= 999 ? n : 0; };
+        fetch('/api/memory', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: memFields.name.value,
+            genres: list(memFields.genres.value),
+            bpmMin: num(memFields.bpmMin.value),
+            bpmMax: num(memFields.bpmMax.value),
+            keys: list(memFields.keys.value),
+            sound: list(memFields.sound.value),
+            artists: list(memFields.artists.value),
+            notes: memFields.notes.value,
+          }),
+        }).then(r => r.json()).then(s => { if (s && s.memory) renderMemoryVal(s.memory); }).catch(() => {});
+      }, 400);
+    }
+    Object.values(memFields).forEach(el => el.addEventListener('input', saveMemory));
+
     document.getElementById('showSettings').addEventListener('click', (e) => {
       e.stopPropagation();
       const opening = settingsPanel.classList.contains('hidden');
@@ -1191,6 +1286,7 @@
         loadProviderFields();
         loadAudioFields();
         loadWebConfig();
+        loadMemory();
         showView('viewMain');
       }
     });

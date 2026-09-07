@@ -277,6 +277,81 @@ let webSettings = { enabled: false };
  * providers.json under "move" — same localStorage-loss problem as lastProvider. */
 let moveSettings: { host?: string; token?: string } = {};
 
+/**
+ * The user's durable musical identity, persisted as memory.json in the same
+ * storage directory (same readHomeFile/writeHomeFile pattern as providers.json,
+ * but a separate file so it stays easy to hand-edit or share). Injected into
+ * the system prompt of every chat; kept fresh by the update_memory tool.
+ * All fields optional — an empty object means "no memory yet".
+ */
+type ArtistMemory = {
+  name?: string;
+  genres?: string[];
+  bpmMin?: number;
+  bpmMax?: number;
+  keys?: string[];
+  sound?: string[];
+  artists?: string[];
+  notes?: string;
+};
+let artistMemory: ArtistMemory = {};
+let memoryPath: string | null = null;
+
+/** Normalize an unknown value into a non-empty string array, or undefined. */
+function toStrArr(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v.map((x) => String(x).trim()).filter(Boolean);
+  return out.length ? out : undefined;
+}
+
+/** Normalize an unknown value into a BPM in Live's valid range, or undefined. */
+function toBpm(v: unknown): number | undefined {
+  const n = Number(v);
+  return n >= 20 && n <= 999 ? n : undefined;
+}
+
+function loadArtistMemory(context: Ctx): void {
+  // Same directory resolution as loadManualConfigs (storage dir or fallback).
+  const dir = storeFileOverride
+    ? path.dirname(storeFileOverride)
+    : context.environment.storageDirectory || path.dirname(storeFallbackPath());
+  memoryPath = path.join(dir, "memory.json");
+  artistMemory = {};
+  try {
+    const raw = readHomeFile(memoryPath);
+    if (!raw) return; // No memory yet — normal on first run.
+    const d = JSON.parse(raw) as Record<string, unknown>;
+    const p: ArtistMemory = {};
+    if (typeof d.name === "string" && d.name.trim()) p.name = d.name.trim();
+    p.genres = toStrArr(d.genres);
+    p.keys = toStrArr(d.keys);
+    p.sound = toStrArr(d.sound);
+    p.artists = toStrArr(d.artists);
+    p.bpmMin = toBpm(d.bpmMin);
+    p.bpmMax = toBpm(d.bpmMax);
+    if (p.bpmMin && p.bpmMax && p.bpmMin > p.bpmMax) {
+      [p.bpmMin, p.bpmMax] = [p.bpmMax, p.bpmMin];
+    }
+    if (typeof d.notes === "string" && d.notes.trim()) p.notes = d.notes.trim();
+    artistMemory = p;
+    // Object.keys would also count keys assigned undefined — count real values.
+    const n = Object.values(p).filter((v) => v !== undefined).length;
+    if (n) console.log(`[ai-assistant] Artist memory 已加载（${n} 个字段）: ${p.name ?? p.genres?.join("/") ?? "…"}`);
+  } catch {
+    artistMemory = {};
+  }
+}
+
+function saveArtistMemory(): void {
+  if (!memoryPath) return;
+  try {
+    mkdirOutsideSandbox(path.dirname(memoryPath));
+    writeHomeFile(memoryPath, JSON.stringify(artistMemory, null, 2));
+  } catch {
+    // In-memory copy still works for this run.
+  }
+}
+
 const AUDIO_PROVIDERS_ALL: AudioProvider[] = ["stable-audio", "elevenlabs", "minimax", "custom"];
 
 /**
@@ -399,6 +474,27 @@ const TOOLS = [
     description:
       "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, and rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content). MIDI/structure-based only: audio clips contribute filename + duration. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview.",
     input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "update_memory",
+    description:
+      "Update the user's persistent artist memory — their musical identity, saved to memory.json and injected into every chat's system prompt. " +
+      "Call ONLY when the user states a durable preference about their own style (\"I make melodic techno around 124\", \"remember I prefer 909 drums\") " +
+      "— never for one-off choices that apply only to the current Set, and never speculatively. " +
+      "Pass only the fields to change: omitted fields stay unchanged; strings/arrays REPLACE the previous value (pass \"\" or [] to clear a field; 0 clears bpmMin/bpmMax).",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Artist / project name" },
+        genres: { type: "array", items: { type: "string" }, description: "Genres the user produces, e.g. [\"melodic techno\", \"deep house\"]" },
+        bpmMin: { type: "number", description: "Lower end of the usual BPM range (20–999); 0 to clear" },
+        bpmMax: { type: "number", description: "Upper end of the BPM range (same as bpmMin for one fixed BPM); 0 to clear" },
+        keys: { type: "array", items: { type: "string" }, description: "Preferred musical keys, e.g. [\"A minor\", \"F# minor\"]" },
+        sound: { type: "array", items: { type: "string" }, description: "Sound/timbre preferences, e.g. [\"909 drums\", \"warm analog pads\", \"acid basslines\"]" },
+        artists: { type: "array", items: { type: "string" }, description: "Reference artists whose style the user likes" },
+        notes: { type: "string", description: "Free-form notes about the user's style, goals or workflow" },
+      },
+    },
   },
   {
     name: "set_tempo",
@@ -873,6 +969,11 @@ Song analysis (read-only):
 - It is MIDI- and structure-based ONLY: audio clips contribute filename + duration — no loudness, timbre or transcribed pitch. Never claim you listened to the audio.
 - Track indices in its output match get_song_overview, so you can follow up with get_clip_notes on a specific track.
 
+Artist memory:
+- The user's artist memory (below, when present) is their durable musical identity. Treat it as the default context for every musical suggestion: match their genres, BPM range and sound preferences unless they ask otherwise.
+- When the user states a durable preference about THEIR style ("I make techno around 128", "remember: I love 909 drums"), call update_memory to save it — it persists across chats. Do NOT save one-off choices that only apply to the current Set, and never call it speculatively.
+- If no memory section appears below, none exists yet — that's fine; don't push the user to create one.
+
 Web access:
 - If web_search/web_fetch are NOT among your tools, web access is OFF: NEVER pretend to search or claim you checked something online — say web search is disabled and the user can turn it on in Settings (gear icon) → 联网搜索 / Web Search.`;
 
@@ -1177,6 +1278,34 @@ async function runTool(
     }
     case "analyze_song": {
       return analyzeSong(buildSongSnapshot(song));
+    }
+    case "update_memory": {
+      // Partial update: only fields present in input are touched; "" / [] / 0
+      // clear a field. Writes memory.json next to providers.json.
+      const p = artistMemory;
+      if (typeof input.name === "string") p.name = input.name.trim() || undefined;
+      if (input.genres !== undefined) p.genres = toStrArr(input.genres);
+      if (input.keys !== undefined) p.keys = toStrArr(input.keys);
+      if (input.sound !== undefined) p.sound = toStrArr(input.sound);
+      if (input.artists !== undefined) p.artists = toStrArr(input.artists);
+      if (typeof input.notes === "string") p.notes = input.notes.trim() || undefined;
+      if (input.bpmMin !== undefined) {
+        const v = toBpm(input.bpmMin);
+        if (Number(input.bpmMin) !== 0 && v === undefined) throw new Error("bpmMin 需在 20–999 之间（0 表示清除）");
+        p.bpmMin = v;
+      }
+      if (input.bpmMax !== undefined) {
+        const v = toBpm(input.bpmMax);
+        if (Number(input.bpmMax) !== 0 && v === undefined) throw new Error("bpmMax 需在 20–999 之间（0 表示清除）");
+        p.bpmMax = v;
+      }
+      if (p.bpmMin && p.bpmMax && p.bpmMin > p.bpmMax) {
+        [p.bpmMin, p.bpmMax] = [p.bpmMax, p.bpmMin];
+      }
+      artistMemory = p;
+      saveArtistMemory();
+      // Return the merged memory so the model sees (and can quote) the result.
+      return { saved: true, memory: artistMemory };
     }
     case "set_tempo": {
       const bpm = Number(input.bpm);
@@ -1633,6 +1762,30 @@ const LANG_NAMES: Record<string, string> = {
   it: "Italian",
 };
 
+/** Rendered into the system prompt only when a memory exists — an empty
+ * memory adds no section at all (same pattern as WEB_PROMPT). */
+function memoryPrompt(): string {
+  const p = artistMemory;
+  const lines: string[] = [];
+  if (p.name) lines.push(`- Name: ${p.name}`);
+  if (p.genres?.length) lines.push(`- Genres: ${p.genres.join(", ")}`);
+  if (p.bpmMin || p.bpmMax) {
+    const range = p.bpmMin && p.bpmMax && p.bpmMin !== p.bpmMax
+      ? `${p.bpmMin}–${p.bpmMax}`
+      : `${p.bpmMin ?? p.bpmMax}`;
+    lines.push(`- BPM: ${range}`);
+  }
+  if (p.keys?.length) lines.push(`- Preferred keys: ${p.keys.join(", ")}`);
+  if (p.sound?.length) lines.push(`- Sound: ${p.sound.join(", ")}`);
+  if (p.artists?.length) lines.push(`- Reference artists: ${p.artists.join(", ")}`);
+  if (p.notes) lines.push(`- Notes: ${p.notes}`);
+  if (!lines.length) return "";
+  return (
+    "\n\nThe user's artist memory (their durable musical identity — these are their defaults unless they say otherwise):\n" +
+    lines.join("\n")
+  );
+}
+
 function systemPromptFor(language?: string): string {
   const name = LANG_NAMES[language ?? ""] ?? "English";
   // The date anchors "latest/recent" web searches — the model's training
@@ -1640,6 +1793,7 @@ function systemPromptFor(language?: string): string {
   const today = new Date().toISOString().slice(0, 10);
   return (
     SYSTEM_PROMPT +
+    memoryPrompt() +
     (webSettings.enabled ? WEB_PROMPT : "") +
     `\n\nToday's date: ${today}.` +
     `\nThe user's UI language is ${name} — use it as the default reply language unless they write in a different language.`
@@ -1901,12 +2055,14 @@ function truncateResult(resultJson: string): string {
   );
 }
 
-/** Tools that only read the Set — always allowed, even with YOLO off.
- * web_search/web_fetch are read-only too: free, keyless, and they touch
- * nothing local, so they never need a confirmation. */
+/** Tools that never touch the Set — always allowed, even with YOLO off.
+ * web_search/web_fetch are read-only: free, keyless, and they touch nothing
+ * local. update_memory only rewrites the user's own memory.json — local,
+ * free and trivially reversible, so it needs no confirmation either. */
 const READ_ONLY_TOOLS = new Set([
   "get_song_overview",
   "analyze_song",
+  "update_memory",
   "get_device_parameters",
   "get_clip_notes",
   "search_samples",
@@ -2790,6 +2946,32 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       });
       return;
     }
+    if (req.method === "GET" && req.url === "/api/memory") {
+      send(200, JSON.stringify(artistMemory));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/memory") {
+      readBody((parsed) => {
+        // Settings-UI write: FULL replace of the editable fields (unlike the
+        // update_memory tool's partial merge), with the same sanitizers.
+        const p: ArtistMemory = {};
+        if (typeof parsed.name === "string" && parsed.name.trim()) p.name = parsed.name.trim();
+        p.genres = toStrArr(parsed.genres);
+        p.keys = toStrArr(parsed.keys);
+        p.sound = toStrArr(parsed.sound);
+        p.artists = toStrArr(parsed.artists);
+        p.bpmMin = toBpm(parsed.bpmMin);
+        p.bpmMax = toBpm(parsed.bpmMax);
+        if (p.bpmMin && p.bpmMax && p.bpmMin > p.bpmMax) {
+          [p.bpmMin, p.bpmMax] = [p.bpmMax, p.bpmMin];
+        }
+        if (typeof parsed.notes === "string" && parsed.notes.trim()) p.notes = parsed.notes.trim();
+        artistMemory = p;
+        saveArtistMemory();
+        send(200, JSON.stringify({ ok: true, memory: artistMemory }));
+      });
+      return;
+    }
     if (req.method === "GET" && req.url === "/api/open") {
       if (selfUrl) {
         void context.ui.showModalDialog(selfUrl, 560, 680).catch(() => {});
@@ -2985,6 +3167,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     };
     loadStore(context);
     loadManualConfigs(context);
+    loadArtistMemory(context);
     tryListen(PREFERRED_PORT);
   });
 }
