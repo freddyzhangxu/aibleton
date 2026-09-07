@@ -6,7 +6,7 @@
 
 <p align="center">
   An open-source agentic music production platform for Ableton Live.<br>
-  Chat, create, arrange, edit, and control your music with AI — Claude, Codex, Gemini, or your own.
+  Chat, create, arrange, edit, and control your music with AI — Codex, Claude, Gemini, or any OpenAI-compatible model.
 </p>
 
 <p align="center">
@@ -52,7 +52,7 @@ The project has two parts:
 
 | Component | What it is |
 |---|---|
-| **[AIbleton/](AIbleton/)** | The Live 12 extension: chat UI + a local assistant server with ~20 tools that read and control the Live Set |
+| **[AIbleton/](AIbleton/)** | The Live 12 extension: chat UI + a local assistant server with 30+ tools that read and control the Live Set |
 | **[AIbletonBar/](AIbletonBar/)** | A native floating sidebar (macOS & Windows) that hosts the same chat UI next to Live — IDE-style, toggled with **⌥⌘A** / **Win+Alt+A** |
 
 ## Screenshots
@@ -66,9 +66,12 @@ The project has two parts:
 - **Chat inside Live** — right-click any track / scene / clip → Extensions →
   **AIbleton: Open** opens the assistant in a modal dialog. The same UI is also reachable at `http://localhost:17666` from any
   browser, and from AIbletonBar.
-- **Your choice of model** — Claude, OpenAI Codex, or Google Gemini, switchable in the
-  dialog. Credentials are reused from the matching local CLI (Claude Code, Codex CLI
-  including ChatGPT-account sign-in, Gemini CLI) or entered by hand, and a reasoning-effort
+- **Your choice of model** — OpenAI Codex, Claude, Google Gemini, or any
+  OpenAI-compatible endpoint (Grok, DeepSeek, OpenRouter, Ollama…), switchable in
+  the dialog. Credentials for the big three are reused from the matching local CLI
+  (Codex CLI including ChatGPT-account sign-in, Claude Code, Gemini CLI) or entered
+  by hand; the Custom slot takes a base URL + model and speaks plain
+  `/chat/completions` (API key optional for local servers). A reasoning-effort
   selector trades speed for deeper thinking when you need it.
 - **Artist memory** — tell the assistant about your style once (*"I make melodic
   techno around 124, A minor, warm analog pads"*) and it remembers across chats:
@@ -84,10 +87,19 @@ The project has two parts:
 - **MIDI generation & editing** — write arrangement or Session-View clips from natural
   language, or read and rework the notes of existing clips — per-note pitch / timing /
   velocity, with swing support.
+- **Set analysis & one-call arranging** — `analyze_song` reads the open Set: detected
+  key, per-track roles, note/density stats, section structure, rule-based issues,
+  and a flat clip map with every clip's coordinates. `arrange_song` then builds or
+  rebuilds the arrangement from a placement plan in ONE call — validated before
+  anything changes (bad references abort with zero writes), executed as a single
+  undo step, with a `dry_run` preview and an optional bar-range clear for rebuilds.
 - **One-shot 808 kit** — builds a Drum Rack with Simpler pads loaded with real factory
   808 samples, ready to program against a GM-style note map.
 - **Sample search & import** — searches your local Splice sync folder, Ableton User
-  Library, Factory Packs and Core Library, then imports audio or loads samples into Simpler.
+  Library, Factory Packs and Core Library, then imports audio or loads samples into
+  Simpler. BPM and key are parsed from file/folder names at index time (gear numbers
+  like "808" excluded), queries get synonym expansion (*dark* → rumble/industrial/sub…),
+  and results rank by exact BPM/key > near BPM > relative major/minor > keywords.
 - **AI audio generation** — renders text prompts into audio with Stable Audio,
   ElevenLabs, MiniMax, or any custom HTTP API (relays, self-hosted MusicGen,
   Suno-style services — sync or async) and drops the result straight into your
@@ -108,6 +120,9 @@ The project has two parts:
   (firmware ≥ 1.5, Standalone Mode), and a WiFi file pipeline (`move_pair` /
   `move_upload_sample` / `move_download_set` / list tools) pushes AI-generated
   samples straight onto the device and pulls Sets back — stock firmware, no SSH.
+  `move_analyze_set` downloads a Set and runs the same analysis engine as
+  `analyze_song` — key, track roles, issues — plus Move extras: mixer levels,
+  device chains, and the sample list with durations and pack/user origin.
   One-time manual output routing per Set — see [docs/move.md](docs/move.md).
 - **Operation guidance** — answers how-to questions about Live itself (mixing, warping,
   routing, shortcuts…) with step-by-step instructions, right where you're working.
@@ -120,12 +135,14 @@ The project has two parts:
 - **Node.js ≥ 24.14.1** — developers only, for building from source. End users
   installing the `.ablx` do *not* need Node.js (the extension runs inside Live's own
   Extension Host)
-- **An AI provider** — Claude, OpenAI Codex, or Google Gemini. Credentials are reused
-  automatically from the matching local CLI: Claude Code's `~/.claude/settings.json`,
-  Codex CLI's `~/.codex/auth.json` (API key or ChatGPT-account sign-in), Gemini CLI's
-  `~/.gemini/.env`. You can also use environment variables (`ANTHROPIC_*`, `OPENAI_*`,
+- **An AI provider** — OpenAI Codex, Claude, Google Gemini, or any OpenAI-compatible
+  endpoint (Grok, DeepSeek, OpenRouter, Ollama…). Credentials are reused automatically
+  from the matching local CLI: Codex CLI's `~/.codex/auth.json` (API key or
+  ChatGPT-account sign-in), Claude Code's `~/.claude/settings.json`, Gemini CLI's
+  `~/.gemini/.env`. You can also use environment variables (`OPENAI_*`, `ANTHROPIC_*`,
   `GEMINI_API_KEY` / `GOOGLE_API_KEY`) or enter everything in the dialog's
-  **Settings → AI Provider** section. Nothing sensitive is stored by the extension.
+  **Settings → AI Provider** section — the Custom slot needs just a base URL and a
+  model (key optional for local servers). Nothing sensitive is stored by the extension.
 - **macOS or Windows** — only needed for AIbletonBar; the extension itself is platform-independent
 
 ## Installation
@@ -190,19 +207,22 @@ cd AIbletonBar/windows
 ## How it works
 
 The extension starts a small HTTP server (port `17666`) inside Live's Extension Host.
-The chat page talks to the selected provider — Claude, Codex, or Gemini — with a tool
-set backed by the Extensions SDK: `get_song_overview`, `write_midi_clip`,
+The chat page talks to the selected provider — Codex, Claude, Gemini, or a custom
+OpenAI-compatible endpoint — with a tool set backed by the Extensions SDK:
+`get_song_overview`, `analyze_song`, `arrange_song`, `write_midi_clip`,
 `write_session_clip`, `load_drum_kit`, `search_samples`, `import_audio_clip`,
 `generate_audio`, `insert_device`, `set_device_parameter`, `set_track_mixer`,
-scene & tempo tools, and more — plus `web_search` / `web_fetch` for keyless
-web access. Every answer can directly read and modify the open Live Set.
+scene & tempo tools, the Ableton Move tools, and more — plus `web_search` /
+`web_fetch` for keyless web access. Every answer can directly read and modify the
+open Live Set.
 
 ```
 ┌────────────────────┐      ┌──────────────────────┐      ┌────────────────┐
 │ Chat UI            │      │ Assistant server     │      │ Model API      │
-│ (dialog / browser  │─────▶│ localhost:17666      │─────▶│ Claude / Codex │
-│  / AIbletonBar)    │      │ + ~20 Live tools     │◀─────│ / Gemini       │
-└────────────────────┘      │                      │      └────────────────┘
+│ (dialog / browser  │─────▶│ localhost:17666      │─────▶│ Codex / Claude │
+│  / AIbletonBar)    │      │ + 30+ Live tools     │◀─────│ Gemini / any   │
+└────────────────────┘      │                      │      │ OpenAI-compat. │
+                            │                      │      └────────────────┘
                             │                      │      ┌────────────────┐
                             │                      │─────▶│ Audio API      │
                             │                      │◀─────│ Stable Audio / │
@@ -225,12 +245,16 @@ them into the Set with `import_audio_clip` / `load_sample`.
 ```
 AIbleton/          Live extension (TypeScript)
 ├── src/extension.ts   entry point — registers context-menu actions, starts server
-├── src/server.ts      assistant server + tool implementations (Claude / Codex / Gemini)
+├── src/server.ts      assistant server + tool implementations (Codex / Claude / Gemini / OpenAI-compatible)
+├── src/analysis.ts    analyze_song engine — key/role/issue detection + the clip map arrange_song plans against
 ├── src/audiogen.ts    audio generation providers (Stable Audio / ElevenLabs / MiniMax / custom HTTP)
 ├── src/websearch.ts   web_search (Bing + DuckDuckGo fallback, keyless) + web_fetch, proxy-aware
+├── src/samplemeta.ts  BPM/key filename parsing + synonym expansion + ranking for search_samples
 ├── src/fileparsers.ts parses .mid / .als attachments into text summaries for the model
+├── src/move.ts        Ableton Move WiFi file pipeline (pair / upload / download / list)
+├── src/movebundle.ts  .ablbundle parser + Move Set → snapshot converter for move_analyze_set
 ├── ui/interface.html  chat UI
-├── scripts/           smoke tests (npx tsx scripts/test-fileparsers.ts)
+├── scripts/           smoke tests (npx tsx scripts/test-*.ts; smoke-samplelib.ts runs against your real library)
 └── vendor/            Extensions SDK beta tarballs (gitignored, see note below)
 
 AIbletonBar/       macOS floating sidebar (Swift, ~180 lines, no deps)
