@@ -45,18 +45,22 @@ import {
   uploadFile,
 } from "./move.js";
 import {
+  AudioClip,
   AudioTrack,
   DrumChain,
   DrumRack,
   MidiClip,
   MidiTrack,
   Simpler,
+  type Clip,
   type Device,
   type DeviceParameter,
   type ExtensionContext,
   type NoteDescription,
+  type Song,
   type Track,
 } from "@ableton-extensions/sdk";
+import { analyzeSong, type SnapshotClip, type SongSnapshot } from "./analysis.js";
 
 // ---------- Local sample library search ----------
 
@@ -388,6 +392,12 @@ const TOOLS = [
     name: "get_song_overview",
     description:
       "Get an overview of the current Live Set: tempo, scale, all tracks (name, type, mute/solo/arm, clips, devices) and scenes.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "analyze_song",
+    description:
+      "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, and rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content). MIDI/structure-based only: audio clips contribute filename + duration. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview.",
     input_schema: { type: "object", properties: {} },
   },
   {
@@ -857,6 +867,12 @@ Compression and sidechain:
 - You CANNOT select the sidechain input source ("Audio From" track) — the SDK has no routing API. Never claim you did it. Instead: insert the Compressor, dial in the pump settings above, then tell the user to finish the last 2 clicks manually: open the Compressor's sidechain section (◁ arrow / headphone icon), enable it, and pick the kick track as "Audio From".
 - Send amounts are not controllable either; volume/pan only via set_track_mixer.
 
+Song analysis (read-only):
+- analyze_song gives an engineering-level read of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's own scale setting, per-track roles (kick/snare/hats/bass/chords/pad/lead/arp/vocal/…) with note/velocity/density/polyphony/entropy stats, section structure (cue points, else 8-bar energy blocks), a session-view summary, and rule-based issues (SINGLE_LOOP, DUPLICATE_CONTENT, LOW_CONTRAST, FLAT_DYNAMICS, MONOTONE_BASS, OFF_KEY, NO_LOW_END/NO_HIGH_END, MUTED_CONTENT, KEY_MISMATCH).
+- Call it when the user asks to analyze/review/diagnose the track, before proposing arrangement or structural changes, or when you need key/role context to write a part that fits. It is read-only and needs no confirmation.
+- It is MIDI- and structure-based ONLY: audio clips contribute filename + duration — no loudness, timbre or transcribed pitch. Never claim you listened to the audio.
+- Track indices in its output match get_song_overview, so you can follow up with get_clip_notes on a specific track.
+
 Web access:
 - If web_search/web_fetch are NOT among your tools, web access is OFF: NEVER pretend to search or claim you checked something online — say web search is disabled and the user can turn it on in Settings (gear icon) → 联网搜索 / Web Search.`;
 
@@ -999,6 +1015,87 @@ function deviceRefFrom(input: Record<string, unknown>): unknown {
   throw new Error("请提供 device_index 或 device_name");
 }
 
+/** The Extension Host bridge hands back BigInt for some numeric getters
+ * (Scene.signatureNumerator confirmed on real Live 12.4.5) — normalize every
+ * number crossing the host boundary or arithmetic blows up downstream. */
+function toNum(v: unknown, fallback = 0): number {
+  const n = Number(v as number);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** Serialize a Live clip for analyzeSong. `start` is null for session clips. */
+function snapshotClip(c: Clip<"1.0.0">, start: number | null): SnapshotClip {
+  const base = {
+    name: String(c.name ?? ""),
+    start,
+    duration: toNum(c.duration),
+    looping: !!c.looping,
+    loopStart: toNum(c.loopStart),
+    loopEnd: toNum(c.loopEnd),
+    startMarker: toNum(c.startMarker),
+    muted: !!c.muted,
+  };
+  if (c instanceof MidiClip) {
+    return {
+      ...base,
+      kind: "midi",
+      notes: c.notes.map((n) => ({
+        pitch: toNum(n.pitch),
+        start: toNum(n.startTime),
+        duration: toNum(n.duration),
+        velocity: toNum(n.velocity ?? 100, 100),
+        muted: !!n.muted,
+      })),
+    };
+  }
+  return {
+    ...base,
+    kind: "audio",
+    file: c instanceof AudioClip && c.filePath ? path.basename(c.filePath) : undefined,
+  };
+}
+
+/** Build the plain-data SongSnapshot analyzeSong runs on. Every field is
+ * `??`-guarded: smoke tests boot the server with a minimal fake song. */
+function buildSongSnapshot(song: Song<"1.0.0">): SongSnapshot {
+  const scenes = song.scenes ?? [];
+  const s0 = scenes[0];
+  return {
+    tempo: toNum(song.tempo, 120),
+    timeSig: {
+      numerator: toNum(s0?.signatureNumerator) || 4,
+      denominator: toNum(s0?.signatureDenominator) || 4,
+    },
+    liveScale: {
+      mode: !!song.scaleMode,
+      root: toNum(song.rootNote),
+      name: String(song.scaleName ?? ""),
+      intervals: (song.scaleIntervals ?? []).map((v) => toNum(v)),
+    },
+    cuePoints: (song.cuePoints ?? []).map((c) => ({ time: toNum(c.time), name: String(c.name ?? "") })),
+    sceneCount: scenes.length,
+    tracks: (song.tracks ?? []).map((t, i) => {
+      const rack = t.devices.find((d): d is DrumRack<"1.0.0"> => d instanceof DrumRack);
+      const clips: SnapshotClip[] = [];
+      for (const c of t.arrangementClips) clips.push(snapshotClip(c, toNum(c.startTime)));
+      for (const slot of t.clipSlots) {
+        if (slot.clip) clips.push(snapshotClip(slot.clip, null));
+      }
+      return {
+        index: i,
+        name: String(t.name ?? ""),
+        type: t instanceof MidiTrack ? ("midi" as const) : ("audio" as const),
+        mute: !!t.mute,
+        mutedViaSolo: !!t.mutedViaSolo,
+        group: t.groupTrack?.name ?? undefined,
+        drumPads: rack?.chains.map((ch) => toNum(ch.receivingNote)),
+        devices: t.devices.map((d) => String(d.name ?? "")).slice(0, 6),
+        clips,
+      };
+    }),
+  };
+}
+
 function parseNotes(raw: unknown, clipLength: number): NoteDescription[] {
   if (!Array.isArray(raw)) throw new Error("notes 必须是数组");
   const notes = raw.map((n) => {
@@ -1077,6 +1174,9 @@ async function runTool(
         returnTracks: song.returnTracks.map((t) => t.name),
         scenes: song.scenes.map((s, i) => ({ index: i, name: s.name })),
       };
+    }
+    case "analyze_song": {
+      return analyzeSong(buildSongSnapshot(song));
     }
     case "set_tempo": {
       const bpm = Number(input.bpm);
@@ -1806,6 +1906,7 @@ function truncateResult(resultJson: string): string {
  * nothing local, so they never need a confirmation. */
 const READ_ONLY_TOOLS = new Set([
   "get_song_overview",
+  "analyze_song",
   "get_device_parameters",
   "get_clip_notes",
   "search_samples",
