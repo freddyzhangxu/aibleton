@@ -61,7 +61,8 @@ import {
   type Track,
   type ClipLoopSettings,
 } from "@ableton-extensions/sdk";
-import { analyzeSong, tileClipNotes, type SnapshotClip, type SongSnapshot } from "./analysis.js";
+import { analyzeMusicState, analyzeSong, tileClipNotes, type SnapshotClip, type SongSnapshot } from "./analysis.js";
+import { buildMusicState } from "./musicstate/builder.js";
 import { moveExtras, moveSongToSnapshot, parseMoveBundle } from "./movebundle.js";
 import { searchSampleIndex, toSampleEntry, type SampleEntry } from "./samplemeta.js";
 
@@ -1671,7 +1672,8 @@ async function runTool(
       };
     }
     case "analyze_song": {
-      return analyzeSong(buildSongSnapshot(song));
+      // Two-stage: facts (what is in the Set) -> interpretation (what it means).
+      return analyzeMusicState(buildMusicState(buildSongSnapshot(song)));
     }
     case "arrange_song": {
       return arrangeSong(context, input);
