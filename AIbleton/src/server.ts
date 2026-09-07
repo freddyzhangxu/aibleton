@@ -62,6 +62,7 @@ import {
   type ClipLoopSettings,
 } from "@ableton-extensions/sdk";
 import { analyzeSong, tileClipNotes, type SnapshotClip, type SongSnapshot } from "./analysis.js";
+import { moveExtras, moveSongToSnapshot, parseMoveBundle } from "./movebundle.js";
 import { searchSampleIndex, toSampleEntry, type SampleEntry } from "./samplemeta.js";
 
 // ---------- Local sample library search ----------
@@ -647,6 +648,18 @@ const TOOLS = [
     },
   },
   {
+    name: "move_analyze_set",
+    description:
+      "Download a Set from the paired Move and analyze it like analyze_song: key detection, per-track roles/note stats, muted content and issue flags — plus Move extras (per-track mixer levels, device chains, sample list with durations). The .ablbundle is kept in the User Library's AIbleton folder. Move has no arrangement view, so all clips are session clips.",
+    input_schema: {
+      type: "object",
+      properties: {
+        set_id: { type: "string", description: "Set id from move_list_sets" },
+      },
+      required: ["set_id"],
+    },
+  },
+  {
     name: "rename_track",
     description: "Rename a track by its 0-based index (as listed by get_song_overview).",
     input_schema: {
@@ -979,6 +992,7 @@ Sequencing an Ableton Move (hardware) from Live:
 Move file transfer (WiFi, stock firmware API — pairing required once):
 - Pair: move_pair (no code) → the Move shows a 6-digit code on its display → ask the user for it → move_pair({code}). The token persists across sessions; if a call fails with 401, pair again.
 - move_list_sets / move_list_files browse the device; move_upload_sample sends a local audio file to the Move (default folder "Samples"), move_download_set pulls a Set (.ablbundle) into the User Library's AIbleton folder.
+- move_analyze_set(set_id) downloads a Set AND analyzes it with the same engine as analyze_song (key, track roles, note stats, issues) plus Move extras: per-track mixer levels, device chains, sample list with durations and pack/user origin. Move Sets have no arrangement — all clips are session clips, so use move_analyze_set (not analyze_song) for anything on the device. Great entry point when the user wants to recreate, extend or review a Move Set in Live.
 - Typical flow: generate_audio → move_upload_sample → the sample appears under Samples on the Move, ready to load into a drum pad or a melodic track. Say so when it lands.
 - move_status reports reachability/pairing/firmware; use it when a Move call fails or the user asks.
 
@@ -1784,6 +1798,40 @@ async function runTool(
         message: `Set 已下载到 ${target}（${Math.round(data.length / 1024)} KB）。`,
       };
     }
+    case "move_analyze_set": {
+      requireMovePaired();
+      const setId = String(input.set_id || "");
+      if (!setId) throw new Error("set_id 不能为空");
+      const setName = (await listSets(moveSettings)).find((s) => s.id === setId)?.name ?? "";
+      const { filename, data } = await downloadSet(moveSettings, setId);
+      // Parse from memory first — a corrupt bundle shouldn't leave a file behind.
+      const bundle = parseMoveBundle(data);
+      const dir = generatedAudioDir();
+      mkdirOutsideSandbox(dir);
+      const target = path.join(dir, filename);
+      writeHomeBinary(target, data);
+      const result = {
+        set: setName || filename.replace(/\.ablbundle$/i, ""),
+        saved: target,
+        ...analyzeSong(moveSongToSnapshot(bundle.song)),
+        move: moveExtras(bundle) as unknown as Record<string, unknown>,
+      };
+      // analyzeSong fits itself to 5800 — the move extras ride on top of that,
+      // so trim them in stages to stay under callTool's 6000-char hard cut.
+      const size = () => JSON.stringify(result).length;
+      const m = result.move as unknown as {
+        samples?: unknown[];
+        samplesOmitted?: number;
+        tracks?: { files?: unknown; devices?: unknown }[];
+      };
+      if (size() > 5800 && Array.isArray(m.samples) && m.samples.length > 10) {
+        m.samplesOmitted = m.samples.length - 10;
+        m.samples = m.samples.slice(0, 10);
+      }
+      if (size() > 5800) for (const t of m.tracks ?? []) delete t.files;
+      if (size() > 5800) for (const t of m.tracks ?? []) delete t.devices;
+      return result;
+    }
     case "rename_track": {
       const ref = resolveTrack(context, input, "index");
       const oldName = ref.track.name;
@@ -2447,6 +2495,7 @@ const READ_ONLY_TOOLS = new Set([
   "move_pair",
   "move_list_sets",
   "move_list_files",
+  "move_analyze_set",
 ]);
 
 /**

@@ -81,6 +81,14 @@ AIbleton also talks to the Move Manager's stock HTTP API — no USB cable, no SS
 | `move_list_files` | Browse folders/files (Samples, Recordings, …) |
 | `move_upload_sample` | Push a local audio file to the Move (default: `Samples`) |
 | `move_download_set` | Pull a Set (`.ablbundle`) into the User Library's AIbleton folder |
+| `move_analyze_set` | Pull a Set **and** analyze it: key detection, per-track roles/note stats/ranges, mixer levels, device presets, sample list with durations — the same engine as `analyze_song`, plus Move extras |
+
+`move_analyze_set` parses the `.ablbundle` (a zip holding `Song.abl` — JSON,
+Ableton's `song/1.8.x` schema — plus the WAVs). Move Sets have no arrangement
+view, so all clips are reported as session clips. Typical questions it answers
+out of the box: "这个 Set 什么调/什么速度", "贝斯轨弹了多少音、什么音域",
+"哪些采样是录的、哪些是核心库的", and it's the natural first step before
+recreating or extending a Move Set in Live.
 
 Pairing is a one-time handshake — the token is persisted by the extension:
 
