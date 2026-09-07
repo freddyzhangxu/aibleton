@@ -66,6 +66,11 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 - **模型自由选择** —— Claude、OpenAI Codex 或 Google Gemini，在对话框里随时切换。
   自动复用本地 CLI 凭证（Claude Code、Codex CLI 含 ChatGPT 账号登录、Gemini CLI），
   也可手动填写；工具栏的思考强度（Effort）选项可以在速度与推理深度之间取舍。
+- **音乐人记忆（Artist Memory）** —— 告诉助手一次你的风格（「我做 124 左右的
+  melodic techno，A 小调，喜欢温暖的模拟 pad」），它就会跨对话记住：记忆以纯
+  JSON 存在 `memory.json` 里，每次对话都作为音乐决策的默认上下文注入；当你提到
+  长期的风格偏好时，助手还会自己调用 `update_memory` 工具写入。也可在
+  设置 → 音乐人记忆 里直接查看编辑，或手动分享这个文件。
 - **文件附件** —— 可附加图片或文本文件，也可以直接丢入 `.mid` 文件或整个 `.als`
   Live 工程：二进制音乐文件会被解析成紧凑的文本摘要供模型阅读，所以你可以问
   *「这条 loop 是什么调？」*、*「把这条 bassline 复刻到第 3 轨」*。

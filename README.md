@@ -70,6 +70,13 @@ The project has two parts:
   dialog. Credentials are reused from the matching local CLI (Claude Code, Codex CLI
   including ChatGPT-account sign-in, Gemini CLI) or entered by hand, and a reasoning-effort
   selector trades speed for deeper thinking when you need it.
+- **Artist memory** — tell the assistant about your style once (*"I make melodic
+  techno around 124, A minor, warm analog pads"*) and it remembers across chats:
+  the memory lives in a plain `memory.json` next to the settings file, is
+  injected into every conversation as the defaults for musical decisions, and the
+  assistant adds to it itself via the `update_memory` tool whenever you state a
+  durable preference. View and edit it anytime in Settings → Artist Memory, or
+  hand-edit and share the file directly.
 - **File attachments** — attach images or text files, or drop in a `.mid` file or a whole
   `.als` Live Set: binary music files are parsed into compact text summaries the model
   can read, so you can ask *"what key is this loop in?"* or *"recreate this bass line
