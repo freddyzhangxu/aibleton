@@ -38,6 +38,8 @@ export interface SnapshotClip {
   muted: boolean;
   notes?: SnapshotNote[]; // midi only
   file?: string; // audio only: basename
+  arrIndex?: number; // index in track.arrangementClips — matches clip_index of get/set_clip_notes
+  scene?: number; // clip-slot index, session clips only — matches scene_index of write_session_clip
 }
 
 export interface SnapshotTrack {
@@ -103,6 +105,20 @@ export interface TrackAnalysis {
   audio?: { clips: number; bars: number; files?: string[] };
 }
 
+/** One clip in the flat clip map — the coordinate system arrange_song plans
+ * against: (t, i) addresses arrangement clips, (t, scene) session clips. */
+export interface ClipEntry {
+  t: number; // track index (matches TrackAnalysis.i / get_song_overview)
+  i?: number; // arrangement clip_index on that track (arrangement clips only)
+  scene?: number; // session slot index (session clips only)
+  name: string;
+  kind: "midi" | "audio";
+  bar?: number; // 1-based start bar (arrangement clips)
+  bars?: number; // clip length in bars (arrangement clips)
+  loop?: number; // loop length in bars — the unit arrange_song tiles (looping clips)
+  muted?: true;
+}
+
 export interface SongAnalysis {
   tempo: number;
   timeSig: string;
@@ -112,6 +128,8 @@ export interface SongAnalysis {
   sections: SectionInfo[];
   tracks: TrackAnalysis[];
   tracksOmitted?: number;
+  clips: ClipEntry[];
+  clipsOmitted?: number;
   session: { scenes: number; clips: number; tracks: number; notes: number };
   issues: string[];
   caveat: string;
@@ -229,6 +247,31 @@ interface ClipMaterial {
   clip: SnapshotClip;
   win: Window;
   material: SnapshotNote[];
+}
+
+/**
+ * Bake a clip's audible material into a fixed-length note list (beats,
+ * relative to the new clip's start): a looping source tiles its loop region
+ * to fill `targetLen`; a one-shot plays once and leaves the rest silent.
+ * Muted notes are dropped — this bakes what analyze "hears", so an arranged
+ * section matches the analysis it was planned from. Used by arrange_song.
+ */
+export function tileClipNotes(clip: SnapshotClip, targetLen: number): SnapshotNote[] {
+  const win = audibleWindow(clip);
+  const material = materialNotes(clip, win);
+  if (material.length === 0 || targetLen <= 0 || win.loopLen <= 1e-4) return [];
+  const passes = clip.looping ? Math.ceil(targetLen / win.loopLen) : 1;
+  const out: SnapshotNote[] = [];
+  for (let k = 0; k < passes; k++) {
+    const off = k * win.loopLen;
+    for (const n of material) {
+      const start = n.start - win.winStart + off;
+      if (start >= targetLen - 1e-9) continue;
+      out.push({ pitch: n.pitch, start, duration: n.duration, velocity: n.velocity });
+    }
+    if (off + win.loopLen >= targetLen) break;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -834,6 +877,15 @@ function fitBudget(analysis: SongAnalysis, budget = 5800): SongAnalysis {
   if (analysis.sections.length > 12) {
     analysis.sections = [...analysis.sections.slice(0, 6), ...analysis.sections.slice(-6)];
   }
+  if (size() <= budget) return analysis;
+  // Keep the clip map longest — it is the coordinate system arrange_song
+  // plans against. Drop loop annotations first, then cap the list.
+  for (const c of analysis.clips) delete c.loop;
+  if (size() <= budget) return analysis;
+  if (analysis.clips.length > 40) {
+    analysis.clipsOmitted = (analysis.clipsOmitted ?? 0) + analysis.clips.length - 40;
+    analysis.clips = analysis.clips.slice(0, 40);
+  }
   return analysis;
 }
 
@@ -1009,6 +1061,47 @@ export function analyzeSong(input: SongSnapshot): SongAnalysis {
     return base;
   });
 
+  // Flat clip map — arrange_song plans against these coordinates. Arrangement
+  // clips first (sorted by position), then session clips (by slot index).
+  const clips: ClipEntry[] = [];
+  for (const pt of perTrack) {
+    const arr = pt.track.clips
+      .filter((c) => c.start !== null)
+      .sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+    const ses = pt.track.clips
+      .filter((c) => c.start === null)
+      .sort((a, b) => (a.scene ?? 0) - (b.scene ?? 0));
+    for (const c of arr) {
+      const e: ClipEntry = {
+        t: pt.track.index,
+        i: c.arrIndex,
+        name: c.name,
+        kind: c.kind,
+        bar: round1((c.start ?? 0) / barBeats) + 1,
+        bars: round1(Math.max(0, c.duration) / barBeats),
+      };
+      if (c.looping && c.loopEnd - c.loopStart > 1e-4) {
+        e.loop = round1((c.loopEnd - c.loopStart) / barBeats);
+      }
+      if (c.muted) e.muted = true;
+      clips.push(e);
+    }
+    for (const c of ses) {
+      const e: ClipEntry = {
+        t: pt.track.index,
+        scene: c.scene,
+        name: c.name,
+        kind: c.kind,
+        bars: round1(Math.max(0, c.duration) / barBeats),
+      };
+      if (c.looping && c.loopEnd - c.loopStart > 1e-4) {
+        e.loop = round1((c.loopEnd - c.loopStart) / barBeats);
+      }
+      if (c.muted) e.muted = true;
+      clips.push(e);
+    }
+  }
+
   const analysis: SongAnalysis = {
     tempo: snap.tempo ?? 120,
     timeSig: `${num}/${den}`,
@@ -1026,6 +1119,7 @@ export function analyzeSong(input: SongSnapshot): SongAnalysis {
     arrangement: arrEnd > 0 ? { bars: round1(arrangementBars), beats: round1(arrEnd) } : null,
     sections,
     tracks: trackAnalyses,
+    clips,
     session: {
       scenes: snap.sceneCount ?? 0,
       clips: sessionClipCount,
