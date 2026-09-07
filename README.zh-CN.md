@@ -36,7 +36,7 @@
 
 ## 简介
 
-AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
+AIbleton 把 AI 制作智能体直接放进 Ableton Live。对它说
 *「做一个 140 BPM 的 4 小节 808 鼓型」*、*「给 2 轨加个 Auto Filter，截止频率扫到 800 Hz」*、
 *「在我本地采样里找一条 tech house loop 拖进编排」* —— 它会直接在你的 Live Set 里完成。
 
@@ -49,12 +49,12 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 
 | 组件 | 说明 |
 |---|---|
-| **[AIbleton/](AIbleton/)** | Live 12 扩展本体：聊天界面 + 本地助手服务，内置 30+ 个读写 Live Set 的工具 |
+| **[AIbleton/](AIbleton/)** | Live 12 扩展本体：聊天界面 + 本地智能体服务，内置 30+ 个读写 Live Set 的工具 |
 | **[AIbletonBar/](AIbletonBar/)** | 原生悬浮侧边栏（macOS / Windows），把同一个聊天界面挂在 Live 旁边，IDE 式体验，**⌥⌘A** / **Win+Alt+A** 呼出 |
 
 ## 截图
 
-| Live 内置 AI 助手对话框 | AIbletonBar 悬浮侧边栏 |
+| Live 内置 AI 智能体对话框 | AIbletonBar 悬浮侧边栏 |
 |:---:|:---:|
 | ![Ableton Live 中的 AIbleton 对话框](docs/screenshots/aibleton-dialog.png) | ![停靠在 Ableton Live 旁的 AIbletonBar 侧边栏](docs/screenshots/aibletonbar-sidebar.png) |
 | **AI 找采样并经 Wi-Fi 推送到 Move** | **……随即出现在设备上（move.local）** |
@@ -63,7 +63,7 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 ## 功能
 
 - **在 Live 里聊天** —— 右键任意轨道 / 场景 / Clip → Extensions → **AIbleton: Open**，
-  在模态对话框中与助手对话；
+  在模态对话框中与智能体对话；
   同一界面也可以在浏览器打开 `http://localhost:17666`，或用 AIbletonBar。
 - **模型自由选择** —— OpenAI Codex、Claude、Google Gemini，或任何 OpenAI 兼容端点
   （Grok、DeepSeek、OpenRouter、Ollama……），在对话框里随时切换。前三家自动复用
@@ -71,10 +71,10 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
   手动填写；Custom 槽位填 API 地址 + 模型即可，走标准 `/chat/completions` 协议
   （本地服务可留空 API Key）。工具栏的思考强度（Effort）选项可以在速度与推理
   深度之间取舍。
-- **音乐人记忆（Artist Memory）** —— 告诉助手一次你的风格（「我做 124 左右的
+- **音乐人记忆（Artist Memory）** —— 告诉智能体一次你的风格（「我做 124 左右的
   melodic techno，A 小调，喜欢温暖的模拟 pad」），它就会跨对话记住：记忆以纯
   JSON 存在 `memory.json` 里，每次对话都作为音乐决策的默认上下文注入；当你提到
-  长期的风格偏好时，助手还会自己调用 `update_memory` 工具写入。也可在
+  长期的风格偏好时，智能体还会自己调用 `update_memory` 工具写入。也可在
   设置 → 音乐人记忆 里直接查看编辑，或手动分享这个文件。
 - **文件附件** —— 可附加图片或文本文件，也可以直接丢入 `.mid` 文件或整个 `.als`
   Live 工程：二进制音乐文件会被解析成紧凑的文本摘要供模型阅读，所以你可以问
@@ -97,7 +97,7 @@ AIbleton 把 AI 对话助手直接放进 Ableton Live。对它说
 - **AI 音频生成** —— 用 Stable Audio、ElevenLabs、MiniMax 或任意自定义 HTTP API
   （中转站、自托管 MusicGen、Suno 类服务，同步异步皆可）把文字描述渲染成音频并
   直接进工程：loop 上编排、one-shot 进 Simpler；文件落在 User Library，随取随用。
-- **联网搜索（默认关闭）** —— 在 设置 → 联网搜索 打开后，助手可以搜网页
+- **联网搜索（默认关闭）** —— 在 设置 → 联网搜索 打开后，智能体可以搜网页
   （`web_search`，Bing 主引擎 + DuckDuckGo 自动兜底，均免 key，搜索语言跟随
   界面语言）并读取页面正文（`web_fetch`）：版本更新、价格、教程等时效问题
   直接查，粘贴的 URL 也能总结，回答附来源链接。只读、免确认，自动走系统代理。
@@ -201,7 +201,7 @@ Gemini / 自定义 OpenAI 兼容端点）对话 —— `get_song_overview`、`an
 
 ```
 ┌────────────────────┐      ┌──────────────────────┐      ┌────────────────┐
-│ 聊天界面           │      │ 助手服务             │      │ 模型 API       │
+│ 聊天界面           │      │ 智能体服务           │      │ 模型 API       │
 │（对话框 / 浏览器   │─────▶│ localhost:17666      │─────▶│ Codex / Claude │
 │  / AIbletonBar）   │      │ + 30+ 个 Live 工具   │◀─────│ Gemini / 任意  │
 └────────────────────┘      │                      │      │ OpenAI 兼容    │
@@ -228,7 +228,7 @@ User Library › AIbleton，再由模型用 `import_audio_clip` / `load_sample`
 ```
 AIbleton/          Live 扩展（TypeScript）
 ├── src/extension.ts   入口 —— 注册右键菜单动作，启动服务
-├── src/server.ts      助手服务 + 工具实现（Codex / Claude / Gemini / OpenAI 兼容）
+├── src/server.ts      智能体服务 + 工具实现（Codex / Claude / Gemini / OpenAI 兼容）
 ├── src/analysis.ts    analyze_song 引擎 —— 调性/角色/问题检测 + arrange_song 赖以规划的 clip map
 ├── src/audiogen.ts    音频生成 provider（Stable Audio / ElevenLabs / MiniMax / 自定义 HTTP）
 ├── src/websearch.ts   web_search（Bing + DuckDuckGo 兜底，免 key）+ web_fetch，代理感知
