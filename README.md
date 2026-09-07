@@ -23,14 +23,14 @@
 
 ## Download
 
-**Current version: v0.9.4** (pre-release) — get it from the
+**Current version: v0.9.5** (pre-release) — get it from the
 [**Releases page**](https://github.com/freddyzhangxu/aibleton/releases):
 
 | File | What it is |
 |---|---|
-| [AIbleton-0.9.4.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.4/AIbleton-0.9.4.ablx) | The Live extension — **required**. Drop it onto Live's **Settings → Extensions** page. |
-| [AIbletonBar-0.9.4-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.4/AIbletonBar-0.9.4-macOS.zip) | Optional macOS floating sidebar app (version kept in sync with the extension). |
-| [AIbletonBar-0.9.4-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.4/AIbletonBar-0.9.4-Windows.zip) | Optional Windows floating sidebar app — toggle with Win+Alt+A (version kept in sync with the extension). |
+| [AIbleton-0.9.5.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.5/AIbleton-0.9.5.ablx) | The Live extension — **required**. Drop it onto Live's **Settings → Extensions** page. |
+| [AIbletonBar-0.9.5-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.5/AIbletonBar-0.9.5-macOS.zip) | Optional macOS floating sidebar app (version kept in sync with the extension). |
+| [AIbletonBar-0.9.5-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.5/AIbletonBar-0.9.5-Windows.zip) | Optional Windows floating sidebar app — toggle with Win+Alt+A (version kept in sync with the extension). |
 
 No Node.js needed for end users — the extension runs inside Live's own Extension Host.
 
@@ -150,7 +150,7 @@ The project has two parts:
 ### For users — install the `.ablx`
 
 Requires **Ableton Live 12.4.5 beta** or later. Download
-[AIbleton-0.9.4.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.4/AIbleton-0.9.4.ablx),
+[AIbleton-0.9.5.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.5/AIbleton-0.9.5.ablx),
 then open Live's **Settings → Extensions** page and drag the `.ablx` file onto it —
 no Node.js, no terminal.
 
