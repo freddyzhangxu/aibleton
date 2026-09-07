@@ -14,6 +14,10 @@
     input, button, textarea { font: inherit; }
 
     :root {
+      /* Dark chrome for native widgets (scrollbars etc.) — without this,
+         Live's dialog webview defaults to light appearance and paints a
+         light scrollbar over the dark UI. */
+      color-scheme: dark;
       --c-bg: hsl(0, 0%, 21%);
       --c-panel: hsl(0, 0%, 16%);
       --c-input-bg: hsl(0, 0%, 12%);
