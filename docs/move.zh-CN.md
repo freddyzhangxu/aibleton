@@ -76,6 +76,13 @@ AIbleton 也能直接调用 Move Manager 的原生 HTTP API——不用插线、
 | `move_list_files` | 浏览文件夹/文件（Samples、Recordings……） |
 | `move_upload_sample` | 把本地音频推上 Move（默认 `Samples` 文件夹） |
 | `move_download_set` | 把 Set（`.ablbundle`）拉回 User Library 的 AIbleton 文件夹 |
+| `move_analyze_set` | 拉回 Set **并直接分析**：调性检测、每轨角色/音符数/音域、混音电平、设备预设、采样清单（含时长）——和 `analyze_song` 同一引擎，外加 Move 专属信息 |
+
+`move_analyze_set` 解析 `.ablbundle`（一个 zip：`Song.abl` 是 Ableton
+`song/1.8.x` 官方 schema 的 JSON，外加全部 WAV）。Move 没有编排视图，
+所有 clip 都按 session clip 报告。它开箱就能回答："这个 Set 什么调/什么速度"、
+"贝斯轨弹了多少音、什么音域"、"哪些采样是录的、哪些是核心库的"——也是把
+Move Set 搬回 Live 复刻或续写前的自然第一步。
 
 配对只需一次——令牌由扩展持久保存：
 
