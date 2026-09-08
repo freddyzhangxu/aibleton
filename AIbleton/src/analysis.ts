@@ -687,8 +687,10 @@ function fitBudget(analysis: SongAnalysis, budget = 5800): SongAnalysis {
 
 /** Interpretation entry point: MusicState -> SongAnalysis. Tools that already
  * have a MusicState (or want the state for themselves) call this directly —
- * analyze_song runs buildMusicState -> analyzeMusicState as two stages. */
-export function analyzeMusicState(state: MusicState): SongAnalysis {
+ * analyze_song runs buildMusicState -> analyzeMusicState as two stages.
+ * budget: JSON char cap for model-bound output; null = no fitBudget cut (the
+ * goal layer needs every section/track — a cut target can't be evaluated). */
+export function analyzeMusicState(state: MusicState, budget: number | null = 5800): SongAnalysis {
   const snap = state.snapshot;
   const num = snap.timeSig.numerator || 4;
   const den = snap.timeSig.denominator || 4;
@@ -906,7 +908,7 @@ export function analyzeMusicState(state: MusicState): SongAnalysis {
     issues,
     caveat: CAVEAT,
   };
-  return fitBudget(analysis);
+  return budget === null ? analysis : fitBudget(analysis, budget);
 }
 
 /** One-call wrapper: snapshot -> facts -> interpretation. Kept for consumers

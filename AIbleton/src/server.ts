@@ -66,6 +66,9 @@ import { buildMusicState } from "./musicstate/builder.js";
 import { postconditionsFor } from "./verify/rules.js";
 import { runVerification } from "./verify/verifier.js";
 import type { ProbeSong } from "./verify/types.js";
+import { CRITERION_KINDS, GOAL_TYPES, normalizeGoal, type GoalEvaluation, type MusicGoal } from "./goal/types.js";
+import { buildGoalView, type GoalView } from "./goal/view.js";
+import { evaluateGoal } from "./goal/evaluate.js";
 import { moveExtras, moveSongToSnapshot, parseMoveBundle } from "./movebundle.js";
 import { searchSampleIndex, toSampleEntry, type SampleEntry } from "./samplemeta.js";
 
@@ -476,6 +479,38 @@ const TRACK_NAME_DESC =
   "Track name as listed by get_song_overview. Always pass it together with the index: " +
   "the pair is verified and the track is re-resolved by name if the index has shifted since.";
 
+/** Flat parameter bag for goal criteria — one schema for every kind keeps it
+ * emittable for weak models (no per-kind nesting); the kind-specific required
+ * params are enforced server-side in goal/types.ts's normalizeGoal. */
+const CRITERION_INPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    kind: {
+      type: "string",
+      enum: [...CRITERION_KINDS],
+      description:
+        "section_energy_gt: section a's note density must exceed b's (a, b = section names; b may be " +
+        "\"baseline:<name>\" to compare against the same section's pre-change value). " +
+        "section_tracks_gte: a section's active-track count >= n. " +
+        "role_present: a role (kick|bass|drums|chords|pad|lead|…, or the group low_end = kick|bass) is audible " +
+        "in `section` (whole song when section omitted). " +
+        "tempo_unchanged / key_unchanged: self-explanatory. " +
+        "track_count_gte: total track count >= n. no_new_tracks: no tracks added. " +
+        "tracks_untouched: the named tracks keep identical note content (mixer/device tweaks not covered).",
+    },
+    a: { type: "string", description: "section_energy_gt: section that must win" },
+    b: { type: "string", description: "section_energy_gt: section to beat, or \"baseline:<name>\"" },
+    section: { type: "string", description: "Section cue name or \"bars N-M\" from analyze_song" },
+    role: { type: "string", description: "role_present: role name, or group low_end" },
+    n: {
+      anyOf: [{ type: "number" }, { type: "string" }],
+      description: "A number, or \"baseline\" = the value when the goal was declared",
+    },
+    names: { type: "array", items: { type: "string" }, description: "tracks_untouched: track names" },
+  },
+  required: ["kind"],
+};
+
 const TOOLS = [
   {
     name: "get_song_overview",
@@ -488,6 +523,47 @@ const TOOLS = [
     description:
       "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content), and a flat clip map (every arrangement clip's track/clip_index/bar/length + every session clip's track/scene_index — the coordinates arrange_song plans against). MIDI/structure-based only: audio clips contribute filename + duration. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview.",
     input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "set_goal",
+    description:
+      "Declare the user's current task as a goal with MACHINE-CHECKABLE success criteria — call it FIRST, " +
+      "before any Set-modifying tool, whenever the user asks for a musical change (create/edit/arrange/mix/sound_design/fix). " +
+      "The server snapshots the Set as the baseline when you declare; when you stop calling tools it evaluates every " +
+      "criterion against the new state, and unmet ones come back as a 目标校验 message (keep working, or explain the " +
+      "blocker — never claim completion while criteria are unmet). Criteria are a CLOSED vocabulary: pick a kind and " +
+      "fill its parameters — never invent kinds. Use analyze_song first to learn section names, then write 1–4 " +
+      "criteria that actually define the outcome (\"make the drop harder\" → section_energy_gt Drop vs Intro + " +
+      "role_present low_end in Drop). Skip set_goal for questions, analysis requests, and single-parameter tweaks " +
+      "(those results are already verified per-call).",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: [...GOAL_TYPES] },
+        objective: {
+          type: "string",
+          description: "One human-readable sentence. Shown to the user, NEVER evaluated — only criteria are.",
+        },
+        target: {
+          type: "object",
+          properties: {
+            track: { type: "string", description: "Track NAME (indices drift, names don't)" },
+            section: { type: "string", description: "Section cue name or \"bars N-M\" from analyze_song" },
+          },
+        },
+        constraints: {
+          type: "array",
+          description: "Hard boundaries that must still hold at the end (tempo_unchanged, no_new_tracks, tracks_untouched…)",
+          items: CRITERION_INPUT_SCHEMA,
+        },
+        successCriteria: {
+          type: "array",
+          description: "End-state conditions defining 'done' — 1–4, each must be checkable against the Set's structure",
+          items: CRITERION_INPUT_SCHEMA,
+        },
+      },
+      required: ["type", "objective", "successCriteria"],
+    },
   },
   {
     name: "arrange_song",
@@ -980,6 +1056,12 @@ Rules:
 - After tools run, confirm what changed in one short sentence.
 - Mutating tool results carry a "verified" flag: the server re-read the Set and checked the change actually landed (value, device, clip). If verified:false comes back with an error, the action DID execute but missed the target — do NOT re-run the same call blindly (that would duplicate content); correct it using the reported actual state, or tell the user what mismatch you see.
 - NEVER claim you changed the Live Set unless a tool actually performed the change in THIS turn. If you did not call a tool, nothing changed — do not pretend otherwise.
+
+Goals (tasks that change the Set):
+- When the user asks for a musical change — create, edit, arrange, mix, sound design, fix — call set_goal FIRST, before any Set-modifying tool, declaring machine-checkable successCriteria for what "done" means. Questions, analysis requests and single-knob tweaks do NOT need one.
+- Criteria are a CLOSED vocabulary (see the set_goal schema): pick a kind and fill its parameters. Section names come from analyze_song; "baseline:<name>" compares a section against its state at the moment you declared the goal. Never invent kinds.
+- set_goal snapshots the Set as its baseline. When you stop calling tools, the server evaluates every criterion against the new state. Unmet criteria come back as a 目标校验 message — keep working or explain the blocker; NEVER claim completion while criteria are unmet.
+- Write 1–4 criteria that genuinely define the outcome ("make the drop harder" → section_energy_gt Drop vs baseline:Drop + role_present low_end in Drop). The objective sentence is for humans; only criteria are judged.
 
 Making music that actually produces sound:
 - A MIDI track without an instrument is SILENT, and a bare "Drum Rack" is EMPTY and silent too.
@@ -1678,6 +1760,9 @@ async function runTool(
     case "analyze_song": {
       // Two-stage: facts (what is in the Set) -> interpretation (what it means).
       return analyzeMusicState(buildMusicState(buildSongSnapshot(song)));
+    }
+    case "set_goal": {
+      return handleSetGoal(context, input);
     }
     case "arrange_song": {
       return arrangeSong(context, input);
@@ -2519,6 +2604,7 @@ function truncateResult(resultJson: string): string {
 const READ_ONLY_TOOLS = new Set([
   "get_song_overview",
   "analyze_song",
+  "set_goal",
   "update_memory",
   "get_device_parameters",
   "get_clip_notes",
@@ -2621,6 +2707,146 @@ async function verifyToolResult(
   }
 }
 
+// ---------- Goal/Intent layer (goal/) ----------
+//
+// One declared goal per user turn. set_goal captures the baseline view at
+// declaration time; when the model stops calling tools, goalGate evaluates
+// the criteria and either lets the turn finish, injects a 目标校验 message so
+// the loop keeps going (bounded), or — retries exhausted — appends a
+// server-side note so the user sees the measured outcome, not the model's
+// claim. PR4 verifies single tool calls; this verifies the TASK.
+
+const GOAL_MAX_RETRIES = 2;
+
+let pendingGoal: {
+  goal: MusicGoal;
+  baseline: GoalView;
+  retries: number;
+  /** Declared after mutations already happened this turn — relative
+   * ("baseline") criteria then compare against a mid-task state. */
+  lateBaseline: boolean;
+} | null = null;
+
+/** Mutating calls that actually executed this turn (drives lateBaseline). */
+let mutationsThisTurn = 0;
+
+/** Compact baseline summary for the set_goal tool result — the model reads
+ * these numbers when picking thresholds. */
+function summarizeView(v: GoalView): Record<string, unknown> {
+  const r2 = (x: number) => Math.round(x * 100) / 100;
+  return {
+    tempo: v.tempo,
+    key: v.keyBest ?? null,
+    trackCount: v.trackCount,
+    sections: v.sections.map((s) => ({ name: s.name, bars: s.bars, density: r2(s.density), tracks: s.tracks })),
+  };
+}
+
+function handleSetGoal(context: Ctx, input: Record<string, unknown>): unknown {
+  const norm = normalizeGoal(input);
+  if (!norm.goal) {
+    throw new Error(
+      `set_goal 未生效：没有有效的 successCriteria/constraints。` +
+        (norm.warnings.length ? ` ${norm.warnings.join("；")}` : ""),
+    );
+  }
+  const late = mutationsThisTurn > 0;
+  const warnings = [...norm.warnings];
+  if (late && !pendingGoal) {
+    warnings.push(
+      `注意：本回合已有 ${mutationsThisTurn} 次改动先于 set_goal 执行，基线捕获的是改动后的状态 — set_goal 应在任何修改类工具之前调用。`,
+    );
+  }
+  pendingGoal = {
+    goal: norm.goal,
+    // Re-declaring within one turn refines the criteria but keeps the
+    // ORIGINAL baseline — "what the user asked for this turn" is anchored at
+    // the first declaration.
+    baseline: pendingGoal?.baseline ??
+      buildGoalView(buildMusicState(buildSongSnapshot(context.application.song))),
+    retries: pendingGoal?.retries ?? 0,
+    lateBaseline: pendingGoal?.lateBaseline ?? late,
+  };
+  debugLog(
+    context,
+    `GOAL set (${norm.goal.type}): ${norm.goal.objective} · criteria=${norm.goal.successCriteria.length} constraints=${norm.goal.constraints.length}`,
+  );
+  return {
+    goal_set: true,
+    type: norm.goal.type,
+    objective: norm.goal.objective,
+    criteria: norm.goal.successCriteria.length,
+    constraints: norm.goal.constraints.length,
+    baseline: summarizeView(pendingGoal.baseline),
+    ...(warnings.length ? { warnings } : {}),
+  };
+}
+
+type GoalGateResult = { inject: string } | { appendNote: string } | null;
+
+const GOAL_RETRY_TAIL: Record<string, string> = {
+  zh: "请继续调用工具直到标准满足；若确实无法满足，向用户如实说明卡在哪一步。禁止在标准未满足时声称已完成。 / Keep working until the criteria pass, or tell the user honestly what is blocking you — do NOT claim completion while they are unmet.",
+  en: "Keep working until the criteria pass, or tell the user honestly what is blocking you — do NOT claim completion while they are unmet.",
+};
+
+function goalRetryMessage(goal: MusicGoal, ev: GoalEvaluation, retries: number, language?: string): string {
+  const lines: string[] = [
+    `【目标校验 / Goal check】第 ${retries}/${GOAL_MAX_RETRIES} 次校验，目标「${goal.objective}」尚未达成：`,
+  ];
+  if (ev.constraintIssues.length) lines.push(`约束违反：${ev.constraintIssues.join("；")}`);
+  if (ev.criteriaIssues.length) lines.push(`未达成标准：${ev.criteriaIssues.join("；")}`);
+  lines.push(GOAL_RETRY_TAIL[language ?? ""] ?? GOAL_RETRY_TAIL.zh);
+  return lines.join("\n");
+}
+
+const GOAL_UNMET_NOTE: Record<string, string> = {
+  zh: `\n\n⚠️ 目标校验未通过（系统已重试 ${GOAL_MAX_RETRIES} 次）：`,
+  en: `\n\n⚠️ Goal check failed (retried ${GOAL_MAX_RETRIES}× by the server): `,
+};
+
+function goalUnmetNote(ev: GoalEvaluation, language?: string): string {
+  const head = GOAL_UNMET_NOTE[language ?? ""] ?? GOAL_UNMET_NOTE.zh;
+  const issues = [...ev.constraintIssues, ...ev.criteriaIssues].join("；");
+  const tail =
+    (language ?? "").startsWith("zh") || !language
+      ? "。以上为系统对 Live Set 的实际检测结果，与上文表述如有出入以检测结果为准。"
+      : ". This is the server's measured state of the Live Set — trust it over the text above.";
+  return `${head}${issues}${tail}`;
+}
+
+/** Evaluate the pending goal at a loop's text-exit. Returns what the loop
+ * should do: inject a retry message and continue, or append a note and
+ * finish. Never throws — a goal-layer bug must not break a working chat. */
+async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult> {
+  const held = pendingGoal;
+  if (!held) return null;
+  try {
+    const after = buildGoalView(
+      buildMusicState(buildSongSnapshot(context.application.song)),
+    );
+    const ev = evaluateGoal(held.goal, held.baseline, after);
+    if (ev.met) {
+      pendingGoal = null;
+      debugLog(context, `GOAL MET: ${held.goal.objective}`);
+      return null;
+    }
+    debugLog(
+      context,
+      `GOAL UNMET (${held.retries + 1}/${GOAL_MAX_RETRIES + 1}): ${[...ev.constraintIssues, ...ev.criteriaIssues].join("；")}`,
+    );
+    if (held.retries >= GOAL_MAX_RETRIES) {
+      pendingGoal = null;
+      return { appendNote: goalUnmetNote(ev, language) };
+    }
+    held.retries++;
+    return { inject: goalRetryMessage(held.goal, ev, held.retries, language) };
+  } catch (err) {
+    pendingGoal = null;
+    debugLog(context, `GOAL gate skipped: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
 async function callTool(
   context: Ctx,
   actions: { tool: string; input: unknown; result: unknown }[],
@@ -2644,6 +2870,14 @@ async function callTool(
     result = { error: err instanceof Error ? err.message : String(err) };
   }
   result = await verifyToolResult(context, name, input, result);
+  // Count executed mutations so a set_goal declared mid-turn can flag that
+  // its baseline is already post-change (handleSetGoal's late warning).
+  if (
+    !READ_ONLY_TOOLS.has(name) &&
+    !(result !== null && typeof result === "object" && "error" in result)
+  ) {
+    mutationsThisTurn++;
+  }
   actions.push({ tool: name, input, result });
   const resultJson = JSON.stringify(result);
   debugLog(context, `TOOL ${name} ${JSON.stringify(input)} -> ${resultJson.slice(0, 400)}`);
@@ -2775,6 +3009,10 @@ async function ensureCodexAuth(cfg: ResolvedConfig): Promise<void> {
 }
 
 async function chat(context: Ctx, req: ChatRequest) {
+  // A new user turn: any goal from the previous turn has already been judged
+  // (or abandoned) — never let a stale goal gate an unrelated request.
+  pendingGoal = null;
+  mutationsThisTurn = 0;
   const cfg = resolveConfig(req);
   // Custom endpoints may legitimately need no key (Ollama & co.) — they get
   // their own validation (baseUrl + model) inside chatCustom instead.
@@ -2954,7 +3192,13 @@ async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest
         .map((b) => b.text ?? "")
         .join("\n")
         .trim() || "（无文本回复）";
-    return finishChat(context, actions, reply);
+    const gate = await goalGate(context, req.language);
+    if (gate && "inject" in gate) {
+      messages.push({ role: "assistant", content });
+      messages.push({ role: "user", content: gate.inject });
+      continue;
+    }
+    return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
   }
   throw new Error("工具调用次数过多，已中止");
 }
@@ -3125,7 +3369,13 @@ async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
           .map((c) => c.text ?? "")
           .join("\n")
           .trim() || "（无文本回复）";
-      return finishChat(context, actions, reply);
+      const gate = await goalGate(context, req.language);
+      if (gate && "inject" in gate) {
+        input.push(...output);
+        input.push({ role: "user", content: [{ type: "input_text", text: gate.inject }] });
+        continue;
+      }
+      return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
     }
 
     // Echo the model's output items back, then append each tool result.
@@ -3248,7 +3498,13 @@ async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
     if (!calls.length) {
       const reply =
         (typeof msg.content === "string" ? msg.content : "").trim() || "（无文本回复）";
-      return finishChat(context, actions, reply);
+      const gate = await goalGate(context, req.language);
+      if (gate && "inject" in gate) {
+        messages.push({ role: "assistant", content: msg.content ?? "" });
+        messages.push({ role: "user", content: gate.inject });
+        continue;
+      }
+      return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
     }
     // Echo the model's message (with its tool_calls verbatim), then append results.
     messages.push({
@@ -3383,7 +3639,13 @@ async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
           .map((p) => p.text!)
           .join("\n")
           .trim() || "（无文本回复）";
-      return finishChat(context, actions, reply);
+      const gate = await goalGate(context, req.language);
+      if (gate && "inject" in gate) {
+        contents.push({ role: "model", parts });
+        contents.push({ role: "user", parts: [{ text: gate.inject }] });
+        continue;
+      }
+      return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
     }
 
     contents.push({ role: "model", parts });
