@@ -69,6 +69,8 @@ import type { ProbeSong } from "./verify/types.js";
 import { CRITERION_KINDS, GOAL_TYPES, normalizeGoal, type GoalEvaluation, type MusicGoal } from "./goal/types.js";
 import { buildGoalView, type GoalView } from "./goal/view.js";
 import { evaluateGoal } from "./goal/evaluate.js";
+import { EFFECT_METRICS, normalizePlan, type MusicPlan } from "./plan/types.js";
+import { buildPlanReport, executedStepIds, type PlanReport } from "./plan/check.js";
 import { moveExtras, moveSongToSnapshot, parseMoveBundle } from "./movebundle.js";
 import { searchSampleIndex, toSampleEntry, type SampleEntry } from "./samplemeta.js";
 
@@ -563,6 +565,76 @@ const TOOLS = [
         },
       },
       required: ["type", "objective", "successCriteria"],
+    },
+  },
+  {
+    name: "set_plan",
+    description:
+      "Declare your step-by-step plan for the declared goal — call it AFTER set_goal, BEFORE any Set-modifying " +
+      "tool, whenever the task needs 2+ tool calls or multiple stages. Each step names the tool you expect to " +
+      "call and the expectedEffects it should produce, so you always know WHY you call a tool and WHAT should " +
+      "change afterwards. Effects are a CLOSED vocabulary (see the schema): pick a metric and fill its " +
+      "parameters — never invent metrics. The server tracks which steps actually execute (matched from your " +
+      "tool calls) and, if the goal check fails at the end, reports per step: which steps never ran and which " +
+      "predicted effects were NOT observed against the measured Set — use that to fix the right step instead " +
+      "of repeating calls blindly. Skip set_plan for single-call tweaks. Re-declaring replaces the plan.",
+    input_schema: {
+      type: "object",
+      properties: {
+        steps: {
+          type: "array",
+          description: "Ordered plan steps (max 12). Keep descriptions short and musical.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Optional stable id (auto-assigned step-N when omitted)" },
+              description: {
+                type: "string",
+                description: "One short sentence of intent, e.g. \"Add open-hat pattern to the drop\"",
+              },
+              tool: {
+                type: "string",
+                description: "The tool expected to carry out this step (must be a real tool name)",
+              },
+              args: {
+                type: "object",
+                description: "Optional sketch of the intended call arguments — display only, never validated",
+              },
+              expectedEffects: {
+                type: "array",
+                description: "What this step should measurably change (max 4 per step) — checked against the Set at the end",
+                items: {
+                  type: "object",
+                  properties: {
+                    metric: {
+                      type: "string",
+                      enum: [...EFFECT_METRICS],
+                      description:
+                        "section_energy: a section's note density (notes/bar) moves vs baseline — needs section + direction. " +
+                        "section_tracks: a section's active-track count moves — needs section + direction. " +
+                        "role_audible: a role (kick|bass|drums|chords|pad|lead|…, or group low_end) is audible afterwards — " +
+                        "needs role, optional section (whole song when omitted), NO direction. " +
+                        "track_notes: a track's audible note count moves — needs track (name) + direction. " +
+                        "track_count / tempo: total tracks / song tempo moves — need direction only.",
+                    },
+                    direction: {
+                      type: "string",
+                      enum: ["increase", "decrease"],
+                      description: "Required for every metric except role_audible",
+                    },
+                    section: { type: "string", description: "Section cue name or \"bars N-M\" from analyze_song" },
+                    track: { type: "string", description: "track_notes: track NAME (indices drift, names don't)" },
+                    role: { type: "string", description: "role_audible: role name, or group low_end" },
+                  },
+                  required: ["metric"],
+                },
+              },
+            },
+            required: ["description"],
+          },
+        },
+      },
+      required: ["steps"],
     },
   },
   {
@@ -1062,6 +1134,11 @@ Goals (tasks that change the Set):
 - Criteria are a CLOSED vocabulary (see the set_goal schema): pick a kind and fill its parameters. Section names come from analyze_song; "baseline:<name>" compares a section against its state at the moment you declared the goal. Never invent kinds.
 - set_goal snapshots the Set as its baseline. When you stop calling tools, the server evaluates every criterion against the new state. Unmet criteria come back as a 目标校验 message — keep working or explain the blocker; NEVER claim completion while criteria are unmet.
 - Write 1–4 criteria that genuinely define the outcome ("make the drop harder" → section_energy_gt Drop vs baseline:Drop + role_present low_end in Drop). The objective sentence is for humans; only criteria are judged.
+
+Plans (multi-step tasks):
+- After set_goal, when the task needs 2+ tool calls or multiple stages, call set_plan with your ordered steps BEFORE touching the Set. Each step: a short description, the tool you expect to call, and expectedEffects — what the step should measurably change (closed vocabulary, see the set_plan schema).
+- expectedEffects are your own predictions ("add hats" → section_energy increase in Drop). The server checks them against the measured Set at the end. If the goal check fails, the 目标校验 message includes a 计划诊断: which steps never executed (matched from your actual tool calls, not your claims) and which predicted effects were not observed — fix THAT step instead of re-running calls that already landed.
+- Skip set_plan for single-call tweaks. Declaring a plan never modifies the Set.
 
 Making music that actually produces sound:
 - A MIDI track without an instrument is SILENT, and a bare "Drum Rack" is EMPTY and silent too.
@@ -1763,6 +1840,9 @@ async function runTool(
     }
     case "set_goal": {
       return handleSetGoal(context, input);
+    }
+    case "set_plan": {
+      return handleSetPlan(context, input);
     }
     case "arrange_song": {
       return arrangeSong(context, input);
@@ -2605,6 +2685,7 @@ const READ_ONLY_TOOLS = new Set([
   "get_song_overview",
   "analyze_song",
   "set_goal",
+  "set_plan",
   "update_memory",
   "get_device_parameters",
   "get_clip_notes",
@@ -2730,6 +2811,66 @@ let pendingGoal: {
 /** Mutating calls that actually executed this turn (drives lateBaseline). */
 let mutationsThisTurn = 0;
 
+// ---------- Plan layer (plan/) ----------
+//
+// One declared plan per goal. set_plan attaches ordered steps — each with its
+// tool and predicted expectedEffects — to the pending goal. The plan never
+// gates (goal criteria alone decide "done"); it DIAGNOSES: when the goal gate
+// fails, the retry injection names the steps that never executed and the
+// predicted effects that were not observed, so self-correction targets the
+// right step. Step execution is inferred server-side from the tool-call log —
+// never from the model's own claims.
+
+let pendingPlan: MusicPlan | null = null;
+
+/** Every tool call that actually RAN this turn (denied/thrown excluded;
+ * verify-failed INCLUDED — "executed but missed target" is not "never
+ * happened"). Replayed against plan steps at declare/gate time. */
+let executedToolsThisTurn: string[] = [];
+
+/** Declaring intent (set_goal/set_plan) is not executing a plan step. */
+const PLAN_META_TOOLS = new Set(["set_goal", "set_plan"]);
+
+/** Known tool names for plan validation — built once from TOOLS. */
+const VALID_TOOL_NAMES: ReadonlySet<string> = new Set(TOOLS.map((t) => t.name));
+
+function handleSetPlan(context: Ctx, input: Record<string, unknown>): unknown {
+  if (!pendingGoal) {
+    throw new Error("set_plan 需要先声明目标 — 请先调用 set_goal（计划必须挂在目标上）。 / Call set_goal first: a plan belongs to a declared goal.");
+  }
+  const norm = normalizePlan(input, VALID_TOOL_NAMES);
+  if (!norm.steps) {
+    throw new Error(
+      `set_plan 未生效：没有有效步骤。` + (norm.warnings.length ? ` ${norm.warnings.join("；")}` : ""),
+    );
+  }
+  const warnings = [...norm.warnings];
+  if (mutationsThisTurn > 0) {
+    warnings.push(
+      `注意：本回合已有 ${mutationsThisTurn} 次改动先于 set_plan 执行 — 计划应在动手之前声明（步骤匹配仍会回放已执行的调用）。`,
+    );
+  }
+  pendingPlan = { goal: pendingGoal.goal, steps: norm.steps };
+  // Replay the turn so far: a plan declared late still gets correct statuses.
+  const done = executedStepIds(pendingPlan.steps, executedToolsThisTurn);
+  debugLog(
+    context,
+    `PLAN set: ${norm.steps.length} steps for goal「${pendingGoal.goal.objective}」· already executed=${done.size}`,
+  );
+  return {
+    plan_set: true,
+    goal: pendingGoal.goal.objective,
+    steps: pendingPlan.steps.map((s) => ({
+      id: s.id,
+      description: s.description,
+      ...(s.tool ? { tool: s.tool } : {}),
+      effects: s.expectedEffects.length,
+      ...(done.has(s.id) ? { already_executed: true } : {}),
+    })),
+    ...(warnings.length ? { warnings } : {}),
+  };
+}
+
 /** Compact baseline summary for the set_goal tool result — the model reads
  * these numbers when picking thresholds. */
 function summarizeView(v: GoalView): Record<string, unknown> {
@@ -2756,6 +2897,11 @@ function handleSetGoal(context: Ctx, input: Record<string, unknown>): unknown {
     warnings.push(
       `注意：本回合已有 ${mutationsThisTurn} 次改动先于 set_goal 执行，基线捕获的是改动后的状态 — set_goal 应在任何修改类工具之前调用。`,
     );
+  }
+  if (pendingPlan) {
+    // The goal the plan was built for just changed — the old plan is stale.
+    pendingPlan = null;
+    warnings.push(`目标已重新声明，之前的计划已清除 — 请重新调用 set_plan。`);
   }
   pendingGoal = {
     goal: norm.goal,
@@ -2789,12 +2935,30 @@ const GOAL_RETRY_TAIL: Record<string, string> = {
   en: "Keep working until the criteria pass, or tell the user honestly what is blocking you — do NOT claim completion while they are unmet.",
 };
 
-function goalRetryMessage(goal: MusicGoal, ev: GoalEvaluation, retries: number, language?: string): string {
+/** Plan diagnosis appended to goal-gate messages: which steps never ran and
+ * which predicted effects didn't materialize — the retry's self-correction
+ * target. Empty when the plan fully executed and every effect was observed. */
+function planDiagnosisLines(report: PlanReport): string[] {
+  const lines: string[] = [];
+  const unexecuted = report.unexecuted.map(
+    (s) => `${s.id}「${s.description}」${s.tool ? ` (${s.tool})` : ""}`,
+  );
+  if (unexecuted.length) lines.push(`计划中未执行的步骤：${unexecuted.join("；")}`);
+  const missed = report.unobserved.map(
+    (fx) => `${fx.stepId}「${fx.description}」: 期望 ${fx.expected}${fx.actual ? `，实际 ${fx.actual}` : ""}`,
+  );
+  if (missed.length) lines.push(`预期效果未观察到：${missed.join("；")}`);
+  if (lines.length) lines.unshift(`【计划诊断 / Plan】已执行 ${report.executedCount}/${report.total} 步：`);
+  return lines;
+}
+
+function goalRetryMessage(goal: MusicGoal, ev: GoalEvaluation, retries: number, language?: string, plan?: PlanReport): string {
   const lines: string[] = [
     `【目标校验 / Goal check】第 ${retries}/${GOAL_MAX_RETRIES} 次校验，目标「${goal.objective}」尚未达成：`,
   ];
   if (ev.constraintIssues.length) lines.push(`约束违反：${ev.constraintIssues.join("；")}`);
   if (ev.criteriaIssues.length) lines.push(`未达成标准：${ev.criteriaIssues.join("；")}`);
+  if (plan) lines.push(...planDiagnosisLines(plan));
   lines.push(GOAL_RETRY_TAIL[language ?? ""] ?? GOAL_RETRY_TAIL.zh);
   return lines.join("\n");
 }
@@ -2804,14 +2968,15 @@ const GOAL_UNMET_NOTE: Record<string, string> = {
   en: `\n\n⚠️ Goal check failed (retried ${GOAL_MAX_RETRIES}× by the server): `,
 };
 
-function goalUnmetNote(ev: GoalEvaluation, language?: string): string {
+function goalUnmetNote(ev: GoalEvaluation, language?: string, plan?: PlanReport): string {
   const head = GOAL_UNMET_NOTE[language ?? ""] ?? GOAL_UNMET_NOTE.zh;
   const issues = [...ev.constraintIssues, ...ev.criteriaIssues].join("；");
+  const planLines = plan ? planDiagnosisLines(plan) : [];
   const tail =
     (language ?? "").startsWith("zh") || !language
       ? "。以上为系统对 Live Set 的实际检测结果，与上文表述如有出入以检测结果为准。"
       : ". This is the server's measured state of the Live Set — trust it over the text above.";
-  return `${head}${issues}${tail}`;
+  return `${head}${issues}${planLines.length ? `\n${planLines.join("\n")}` : ""}${tail}`;
 }
 
 /** Evaluate the pending goal at a loop's text-exit. Returns what the loop
@@ -2825,23 +2990,38 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
       buildMusicState(buildSongSnapshot(context.application.song)),
     );
     const ev = evaluateGoal(held.goal, held.baseline, after);
+    // Plan diagnosis rides the SAME before/after views, so a plan effect and
+    // a goal criterion can never disagree about the numbers. The plan never
+    // gates: a met goal clears it silently (debugLog only).
+    const plan = pendingPlan
+      ? buildPlanReport(pendingPlan, executedToolsThisTurn, held.baseline, after)
+      : null;
     if (ev.met) {
       pendingGoal = null;
-      debugLog(context, `GOAL MET: ${held.goal.objective}`);
+      pendingPlan = null;
+      debugLog(
+        context,
+        `GOAL MET: ${held.goal.objective}` + (plan ? ` · plan ${plan.executedCount}/${plan.total} steps` : ""),
+      );
       return null;
     }
     debugLog(
       context,
-      `GOAL UNMET (${held.retries + 1}/${GOAL_MAX_RETRIES + 1}): ${[...ev.constraintIssues, ...ev.criteriaIssues].join("；")}`,
+      `GOAL UNMET (${held.retries + 1}/${GOAL_MAX_RETRIES + 1}): ${[...ev.constraintIssues, ...ev.criteriaIssues].join("；")}` +
+        (plan
+          ? ` · plan: ${plan.unexecuted.length} steps unexecuted, ${plan.unobserved.length} effects unobserved`
+          : ""),
     );
     if (held.retries >= GOAL_MAX_RETRIES) {
       pendingGoal = null;
-      return { appendNote: goalUnmetNote(ev, language) };
+      pendingPlan = null;
+      return { appendNote: goalUnmetNote(ev, language, plan ?? undefined) };
     }
     held.retries++;
-    return { inject: goalRetryMessage(held.goal, ev, held.retries, language) };
+    return { inject: goalRetryMessage(held.goal, ev, held.retries, language, plan ?? undefined) };
   } catch (err) {
     pendingGoal = null;
+    pendingPlan = null;
     debugLog(context, `GOAL gate skipped: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
@@ -2866,6 +3046,10 @@ async function callTool(
   let result: unknown;
   try {
     result = await runTool(context, name, input);
+    // Plan-layer step matching counts every call that actually ran — a call
+    // whose verify later fails still executed ("missed target" ≠ "never
+    // happened"); the step's effect check carries that diagnosis instead.
+    if (!PLAN_META_TOOLS.has(name)) executedToolsThisTurn.push(name);
   } catch (err) {
     result = { error: err instanceof Error ? err.message : String(err) };
   }
@@ -3012,7 +3196,9 @@ async function chat(context: Ctx, req: ChatRequest) {
   // A new user turn: any goal from the previous turn has already been judged
   // (or abandoned) — never let a stale goal gate an unrelated request.
   pendingGoal = null;
+  pendingPlan = null;
   mutationsThisTurn = 0;
+  executedToolsThisTurn = [];
   const cfg = resolveConfig(req);
   // Custom endpoints may legitimately need no key (Ollama & co.) — they get
   // their own validation (baseUrl + model) inside chatCustom instead.
