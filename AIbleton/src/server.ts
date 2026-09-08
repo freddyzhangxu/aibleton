@@ -61,7 +61,7 @@ import {
   type Track,
   type ClipLoopSettings,
 } from "@ableton-extensions/sdk";
-import { analyzeMusicState, analyzeSong, presentAnalysis } from "./analysis/index.js";
+import { analyzeMusicState, analyzeSong, presentAnalysis, selectMusicContext } from "./analysis/index.js";
 import { buildMusicState, tileClipNotes } from "./musicstate/builder.js";
 import type { SnapshotClip, SongSnapshot } from "./musicstate/types.js";
 import { postconditionsFor } from "./verify/rules.js";
@@ -533,8 +533,17 @@ const TOOLS = [
   {
     name: "analyze_song",
     description:
-      "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content), and a flat clip map (every arrangement clip's track/clip_index/bar/length + every session clip's track/scene_index — the coordinates arrange_song plans against). MIDI/structure-based only: audio clips contribute filename + duration. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview.",
-    input_schema: { type: "object", properties: {} },
+      "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content), and a flat clip map (every arrangement clip's track/clip_index/bar/length + every session clip's track/scene_index — the coordinates arrange_song plans against). MIDI/structure-based only: audio clips contribute filename + duration. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview. Optional focus narrows the read to what matters for the question.",
+    input_schema: {
+      type: "object",
+      properties: {
+        focus: {
+          type: "string",
+          description:
+            "Optional: narrow the analysis to what matters — a track name or role (\"bass\", \"drums\", \"vocal\"), a section name, or an issue code (\"MONOTONE_BASS\"). Focused tracks keep full stats and the clip map keeps only their clips; other tracks collapse to one-line summaries (indices stay valid). Omit for the full read.",
+        },
+      },
+    },
   },
   {
     name: "set_goal",
@@ -820,6 +829,10 @@ const TOOLS = [
       type: "object",
       properties: {
         set_id: { type: "string", description: "Set id from move_list_sets" },
+        focus: {
+          type: "string",
+          description: "Optional, same as analyze_song's focus: narrow the read to a track name, role, or issue code.",
+        },
       },
       required: ["set_id"],
     },
@@ -1210,6 +1223,7 @@ Compression and sidechain:
 
 Song analysis (read-only):
 - analyze_song gives an engineering-level read of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's own scale setting, per-track roles (kick/snare/hats/bass/chords/pad/lead/arp/vocal/…) with note/velocity/density/polyphony/entropy stats, section structure (cue points, else 8-bar energy blocks), a session-view summary, and rule-based issues (SINGLE_LOOP, DUPLICATE_CONTENT, LOW_CONTRAST, FLAT_DYNAMICS, MONOTONE_BASS, OFF_KEY, NO_LOW_END/NO_HIGH_END, MUTED_CONTENT, KEY_MISMATCH).
+- When the user's question is about specific material ("the bass is boring", "what's the vocal doing"), pass analyze_song's focus parameter ("bass", "vocal"): focused tracks keep full stats, every section shows whether the focused tracks are active in it (focusTracks), relevant issues sort first, and everything else collapses to one-liners — much cheaper than the full read on large Sets, and the focused tracks' details can't be crowded out. Omit focus for song-wide work (arranging, key/energy overview).
 - Call it when the user asks to analyze/review/diagnose the track, before proposing arrangement or structural changes, or when you need key/role context to write a part that fits. It is read-only and needs no confirmation.
 - It is MIDI- and structure-based ONLY: audio clips contribute filename + duration — no loudness, timbre or transcribed pitch. Never claim you listened to the audio.
 - Track indices in its output match get_song_overview, so you can follow up with get_clip_notes on a specific track.
@@ -1850,9 +1864,14 @@ async function runTool(
     }
     case "analyze_song": {
       // Three-stage: facts (what is in the Set) -> interpretation (what it
-      // means) -> presentation (model-bound JSON, budget-fitted).
+      // means) -> presentation (model-bound JSON, budget-fitted). Optional
+      // focus runs the Context Selector between interpretation and
+      // presentation (select.ts) for a focused projection.
       const state = buildMusicState(buildSongSnapshot(song));
-      return presentAnalysis(state, analyzeMusicState(state));
+      const ma = analyzeMusicState(state);
+      const focus =
+        typeof input.focus === "string" && input.focus.trim() ? input.focus.trim() : undefined;
+      return presentAnalysis(state, ma, 5800, focus ? selectMusicContext(state, ma, focus) : undefined);
     }
     case "set_goal": {
       return handleSetGoal(context, input);
@@ -2003,7 +2022,11 @@ async function runTool(
       const result = {
         set: setName || filename.replace(/\.ablbundle$/i, ""),
         saved: target,
-        ...analyzeSong(moveSongToSnapshot(bundle.song)),
+        ...analyzeSong(
+          moveSongToSnapshot(bundle.song),
+          5800,
+          typeof input.focus === "string" && input.focus.trim() ? input.focus.trim() : undefined,
+        ),
         move: moveExtras(bundle) as unknown as Record<string, unknown>,
       };
       // analyzeSong fits itself to 5800 — the move extras ride on top of that,

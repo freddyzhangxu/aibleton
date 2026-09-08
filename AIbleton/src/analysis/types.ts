@@ -33,6 +33,9 @@ export interface SectionAnalysis {
   energy: "low" | "mid" | "high";
   tracks: number; // tracks with >= 1 onset in this section
   notes: number;
+  /** Presentation-only (present.ts, focused render): indices of the SELECTED
+   * tracks audible in this section. interpret.ts never fills this. */
+  focusTracks?: number[];
 }
 
 /** Role attribution for one track. isDrums is the classification that kept
@@ -106,6 +109,15 @@ export interface ClipEntry {
   muted?: true;
 }
 
+/** Echo of the analyze_song focus parameter (select.ts): what the caller
+ * asked for and what it matched. unmatched: the focus matched nothing and
+ * the full analysis was returned instead. */
+export interface FocusEcho {
+  raw: string;
+  matched: string[]; // e.g. ["track:Bass", "role:bass", "issue:MONOTONE_BASS"]
+  unmatched?: true;
+}
+
 export interface SongAnalysis {
   tempo: number;
   timeSig: string;
@@ -120,4 +132,5 @@ export interface SongAnalysis {
   session: { scenes: number; clips: number; tracks: number; notes: number };
   issues: string[];
   caveat: string;
+  focus?: FocusEcho;
 }
