@@ -3,17 +3,17 @@
  *
  * Built twice per goal turn: once when set_goal is declared (baseline) and
  * once when the model stops calling tools (after). Everything here is derived
- * from MusicState + the interpretation layer (analysis.ts) with budget cuts
- * OFF — a section lost to fitBudget could never be evaluated.
+ * from MusicState + MusicAnalysis (analysis/) — the uncut interpretation
+ * layer, so a section lost to fitBudget could never be evaluated.
  *
  * Section role attribution walks audible onsets per track (same tiling math
- * as analysis.ts's sectionEnergy) and maps them into section beat ranges
- * recovered from SectionInfo.bars. Cue-aligned boundaries are bar-rounded
+ * as interpret.ts's sectionEnergy) and maps them into section beat ranges
+ * recovered from SectionAnalysis.bars. Cue-aligned boundaries are bar-rounded
  * here, so an onset within half a beat of a cue can land one section over —
  * acceptable for role presence, which is all this walk feeds.
  */
 
-import { analyzeMusicState } from "../analysis.js";
+import { analyzeMusicState } from "../analysis/index.js";
 import type { MusicState } from "../musicstate/types.js";
 
 export interface GoalTrackMeasure {
@@ -26,9 +26,9 @@ export interface GoalTrackMeasure {
 export interface GoalSectionMeasure {
   name: string;
   bars: [number, number];
-  notes: number; // onsets incl. loop repeats (from SectionInfo)
+  notes: number; // onsets incl. loop repeats (from SectionAnalysis)
   density: number; // notes per bar
-  tracks: number; // tracks with >= 1 onset (from SectionInfo)
+  tracks: number; // tracks with >= 1 onset (from SectionAnalysis)
   roles: Set<string>; // roles audible in this section (the onset walk below)
 }
 
@@ -42,10 +42,10 @@ export interface GoalView {
 }
 
 export function buildGoalView(state: MusicState): GoalView {
-  const analysis = analyzeMusicState(state, null);
+  const ma = analyzeMusicState(state);
   const barBeats = state.barBeats;
 
-  const sections: GoalSectionMeasure[] = analysis.sections.map((s) => ({
+  const sections: GoalSectionMeasure[] = ma.sections.map((s) => ({
     name: s.name,
     bars: s.bars,
     notes: s.notes,
@@ -63,7 +63,7 @@ export function buildGoalView(state: MusicState): GoalView {
   // exactly like sectionEnergy does (loop region tiled across the clip).
   state.tracks.forEach((ts, i) => {
     if (ts.muted) return;
-    const role = analysis.tracks[i]?.role ?? "unknown";
+    const role = ma.trackRoles[i]?.role ?? "unknown";
     for (const cs of ts.clips) {
       const { clip, window: win, material } = cs;
       if (clip.start === null || clip.muted || material.length === 0) continue;
@@ -82,16 +82,16 @@ export function buildGoalView(state: MusicState): GoalView {
     }
   });
 
-  const tracks: GoalTrackMeasure[] = analysis.tracks.map((t) => ({
-    name: t.name,
-    role: t.role,
-    notes: t.notes,
-    muted: t.muted === true,
+  const tracks: GoalTrackMeasure[] = state.tracks.map((ts, i) => ({
+    name: ts.track.name,
+    role: ma.trackRoles[i]?.role ?? "unknown",
+    notes: ts.measurements?.audibleNotes ?? 0,
+    muted: ts.muted,
   }));
 
   return {
-    tempo: analysis.tempo,
-    keyBest: analysis.key.best,
+    tempo: state.snapshot.tempo ?? 120,
+    keyBest: ma.key.best,
     trackCount: tracks.length,
     tracks,
     sections,

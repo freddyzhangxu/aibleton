@@ -20,7 +20,7 @@ import {
   parseMoveBundle,
   unzipEntries,
 } from "../src/movebundle.js";
-import { analyzeSong } from "../src/analysis.js";
+import { analyzeSong } from "../src/analysis/index.js";
 
 // ---------------------------------------------------------------------------
 // Minimal zip writer (STORE/DEFLATE + data descriptor, mirrors Move output)

@@ -1,5 +1,5 @@
 /**
- * Fixture-based smoke test for src/analysis.ts (analyze_song).
+ * Fixture-based smoke test for src/analysis/ (analyze_song).
  * Run: npx tsx scripts/test-analysis.ts
  *
  * All fixtures are plain SongSnapshot objects — no Live, no SDK.
@@ -7,12 +7,15 @@
 import {
   analyzeMusicState,
   analyzeSong,
-  type SnapshotClip,
-  type SnapshotNote,
-  type SnapshotTrack,
-  type SongSnapshot,
-} from "../src/analysis.js";
+  presentAnalysis,
+} from "../src/analysis/index.js";
 import { buildMusicState } from "../src/musicstate/builder.js";
+import type {
+  SnapshotClip,
+  SnapshotNote,
+  SnapshotTrack,
+  SongSnapshot,
+} from "../src/musicstate/types.js";
 
 // ---------------------------------------------------------------------------
 // Builders
@@ -409,10 +412,10 @@ check("tracks truncated to 12", r19.tracks.length === 12, String(r19.tracks.leng
 check("tracksOmitted = 20", r19.tracksOmitted === 20, String(r19.tracksOmitted));
 
 // ---------------------------------------------------------------------------
-// 21. Two-stage pipeline: analyzeMusicState(buildMusicState(f)) ≡ analyzeSong(f)
-// (analyze_song calls the two stages explicitly — pin the contract)
+// 21. Three-stage pipeline: present(state, analyzeMusicState(state)) ≡ analyzeSong(f)
+// (analyze_song calls the three stages explicitly — pin the contract)
 // ---------------------------------------------------------------------------
-console.log("== two-stage equivalence ==");
+console.log("== three-stage equivalence ==");
 {
   const fixtures: [string, SongSnapshot][] = [
     ["fsMinor", fsMinor],
@@ -429,7 +432,8 @@ console.log("== two-stage equivalence ==");
   ];
   for (const [label, fx] of fixtures) {
     const direct = JSON.stringify(analyzeSong(fx));
-    const staged = JSON.stringify(analyzeMusicState(buildMusicState(fx)));
+    const state = buildMusicState(fx);
+    const staged = JSON.stringify(presentAnalysis(state, analyzeMusicState(state)));
     check(`${label}: staged ≡ direct`, staged === direct, `${staged.length} vs ${direct.length} chars`);
   }
 }

@@ -31,7 +31,7 @@
 
 import { inflateRawSync } from "node:zlib";
 import { Buffer } from "node:buffer";
-import type { SnapshotClip, SnapshotNote, SnapshotTrack, SongSnapshot } from "./analysis.js";
+import type { SnapshotClip, SnapshotNote, SnapshotTrack, SongSnapshot } from "./musicstate/types.js";
 
 // ---------------------------------------------------------------------------
 // Minimal zip reader (central directory based; STORE + DEFLATE)
