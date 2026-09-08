@@ -71,6 +71,15 @@ import { buildGoalView, type GoalView } from "./goal/view.js";
 import { evaluateGoal } from "./goal/evaluate.js";
 import { EFFECT_METRICS, normalizePlan, type MusicPlan } from "./plan/types.js";
 import { buildPlanReport, executedStepIds, type PlanReport } from "./plan/check.js";
+import {
+  AGENT_MAX_RETRIES,
+  AGENT_MAX_ROUNDS,
+  AGENT_MAX_STEPS,
+  countMutations,
+  gateAction,
+  mutationsLeft,
+  stepBudgetError,
+} from "./agent/loop.js";
 import { moveExtras, moveSongToSnapshot, parseMoveBundle } from "./movebundle.js";
 import { searchSampleIndex, toSampleEntry, type SampleEntry } from "./samplemeta.js";
 
@@ -1139,6 +1148,10 @@ Plans (multi-step tasks):
 - After set_goal, when the task needs 2+ tool calls or multiple stages, call set_plan with your ordered steps BEFORE touching the Set. Each step: a short description, the tool you expect to call, and expectedEffects — what the step should measurably change (closed vocabulary, see the set_plan schema).
 - expectedEffects are your own predictions ("add hats" → section_energy increase in Drop). The server checks them against the measured Set at the end. If the goal check fails, the 目标校验 message includes a 计划诊断: which steps never executed (matched from your actual tool calls, not your claims) and which predicted effects were not observed — fix THAT step instead of re-running calls that already landed.
 - Skip set_plan for single-call tweaks. Declaring a plan never modifies the Set.
+
+Loop bounds (hard, server-enforced):
+- One turn executes at most 8 Set-modifying tool calls — beyond that the server refuses further mutations UNEXECUTED. If you hit the budget, stop modifying, summarize what landed vs. what remains, and let the user say "continue" (a new turn = a fresh budget).
+- A failed goal check gets exactly ONE retry; the plan is then cleared — re-plan the remaining gap from the diagnosis instead of re-running the route that missed. There is no open-ended tweak loop: if the check fails again, the turn ends and the user sees the server's measured state.
 
 Making music that actually produces sound:
 - A MIDI track without an instrument is SILENT, and a bare "Drum Rack" is EMPTY and silent too.
@@ -2796,8 +2809,7 @@ async function verifyToolResult(
 // the loop keeps going (bounded), or — retries exhausted — appends a
 // server-side note so the user sees the measured outcome, not the model's
 // claim. PR4 verifies single tool calls; this verifies the TASK.
-
-const GOAL_MAX_RETRIES = 2;
+// The bounds (retries, mutation budget, round cap) live in agent/loop.ts.
 
 let pendingGoal: {
   goal: MusicGoal;
@@ -2952,20 +2964,36 @@ function planDiagnosisLines(report: PlanReport): string[] {
   return lines;
 }
 
-function goalRetryMessage(goal: MusicGoal, ev: GoalEvaluation, retries: number, language?: string, plan?: PlanReport): string {
+function goalRetryMessage(
+  goal: MusicGoal,
+  ev: GoalEvaluation,
+  retries: number,
+  language?: string,
+  plan?: PlanReport,
+  replanned?: boolean,
+): string {
   const lines: string[] = [
-    `【目标校验 / Goal check】第 ${retries}/${GOAL_MAX_RETRIES} 次校验，目标「${goal.objective}」尚未达成：`,
+    `【目标校验 / Goal check】第 ${retries}/${AGENT_MAX_RETRIES} 次校验，目标「${goal.objective}」尚未达成：`,
   ];
   if (ev.constraintIssues.length) lines.push(`约束违反：${ev.constraintIssues.join("；")}`);
   if (ev.criteriaIssues.length) lines.push(`未达成标准：${ev.criteriaIssues.join("；")}`);
   if (plan) lines.push(...planDiagnosisLines(plan));
+  if (replanned) {
+    // The loop's single retry IS the replan: the old route already missed, so
+    // it is cleared rather than re-run. A fresh focused plan is invited, not
+    // required — a one-call fix may go directly.
+    lines.push(
+      `原计划已清除 — 请根据以上诊断重新声明一个聚焦剩余差距的 set_plan（差距很小也可直接修复）。` +
+        ` / The previous plan has been cleared — re-declare a focused set_plan for the remaining gap (or fix it directly if small).`,
+    );
+  }
   lines.push(GOAL_RETRY_TAIL[language ?? ""] ?? GOAL_RETRY_TAIL.zh);
   return lines.join("\n");
 }
 
 const GOAL_UNMET_NOTE: Record<string, string> = {
-  zh: `\n\n⚠️ 目标校验未通过（系统已重试 ${GOAL_MAX_RETRIES} 次）：`,
-  en: `\n\n⚠️ Goal check failed (retried ${GOAL_MAX_RETRIES}× by the server): `,
+  zh: `\n\n⚠️ 目标校验未通过（系统已重试 ${AGENT_MAX_RETRIES} 次）：`,
+  en: `\n\n⚠️ Goal check failed (retried ${AGENT_MAX_RETRIES}× by the server): `,
 };
 
 function goalUnmetNote(ev: GoalEvaluation, language?: string, plan?: PlanReport): string {
@@ -2996,7 +3024,12 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
     const plan = pendingPlan
       ? buildPlanReport(pendingPlan, executedToolsThisTurn, held.baseline, after)
       : null;
-    if (ev.met) {
+    // The loop's exit decision is one pure function (agent/loop.ts) — pass,
+    // retry once, or stop. A retry with no mutation budget left is a stop:
+    // it could only re-analyze and apologize.
+    const left = mutationsLeft(executedToolsThisTurn, READ_ONLY_TOOLS);
+    const action = gateAction(ev.met, held.retries, left);
+    if (action === "pass") {
       pendingGoal = null;
       pendingPlan = null;
       debugLog(
@@ -3007,18 +3040,26 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
     }
     debugLog(
       context,
-      `GOAL UNMET (${held.retries + 1}/${GOAL_MAX_RETRIES + 1}): ${[...ev.constraintIssues, ...ev.criteriaIssues].join("；")}` +
+      `GOAL UNMET (${held.retries + 1}/${AGENT_MAX_RETRIES + 1}): ${[...ev.constraintIssues, ...ev.criteriaIssues].join("；")}` +
         (plan
           ? ` · plan: ${plan.unexecuted.length} steps unexecuted, ${plan.unobserved.length} effects unobserved`
+          : "") +
+        (action === "stop" && left <= 0 && held.retries < AGENT_MAX_RETRIES
+          ? ` · mutation budget exhausted (${AGENT_MAX_STEPS}) — no retry`
           : ""),
     );
-    if (held.retries >= GOAL_MAX_RETRIES) {
+    if (action === "stop") {
       pendingGoal = null;
       pendingPlan = null;
       return { appendNote: goalUnmetNote(ev, language, plan ?? undefined) };
     }
     held.retries++;
-    return { inject: goalRetryMessage(held.goal, ev, held.retries, language, plan ?? undefined) };
+    // The single retry IS the replan: the old route already missed, so clear
+    // it — the model re-declares a focused plan from the diagnosis (or fixes
+    // directly). The report was computed above, before the clear.
+    const replanned = pendingPlan !== null;
+    pendingPlan = null;
+    return { inject: goalRetryMessage(held.goal, ev, held.retries, language, plan ?? undefined, replanned) };
   } catch (err) {
     pendingGoal = null;
     pendingPlan = null;
@@ -3034,6 +3075,20 @@ async function callTool(
   input: Record<string, unknown>,
   yolo: boolean,
 ): Promise<string> {
+  // Agent-loop step budget (agent/loop.ts): once AGENT_MAX_STEPS mutations
+  // actually executed this turn, further mutating calls are refused BEFORE
+  // running — and before the user is asked to confirm. The refusal never
+  // enters executedToolsThisTurn (it didn't execute), so the budget can't be
+  // talked past; the model must wrap up and let the user say "continue".
+  if (
+    !READ_ONLY_TOOLS.has(name) &&
+    countMutations(executedToolsThisTurn, READ_ONLY_TOOLS) >= AGENT_MAX_STEPS
+  ) {
+    const refused = stepBudgetError();
+    actions.push({ tool: name, input, result: refused });
+    debugLog(context, `TOOL ${name} REFUSED: mutation budget ${AGENT_MAX_STEPS} exhausted`);
+    return JSON.stringify(refused);
+  }
   if (!READ_ONLY_TOOLS.has(name) && (!yolo || COSTLY_TOOLS.has(name))) {
     const allowed = await askConfirmation(name, input);
     if (!allowed) {
@@ -3266,7 +3321,7 @@ async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest
   // Bounded retries when max_tokens truncates a text-only answer (see below).
   let continuations = 0;
 
-  for (let round = 0; round < 12; round++) {
+  for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     if (stopRequested) return finishChat(context, actions, stopNote(req.language));
     // Mirror Claude Code's auth style: Bearer token (works for relays and OAuth),
     // plus x-api-key for endpoints that expect it.
@@ -3386,7 +3441,7 @@ async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest
     }
     return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
   }
-  throw new Error("工具调用次数过多，已中止");
+  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
 }
 
 // ---------- OpenAI Responses API (Codex) ----------
@@ -3485,7 +3540,7 @@ async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
     parameters: tool.input_schema,
   }));
 
-  for (let round = 0; round < 12; round++) {
+  for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     if (stopRequested) return finishChat(context, actions, stopNote(req.language));
     const requestBody = JSON.stringify({
       model: cfg.model,
@@ -3578,7 +3633,7 @@ async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
       input.push({ type: "function_call_output", call_id: call.call_id, output: resultJson });
     }
   }
-  throw new Error("工具调用次数过多，已中止");
+  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
 }
 
 // ---------- OpenAI-compatible chat/completions (custom endpoint) ----------
@@ -3649,7 +3704,7 @@ async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
     },
   }));
 
-  for (let round = 0; round < 12; round++) {
+  for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     if (stopRequested) return finishChat(context, actions, stopNote(req.language));
     const requestBody = JSON.stringify({ model: cfg.model, messages, tools });
     let data: ChatCompletionsData;
@@ -3710,7 +3765,7 @@ async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
       messages.push({ role: "tool", tool_call_id: call.id ?? "", content: resultJson });
     }
   }
-  throw new Error("工具调用次数过多，已中止");
+  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
 }
 
 // ---------- Gemini generateContent API ----------
@@ -3777,7 +3832,7 @@ async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
   };
   const thinkingBudget = GEMINI_EFFORT[cfg.effort ?? ""];
 
-  for (let round = 0; round < 12; round++) {
+  for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     if (stopRequested) return finishChat(context, actions, stopNote(req.language));
     const requestBody = JSON.stringify({
       systemInstruction: { parts: [{ text: systemPromptFor(req.language) }] },
@@ -3844,7 +3899,7 @@ async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
     }
     contents.push({ role: "user", parts: responseParts });
   }
-  throw new Error("工具调用次数过多，已中止");
+  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
 }
 
 // ---------- HTTP server ----------
