@@ -46,8 +46,9 @@ const KK_MINOR = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.3
 const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
 const MINOR_STEPS = [0, 2, 3, 5, 7, 8, 10];
 
-/** Ordered by specificity — first match wins. */
-const ROLE_KEYWORDS: [TrackRole, RegExp][] = [
+/** Ordered by specificity — first match wins. Exported for select.ts, which
+ * reuses the same vocabulary to resolve focus strings to roles. */
+export const ROLE_KEYWORDS: [TrackRole, RegExp][] = [
   ["kick", /\bkick|bass\s*drum|\bbd\b/i],
   ["snare", /snare|\bsd\b/i],
   ["clap", /clap/i],

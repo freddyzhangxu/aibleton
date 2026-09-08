@@ -7,10 +7,18 @@
  * map arrange_song plans against, the session summary, and fitBudget — the
  * staged cuts that keep the JSON inside the callTool character budget.
  * Machine consumers should use MusicAnalysis (interpret.ts), not this output.
+ *
+ * With a ContextSelection (select.ts, from analyze_song's focus param) the
+ * same content is rendered as a focused projection: selected tracks keep
+ * full stats, the rest collapse to one-line base rows; the clip map keeps
+ * only selected tracks' entries; sections gain focusTracks activity markers;
+ * relevant issues sort first. Unmatched selections fall back to the full
+ * render with a focus.unmatched echo.
  */
 
 import { rhythmEntropy } from "../musicstate/builder.js";
 import type { MusicState } from "../musicstate/types.js";
+import type { ContextSelection } from "./select.js";
 import type {
   ClipEntry,
   MusicAnalysis,
@@ -87,11 +95,13 @@ function fitBudget(analysis: SongAnalysis, budget = 5800): SongAnalysis {
 
 /** Presentation entry point: render MusicAnalysis (plus facts from MusicState
  * it references by index) as model-bound SongAnalysis JSON.
- * budget: JSON char cap; null = no fitBudget cut. */
+ * budget: JSON char cap; null = no fitBudget cut.
+ * selection: from selectMusicContext; omitted = full render (unchanged). */
 export function presentAnalysis(
   state: MusicState,
   ma: MusicAnalysis,
   budget: number | null = 5800,
+  selection?: ContextSelection,
 ): SongAnalysis {
   const snap = state.snapshot;
   const num = snap.timeSig.numerator || 4;
@@ -189,6 +199,53 @@ export function presentAnalysis(
     }
   }
 
+  // --- Focused projection (select.ts) -------------------------------------
+  // focused: a selection that resolved to at least one track. Section-name-
+  // only matches stay echo-only (no track/clip projection).
+  const focused =
+    selection !== undefined && !selection.unmatched && selection.trackIndices.size > 0;
+
+  let tracksOut = trackAnalyses;
+  let clipsOut = clips;
+  let clipsProjectionOmitted = 0;
+  let sectionsOut = ma.sections;
+  let issuesOut = ma.issues.map((i) => `${i.code}: ${i.message}`);
+  if (selection && !selection.unmatched) {
+    if (focused) {
+      // Selected tracks keep full rows; the rest collapse to their base row
+      // (i/name/role/notes/clips[/muted]) so coordinates stay addressable.
+      tracksOut = trackAnalyses.map((full, idx) => {
+        if (selection.trackIndices.has(state.tracks[idx].track.index)) return full;
+        const compact: TrackAnalysis = {
+          i: full.i,
+          name: full.name,
+          role: full.role,
+          notes: full.notes,
+          clips: full.clips,
+        };
+        if (full.muted) compact.muted = true;
+        return compact;
+      });
+      clipsOut = clips.filter((c) => selection.trackIndices.has(c.t));
+      clipsProjectionOmitted = clips.length - clipsOut.length;
+      // Every section carries the selected tracks active in it ([] = none —
+      // "bass silent in the Drop" is exactly what a focus call is for).
+      sectionsOut = ma.sections.map((s) => ({
+        ...s,
+        focusTracks: selection.sectionFocus.get(s.name) ?? [],
+      }));
+    }
+    // Relevant issues first, the rest after.
+    if (selection.relevantIssues.length > 0) {
+      const relevant = new Set(selection.relevantIssues);
+      const fmt = (i: (typeof ma.issues)[number]) => `${i.code}: ${i.message}`;
+      issuesOut = [
+        ...ma.issues.filter((i) => relevant.has(i)).map(fmt),
+        ...ma.issues.filter((i) => !relevant.has(i)).map(fmt),
+      ];
+    }
+  }
+
   const analysis: SongAnalysis = {
     tempo: snap.tempo ?? 120,
     timeSig: `${num}/${den}`,
@@ -206,17 +263,23 @@ export function presentAnalysis(
       candidates: ma.key.candidates?.map(([l, r]) => [l, round2(r)] as [string, number]),
     },
     arrangement: arrEnd > 0 ? { bars: round1(arrangementBars), beats: round1(arrEnd) } : null,
-    sections: ma.sections,
-    tracks: trackAnalyses,
-    clips,
+    sections: sectionsOut,
+    tracks: tracksOut,
+    clips: clipsOut,
     session: {
       scenes: snap.sceneCount ?? 0,
       clips: sessionClipCount,
       tracks: sessionTracks.size,
       notes: sessionNotes,
     },
-    issues: ma.issues.map((i) => `${i.code}: ${i.message}`),
+    issues: issuesOut,
     caveat: CAVEAT,
   };
+  if (clipsProjectionOmitted > 0) analysis.clipsOmitted = clipsProjectionOmitted;
+  if (selection) {
+    analysis.focus = selection.unmatched
+      ? { raw: selection.focusRaw, matched: selection.matched, unmatched: true }
+      : { raw: selection.focusRaw, matched: selection.matched };
+  }
   return budget === null ? analysis : fitBudget(analysis, budget);
 }
