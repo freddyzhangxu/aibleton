@@ -63,6 +63,9 @@ import {
 } from "@ableton-extensions/sdk";
 import { analyzeMusicState, analyzeSong, tileClipNotes, type SnapshotClip, type SongSnapshot } from "./analysis.js";
 import { buildMusicState } from "./musicstate/builder.js";
+import { postconditionsFor } from "./verify/rules.js";
+import { runVerification } from "./verify/verifier.js";
+import type { ProbeSong } from "./verify/types.js";
 import { moveExtras, moveSongToSnapshot, parseMoveBundle } from "./movebundle.js";
 import { searchSampleIndex, toSampleEntry, type SampleEntry } from "./samplemeta.js";
 
@@ -975,6 +978,7 @@ Rules:
 - You CAN adjust device parameters (Operator, Reverb, Auto Filter, …) and track volume/pan — see the device-control section below.
 - You cannot delete tracks or scenes, load third-party plugins, or do realtime audio/MIDI processing. Say so if asked. (arrange_song CAN clear clips in a bar range as part of arranging.)
 - After tools run, confirm what changed in one short sentence.
+- Mutating tool results carry a "verified" flag: the server re-read the Set and checked the change actually landed (value, device, clip). If verified:false comes back with an error, the action DID execute but missed the target — do NOT re-run the same call blindly (that would duplicate content); correct it using the reported actual state, or tell the user what mismatch you see.
 - NEVER claim you changed the Live Set unless a tool actually performed the change in THIS turn. If you did not call a tool, nothing changed — do not pretend otherwise.
 
 Making music that actually produces sound:
@@ -2582,6 +2586,41 @@ function askConfirmation(
 }
 
 /** Run one tool call and normalize the result for the provider + UI log. */
+/**
+ * Deterministic postcondition verification (verify/). After a mutating tool
+ * succeeds, checks derived from the call itself are probed against the live
+ * Set. Failure keeps the result fields (what actually happened) but adds an
+ * `error` key — weak models react to structural errors far more reliably than
+ * to advisory text. Never throws: a verifier bug must not fail a working call.
+ */
+async function verifyToolResult(
+  context: Ctx,
+  name: string,
+  input: Record<string, unknown>,
+  result: unknown,
+): Promise<unknown> {
+  if (typeof result !== "object" || result === null || "error" in result) return result;
+  try {
+    const specs = postconditionsFor(name, input, result as Record<string, unknown>);
+    if (!specs.length) return result;
+    // SDK classes carry protected members — the structural ProbeSong view
+    // requires one explicit cast here at the boundary.
+    const v = await runVerification(context.application.song as unknown as ProbeSong, specs);
+    if (v.success) return { ...(result as Record<string, unknown>), verified: true };
+    debugLog(context, `VERIFY FAILED ${name}: ${v.remainingIssues.join("；")}`);
+    return {
+      ...(result as Record<string, unknown>),
+      verified: false,
+      error:
+        `验证失败（操作已执行，未达预期）: ${v.remainingIssues.join("；")}。` +
+        `请勿直接重复该操作（避免重复创建内容），按实际状态修正。`,
+    };
+  } catch (err) {
+    debugLog(context, `VERIFY skipped ${name}: ${err instanceof Error ? err.message : String(err)}`);
+    return result;
+  }
+}
+
 async function callTool(
   context: Ctx,
   actions: { tool: string; input: unknown; result: unknown }[],
@@ -2604,6 +2643,7 @@ async function callTool(
   } catch (err) {
     result = { error: err instanceof Error ? err.message : String(err) };
   }
+  result = await verifyToolResult(context, name, input, result);
   actions.push({ tool: name, input, result });
   const resultJson = JSON.stringify(result);
   debugLog(context, `TOOL ${name} ${JSON.stringify(input)} -> ${resultJson.slice(0, 400)}`);
