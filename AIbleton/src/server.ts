@@ -61,8 +61,9 @@ import {
   type Track,
   type ClipLoopSettings,
 } from "@ableton-extensions/sdk";
-import { analyzeMusicState, analyzeSong, tileClipNotes, type SnapshotClip, type SongSnapshot } from "./analysis.js";
-import { buildMusicState } from "./musicstate/builder.js";
+import { analyzeMusicState, analyzeSong, presentAnalysis } from "./analysis/index.js";
+import { buildMusicState, tileClipNotes } from "./musicstate/builder.js";
+import type { SnapshotClip, SongSnapshot } from "./musicstate/types.js";
 import { postconditionsFor } from "./verify/rules.js";
 import { runVerification } from "./verify/verifier.js";
 import type { ProbeSong } from "./verify/types.js";
@@ -1848,8 +1849,10 @@ async function runTool(
       };
     }
     case "analyze_song": {
-      // Two-stage: facts (what is in the Set) -> interpretation (what it means).
-      return analyzeMusicState(buildMusicState(buildSongSnapshot(song)));
+      // Three-stage: facts (what is in the Set) -> interpretation (what it
+      // means) -> presentation (model-bound JSON, budget-fitted).
+      const state = buildMusicState(buildSongSnapshot(song));
+      return presentAnalysis(state, analyzeMusicState(state));
     }
     case "set_goal": {
       return handleSetGoal(context, input);

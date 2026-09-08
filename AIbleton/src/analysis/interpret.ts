@@ -1,15 +1,12 @@
 /**
- * analysis.ts — interpretation + presentation over the MusicState facts layer.
+ * analysis/interpret.ts — MusicState -> MusicAnalysis: what the Set means.
  *
- * buildMusicState() (musicstate/) says what is in the Set; analyzeSong() here
- * says what it means: key detection, track roles, section structure, issues —
- * formatted as SongAnalysis and fitted to the callTool character budget.
+ * Pure interpretation, no presentation: numbers stay unrounded (rounding for
+ * model-bound JSON lives in present.ts), issues come out as structured
+ * MusicIssue[] (stringified by present.ts), and there is no budget cut — the
+ * goal layer judges against this output directly.
  *
- * Pure functions only: no SDK, no I/O. server.ts builds a plain SongSnapshot
- * from the Live SDK and passes it to analyzeSong(); everything runs on
- * serializable data so it can be fixture-tested offline with tsx.
- *
- * Design notes:
+ * Design notes (carried over from the fused analysis.ts):
  * - Drum tracks are excluded from the key histogram (a 4-on-floor kick at
  *   pitch 36 would otherwise dominate and bias detection toward C-ish keys).
  * - Looped clips are "virtually unrolled": material is read once from the
@@ -18,12 +15,7 @@
  *   and reported once via MUTED_CONTENT.
  */
 
-import {
-  audibleWindow,
-  buildMusicState,
-  materialNotes,
-  rhythmEntropy,
-} from "./musicstate/builder.js";
+import { audibleWindow, materialNotes } from "../musicstate/builder.js";
 import type {
   ClipWindow,
   MusicState,
@@ -32,89 +24,14 @@ import type {
   SnapshotTrack,
   SongSnapshot,
   TrackMeasurements,
-} from "./musicstate/types.js";
-
-// Shim: the facts layer moved to musicstate/ — existing importers
-// (server.ts, movebundle.ts, offline tests) keep working unchanged.
-export { tileClipNotes } from "./musicstate/builder.js";
-export type {
-  SnapshotClip,
-  SnapshotNote,
-  SnapshotTrack,
-  SongSnapshot,
-} from "./musicstate/types.js";
-
-// ---------------------------------------------------------------------------
-// Analysis output
-// ---------------------------------------------------------------------------
-
-export type TrackRole =
-  | "kick" | "snare" | "clap" | "hats" | "cymbal" | "tom"
-  | "drums" | "percussion"
-  | "bass" | "chords" | "pad" | "lead" | "arp" | "vocal" | "fx" | "unknown";
-
-export interface KeyAnalysis {
-  status: "ok" | "insufficient_material";
-  best?: string; // "F# minor"
-  confidence?: "high" | "medium" | "low";
-  r?: number; // best Pearson correlation (2 dp)
-  margin?: number; // r1 - r2
-  candidates?: [string, number][]; // top-3 (may be cut to 1 by fitBudget)
-}
-
-export interface SectionInfo {
-  name: string; // cue name or "bars 9-16"
-  bars: [number, number]; // 1-based inclusive
-  energy: "low" | "mid" | "high";
-  tracks: number; // tracks with >= 1 onset in this section
-  notes: number;
-}
-
-export interface TrackAnalysis {
-  i: number; // same order as get_song_overview
-  name: string;
-  role: TrackRole;
-  notes: number; // audible notes incl. loop repeats
-  range?: string; // "F#1-C#2"
-  dens?: number; // audible notes / bar over the track's active span
-  poly?: number; // sum(duration) / single-pass span
-  vel?: [number, number, number]; // min, max, avg
-  ent?: number; // 0-1 rhythm entropy; omitted with < 8 onsets
-  uniq?: number; // unique pitches
-  clips: number;
-  muted?: true;
-  audio?: { clips: number; bars: number; files?: string[] };
-}
-
-/** One clip in the flat clip map — the coordinate system arrange_song plans
- * against: (t, i) addresses arrangement clips, (t, scene) session clips. */
-export interface ClipEntry {
-  t: number; // track index (matches TrackAnalysis.i / get_song_overview)
-  i?: number; // arrangement clip_index on that track (arrangement clips only)
-  scene?: number; // session slot index (session clips only)
-  name: string;
-  kind: "midi" | "audio";
-  bar?: number; // 1-based start bar (arrangement clips)
-  bars?: number; // clip length in bars (arrangement clips)
-  loop?: number; // loop length in bars — the unit arrange_song tiles (looping clips)
-  muted?: true;
-}
-
-export interface SongAnalysis {
-  tempo: number;
-  timeSig: string;
-  liveScale: { mode: boolean; root: string; name: string } | null;
-  key: KeyAnalysis;
-  arrangement: { bars: number; beats: number } | null;
-  sections: SectionInfo[];
-  tracks: TrackAnalysis[];
-  tracksOmitted?: number;
-  clips: ClipEntry[];
-  clipsOmitted?: number;
-  session: { scenes: number; clips: number; tracks: number; notes: number };
-  issues: string[];
-  caveat: string;
-}
+} from "../musicstate/types.js";
+import type {
+  KeyAnalysis,
+  MusicAnalysis,
+  MusicIssue,
+  SectionAnalysis,
+  TrackRole,
+} from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -151,15 +68,10 @@ const ROLE_KEYWORDS: [TrackRole, RegExp][] = [
 const DRUM_NAME_RE =
   /kick|snare|clap|hats?|hihat|\bhh\b|cymbal|crash|ride|\btoms?\b|perc|drums?|kit|shaker|tamb|conga|bongo/i;
 
-const CAVEAT =
-  "MIDI/structure-based only: audio clips contribute filename + duration, " +
-  "no loudness/timbre/pitch analysis. Loop repeats estimated virtually " +
-  "(material x repeats). Track indices match get_song_overview.";
-
 const MIN_NOTES_FOR_ISSUES = 32;
 
 // ---------------------------------------------------------------------------
-// Small helpers
+// Small helpers (message formatting — data stays unrounded)
 // ---------------------------------------------------------------------------
 
 function pitchName(p: number): string {
@@ -173,10 +85,6 @@ function pcName(pc: number): string {
 
 function round2(x: number): number {
   return Math.round(x * 100) / 100;
-}
-
-function round1(x: number): number {
-  return Math.round(x * 10) / 10;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +162,7 @@ interface KeyResult extends KeyAnalysis {
   mode?: "major" | "minor"; // internal
 }
 
+/** r/margin/candidates stay raw — present.ts rounds for model-bound JSON. */
 function detectKey(hist: number[]): KeyResult {
   const uniq = hist.filter((v) => v > 1e-9).length;
   const total = hist.reduce((a, b) => a + b, 0);
@@ -279,9 +188,9 @@ function detectKey(hist: number[]): KeyResult {
     mode: top[0].mode,
     best: label(top[0]),
     confidence,
-    r: round2(r1),
-    margin: round2(margin),
-    candidates: top.map((s) => [label(s), round2(s.r)] as [string, number]),
+    r: r1,
+    margin,
+    candidates: top.map((s) => [label(s), s.r] as [string, number]),
   };
 }
 
@@ -434,7 +343,7 @@ function sectionize(
 function sectionEnergy(
   sections: RawSection[],
   perTrack: { track: SnapshotTrack; clipMats: ClipMaterial[] }[],
-): SectionInfo[] {
+): SectionAnalysis[] {
   const notes = sections.map(() => 0);
   const trackSets = sections.map(() => new Set<number>());
   for (const { track, clipMats } of perTrack) {
@@ -458,7 +367,7 @@ function sectionEnergy(
     }
   }
   const maxNotes = Math.max(0, ...notes);
-  const out: SectionInfo[] = [];
+  const out: SectionAnalysis[] = [];
   for (let s = 0; s < sections.length; s++) {
     if (notes[s] === 0) continue;
     const ratio = maxNotes > 0 ? notes[s] / maxNotes : 0;
@@ -508,7 +417,7 @@ function detectIssues(ctx: {
     role: TrackRole;
     clipMats: ClipMaterial[];
   }[];
-  sections: SectionInfo[];
+  sections: SectionAnalysis[];
   arrangementBars: number;
   arrFingerprints: Set<string>;
   duplicateGroups: { i: number; name: string }[][];
@@ -521,30 +430,32 @@ function detectIssues(ctx: {
   mutedTrackNotes: number;
   mutedClipNotes: number;
   mutedNotes: number;
-}): string[] {
-  const issues: string[] = [];
+}): MusicIssue[] {
+  const issues: MusicIssue[] = [];
   const { snap, key } = ctx;
 
   if (ctx.totalAudible === 0 && ctx.sessionClipCount === 0) {
     const hasAudio = snap.tracks.some((t) => t.clips.some((c) => c.kind === "audio"));
     if (!hasAudio) {
-      issues.push("EMPTY_SET: no MIDI notes or audio clips in the Set");
+      issues.push({ code: "EMPTY_SET", message: "no MIDI notes or audio clips in the Set" });
       return issues;
     }
   }
   if (!ctx.hasArrClips && ctx.sessionClipCount > 0) {
-    issues.push(
-      `NO_ARRANGEMENT: arrangement is empty, ${ctx.sessionClipCount} session clip(s) only — key/stats are session-based`,
-    );
+    issues.push({
+      code: "NO_ARRANGEMENT",
+      message: `arrangement is empty, ${ctx.sessionClipCount} session clip(s) only — key/stats are session-based`,
+    });
   }
   if (
     ctx.arrangementBars > 32 &&
     ctx.arrMidiClips >= 2 &&
     ctx.arrFingerprints.size <= 2
   ) {
-    issues.push(
-      `SINGLE_LOOP: ${Math.round(ctx.arrangementBars)} bars but only ${ctx.arrFingerprints.size} unique clip(s) — arrangement is one loop repeated`,
-    );
+    issues.push({
+      code: "SINGLE_LOOP",
+      message: `${Math.round(ctx.arrangementBars)} bars but only ${ctx.arrFingerprints.size} unique clip(s) — arrangement is one loop repeated`,
+    });
   }
   if (ctx.sections.length >= 4) {
     const vals = ctx.sections.map((s) => s.notes);
@@ -553,25 +464,29 @@ function detectIssues(ctx: {
       const sd = Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length);
       const cv = sd / mean;
       if (cv < 0.15) {
-        issues.push(
-          `LOW_CONTRAST: energy nearly constant across ${ctx.sections.length} sections (cv=${round2(cv)}) — arrangement may lack build/drop contrast`,
-        );
+        issues.push({
+          code: "LOW_CONTRAST",
+          message: `energy nearly constant across ${ctx.sections.length} sections (cv=${round2(cv)}) — arrangement may lack build/drop contrast`,
+        });
       }
     }
   }
   for (const group of ctx.duplicateGroups) {
     const label = group.map((t) => `${t.i} "${t.name}"`).join(" and ");
-    issues.push(
-      `DUPLICATE_CONTENT: tracks ${label} are note-for-note identical (pitch/timing) — mute or delete one if not an intentional layer`,
-    );
+    issues.push({
+      code: "DUPLICATE_CONTENT",
+      message: `tracks ${label} are note-for-note identical (pitch/timing) — mute or delete one if not an intentional layer`,
+      tracks: group.map((t) => t.i),
+    });
   }
   if (snap.liveScale.mode && key.status === "ok" && key.confidence !== "low" && key.root !== undefined) {
     const liveRoot = ((snap.liveScale.root % 12) + 12) % 12;
     const diff = (((key.root - liveRoot) % 12) + 12) % 12;
     if (diff !== 0 && diff !== 3 && diff !== 9) {
-      issues.push(
-        `KEY_MISMATCH: Live scale is ${pcName(liveRoot)} ${snap.liveScale.name} but detected key is ${key.best} (r=${key.r})`,
-      );
+      issues.push({
+        code: "KEY_MISMATCH",
+        message: `Live scale is ${pcName(liveRoot)} ${snap.liveScale.name} but detected key is ${key.best} (r=${round2(key.r ?? 0)})`,
+      });
     }
   }
   // OFF_KEY
@@ -604,36 +519,43 @@ function detectIssues(ctx: {
     if (total >= 16) {
       const pct = outW / total;
       if (pct > 0.15) {
-        issues.push(
-          `OFF_KEY: ${Math.round(pct * 100)}% of note duration is outside ${scaleLabel} — check for wrong notes (or intentional chromaticism)`,
-        );
+        issues.push({
+          code: "OFF_KEY",
+          message: `${Math.round(pct * 100)}% of note duration is outside ${scaleLabel} — check for wrong notes (or intentional chromaticism)`,
+        });
       }
     }
   }
   if (ctx.totalAudible >= MIN_NOTES_FOR_ISSUES) {
     if (ctx.globalPitchMin >= 48) {
-      issues.push(
-        `NO_LOW_END: lowest note is ${pitchName(ctx.globalPitchMin)} across ${ctx.totalAudible} notes — nothing below C3`,
-      );
+      issues.push({
+        code: "NO_LOW_END",
+        message: `lowest note is ${pitchName(ctx.globalPitchMin)} across ${ctx.totalAudible} notes — nothing below C3`,
+      });
     }
     if (ctx.globalPitchMax < 72) {
-      issues.push(
-        `NO_HIGH_END: highest note is ${pitchName(ctx.globalPitchMax)} across ${ctx.totalAudible} notes — nothing at/above C5`,
-      );
+      issues.push({
+        code: "NO_HIGH_END",
+        message: `highest note is ${pitchName(ctx.globalPitchMax)} across ${ctx.totalAudible} notes — nothing at/above C5`,
+      });
     }
   }
   for (const pt of ctx.perTrack) {
     const f = pt.feats;
     if (!f || f.materialCount < MIN_NOTES_FOR_ISSUES) continue;
     if (f.velMax - f.velMin <= 6) {
-      issues.push(
-        `FLAT_DYNAMICS: "${pt.track.name}" velocity range ${Math.round(f.velMax - f.velMin)} across ${f.materialCount} notes — sounds mechanical`,
-      );
+      issues.push({
+        code: "FLAT_DYNAMICS",
+        message: `"${pt.track.name}" velocity range ${Math.round(f.velMax - f.velMin)} across ${f.materialCount} notes — sounds mechanical`,
+        tracks: [pt.track.index],
+      });
     }
     if (pt.role === "bass" && f.uniq <= 2) {
-      issues.push(
-        `MONOTONE_BASS: "${pt.track.name}" plays only ${f.uniq} pitch(es) across ${f.materialCount} notes`,
-      );
+      issues.push({
+        code: "MONOTONE_BASS",
+        message: `"${pt.track.name}" plays only ${f.uniq} pitch(es) across ${f.materialCount} notes`,
+        tracks: [pt.track.index],
+      });
     }
   }
   const mutedParts: string[] = [];
@@ -641,59 +563,20 @@ function detectIssues(ctx: {
   if (ctx.mutedClipNotes > 0) mutedParts.push(`${ctx.mutedClipNotes} notes in muted clips`);
   if (ctx.mutedNotes > 0) mutedParts.push(`${ctx.mutedNotes} muted notes`);
   if (mutedParts.length > 0) {
-    issues.push(`MUTED_CONTENT: ${mutedParts.join(", ")} — excluded from all stats`);
+    issues.push({ code: "MUTED_CONTENT", message: `${mutedParts.join(", ")} — excluded from all stats` });
   }
   return issues;
 }
 
 // ---------------------------------------------------------------------------
-// Budget fitting (callTool hard-truncates at 6000 chars)
+// Entry point
 // ---------------------------------------------------------------------------
 
-function fitBudget(analysis: SongAnalysis, budget = 5800): SongAnalysis {
-  const size = () => JSON.stringify(analysis).length;
-  if (size() <= budget) return analysis;
-  for (const t of analysis.tracks) {
-    if (t.audio?.files) delete t.audio.files;
-  }
-  if (size() <= budget) return analysis;
-  if (analysis.tracks.length > 12) {
-    analysis.tracksOmitted = (analysis.tracksOmitted ?? 0) + analysis.tracks.length - 12;
-    analysis.tracks = analysis.tracks.slice(0, 12);
-  }
-  if (size() <= budget) return analysis;
-  if (analysis.key.candidates && analysis.key.candidates.length > 1) {
-    analysis.key.candidates = analysis.key.candidates.slice(0, 1);
-  }
-  if (size() <= budget) return analysis;
-  if (analysis.sections.length > 12) {
-    analysis.sections = [...analysis.sections.slice(0, 6), ...analysis.sections.slice(-6)];
-  }
-  if (size() <= budget) return analysis;
-  // Keep the clip map longest — it is the coordinate system arrange_song
-  // plans against. Drop loop annotations first, then cap the list.
-  for (const c of analysis.clips) delete c.loop;
-  if (size() <= budget) return analysis;
-  if (analysis.clips.length > 40) {
-    analysis.clipsOmitted = (analysis.clipsOmitted ?? 0) + analysis.clips.length - 40;
-    analysis.clips = analysis.clips.slice(0, 40);
-  }
-  return analysis;
-}
-
-// ---------------------------------------------------------------------------
-// Entry points
-// ---------------------------------------------------------------------------
-
-/** Interpretation entry point: MusicState -> SongAnalysis. Tools that already
- * have a MusicState (or want the state for themselves) call this directly —
- * analyze_song runs buildMusicState -> analyzeMusicState as two stages.
- * budget: JSON char cap for model-bound output; null = no fitBudget cut (the
- * goal layer needs every section/track — a cut target can't be evaluated). */
-export function analyzeMusicState(state: MusicState, budget: number | null = 5800): SongAnalysis {
+/** Interpretation entry point: MusicState -> MusicAnalysis. No rounding, no
+ * budget cut — machine consumers (goal layer) use this directly; present.ts
+ * renders it as SongAnalysis for model-bound output. */
+export function analyzeMusicState(state: MusicState): MusicAnalysis {
   const snap = state.snapshot;
-  const num = snap.timeSig.numerator || 4;
-  const den = snap.timeSig.denominator || 4;
   const barBeats = state.barBeats;
 
   // Interpretation view over the facts (order: drums pre-classify -> histogram
@@ -745,10 +628,8 @@ export function analyzeMusicState(state: MusicState, budget: number | null = 580
   }
   const duplicateGroups = [...trackSigs.values()].filter((g) => g.length > 1);
 
-  // Session summary + global stats.
+  // Aggregates the issue rules judge against.
   let sessionClipCount = 0;
-  let sessionNotes = 0;
-  const sessionTracks = new Set<number>();
   let totalAudible = 0;
   let globalPitchMin = Infinity;
   let globalPitchMax = -Infinity;
@@ -759,8 +640,6 @@ export function analyzeMusicState(state: MusicState, budget: number | null = 580
     for (const cm of pt.clipMats) {
       if (cm.clip.start === null && !cm.clip.muted && cm.clip.kind === "midi") {
         sessionClipCount++;
-        sessionNotes += cm.material.length;
-        if (cm.material.length > 0) sessionTracks.add(pt.track.index);
       }
     }
     if (pt.track.mute || pt.track.mutedViaSolo) {
@@ -810,83 +689,9 @@ export function analyzeMusicState(state: MusicState, budget: number | null = 580
     mutedNotes: mutedNoteCount,
   });
 
-  const trackAnalyses: TrackAnalysis[] = perTrack.map((pt, i) => {
-    const { track, feats } = pt;
-    const arrClipCount = track.clips.filter((c) => c.start !== null).length;
-    const base: TrackAnalysis = {
-      i: track.index,
-      name: track.name,
-      role: roles[i],
-      notes: feats?.audibleNotes ?? 0,
-      clips: arrClipCount,
-    };
-    if (track.mute || track.mutedViaSolo) base.muted = true;
-    const audioClips = track.clips.filter((c) => c.kind === "audio" && c.start !== null);
-    if (feats && feats.materialCount > 0) {
-      base.range = `${pitchName(feats.pitchMin)}-${pitchName(feats.pitchMax)}`;
-      base.dens = round1(feats.audibleNotes / Math.max(1, feats.spanAudible / barBeats));
-      base.poly = round2(feats.sumDur / feats.spanSingle);
-      base.vel = [Math.round(feats.velMin), Math.round(feats.velMax), Math.round(feats.velAvg)];
-      const ent = rhythmEntropy(feats.onsetBeatsInBar, barBeats * 4);
-      if (ent !== null) base.ent = ent;
-      base.uniq = feats.uniq;
-    } else if (audioClips.length > 0) {
-      base.audio = {
-        clips: audioClips.length,
-        bars: round1(audioClips.reduce((a, c) => a + Math.max(0, c.duration), 0) / barBeats),
-        files: audioClips.map((c) => c.file ?? c.name).filter(Boolean).slice(0, 4),
-      };
-    }
-    return base;
-  });
-
-  // Flat clip map — arrange_song plans against these coordinates. Arrangement
-  // clips first (sorted by position), then session clips (by slot index).
-  const clips: ClipEntry[] = [];
-  for (const pt of perTrack) {
-    const arr = pt.track.clips
-      .filter((c) => c.start !== null)
-      .sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
-    const ses = pt.track.clips
-      .filter((c) => c.start === null)
-      .sort((a, b) => (a.scene ?? 0) - (b.scene ?? 0));
-    for (const c of arr) {
-      const e: ClipEntry = {
-        t: pt.track.index,
-        i: c.arrIndex,
-        name: c.name,
-        kind: c.kind,
-        bar: round1((c.start ?? 0) / barBeats) + 1,
-        bars: round1(Math.max(0, c.duration) / barBeats),
-      };
-      if (c.looping && c.loopEnd - c.loopStart > 1e-4) {
-        e.loop = round1((c.loopEnd - c.loopStart) / barBeats);
-      }
-      if (c.muted) e.muted = true;
-      clips.push(e);
-    }
-    for (const c of ses) {
-      const e: ClipEntry = {
-        t: pt.track.index,
-        scene: c.scene,
-        name: c.name,
-        kind: c.kind,
-        bars: round1(Math.max(0, c.duration) / barBeats),
-      };
-      if (c.looping && c.loopEnd - c.loopStart > 1e-4) {
-        e.loop = round1((c.loopEnd - c.loopStart) / barBeats);
-      }
-      if (c.muted) e.muted = true;
-      clips.push(e);
-    }
-  }
-
-  const analysis: SongAnalysis = {
-    tempo: snap.tempo ?? 120,
-    timeSig: `${num}/${den}`,
-    liveScale: snap.liveScale?.mode
-      ? { mode: true, root: pcName(snap.liveScale.root), name: snap.liveScale.name }
-      : null,
+  return {
+    // Whitelist copy: KeyResult's internal root/mode must not leak into
+    // MusicAnalysis (present.ts whitelists again for SongAnalysis).
     key: {
       status: key.status,
       best: key.best,
@@ -895,25 +700,12 @@ export function analyzeMusicState(state: MusicState, budget: number | null = 580
       margin: key.margin,
       candidates: key.candidates,
     },
-    arrangement: arrEnd > 0 ? { bars: round1(arrangementBars), beats: round1(arrEnd) } : null,
     sections,
-    tracks: trackAnalyses,
-    clips,
-    session: {
-      scenes: snap.sceneCount ?? 0,
-      clips: sessionClipCount,
-      tracks: sessionTracks.size,
-      notes: sessionNotes,
-    },
+    trackRoles: perTrack.map((pt, i) => ({
+      i: pt.track.index,
+      role: roles[i],
+      isDrums: pt.isDrums,
+    })),
     issues,
-    caveat: CAVEAT,
   };
-  return budget === null ? analysis : fitBudget(analysis, budget);
-}
-
-/** One-call wrapper: snapshot -> facts -> interpretation. Kept for consumers
- * with no use for the intermediate MusicState (move_analyze_set, offline
- * fixture tests); analyze_song calls the two stages explicitly. */
-export function analyzeSong(input: SongSnapshot): SongAnalysis {
-  return analyzeMusicState(buildMusicState(input));
 }
