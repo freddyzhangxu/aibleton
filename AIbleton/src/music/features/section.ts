@@ -53,8 +53,13 @@ function emptyMidi(): SectionMidi {
 
 /**
  * Onset pass over one section — same loop structure, tile count, onset math
- * and 1e-6 membership window as interpret.sectionEnergy. Do not "improve"
- * one without the other: features must count what analysis heard.
+ * and 1e-6 membership window as interpret.sectionEnergy, with ONE deliberate
+ * refinement: the final partial loop pass is truncated at the clip's
+ * arrangement end. sectionEnergy counts full ceil tiles (a 4-beat loop over
+ * a 10-beat clip reads 3 passes = 12 onsets); MusicState's audibleNotes uses
+ * fractional repeats (2.5 → 10). Features follow MusicState — a note sounds
+ * only when its onset falls inside the clip's span. For exact-multiple loops
+ * the two agree, which is what the test-6 cross-check pins.
  */
 function collectSectionMidi(
   state: MusicState,
@@ -68,6 +73,7 @@ function collectSectionMidi(
       const { clip, window: win, material } = cs;
       if (clip.start === null || clip.muted || clip.kind !== "midi") continue;
       if (material.length === 0) continue;
+      const clipEnd = clip.start + Math.max(0, clip.duration);
       const tiles = Math.max(1, Math.ceil(clip.duration / Math.max(win.loopLen, EPS) - EPS));
       let onsetsInSection = 0;
       let passesInSection = 0;
@@ -75,6 +81,7 @@ function collectSectionMidi(
         let passOnsets = 0;
         for (const n of material) {
           const onset = clip.start + (n.start - win.winStart) + k * win.loopLen;
+          if (onset >= clipEnd - EPS) continue; // truncated final pass
           if (onset >= startBeat - EPS && onset < endBeat - EPS) {
             passOnsets++;
             out.velSum += n.velocity;
@@ -133,6 +140,11 @@ interface SectionAudio {
   spectralCentroidHz: number; // energy-weighted
   dynamicRangeDb?: number; // duration-weighted, undefined-propagated
   transientDensity?: number; // duration-weighted, undefined-propagated
+  /** Fraction of the section's audible audio (overlap beats) that actually
+   * has features — 1 = every overlapping clip analyzed; < 1 = partial
+   * coverage (budget-skipped or failed files). Surfaces as `confidence` so
+   * consumers can distrust a quarter-analyzed aggregate. */
+  coverage: number;
 }
 
 /** Overlap-duration weighted aggregate of the analyzed audio clips touching
@@ -144,20 +156,25 @@ function collectSectionAudio(
   secPerBeat: number,
 ): SectionAudio | null {
   const contributors: { f: AudioFeatures; wd: number; we: number }[] = [];
+  let totalOverlap = 0;
   for (const ts of state.tracks) {
     if (ts.muted) continue;
     for (const cs of ts.clips) {
       const c = cs.clip;
       if (c.kind !== "audio" || c.start === null || c.muted) continue;
-      const f = cs.audio?.features;
-      if (!f) continue; // includes cs.audio.error — failed files contribute nothing
+      if (Math.max(0, c.duration) <= 0) continue;
       const overlap = Math.min(c.start + Math.max(0, c.duration), endBeat) - Math.max(c.start, startBeat);
       if (overlap <= EPS) continue;
+      totalOverlap += overlap;
+      const f = cs.audio?.features;
+      if (!f) continue; // includes cs.audio.error — failed files contribute nothing
       const wd = overlap * secPerBeat;
       contributors.push({ f, wd, we: wd * 10 ** (f.rmsDb / 10) });
     }
   }
   if (contributors.length === 0) return null;
+  const coveredOverlap = contributors.reduce((a, c) => a + c.wd, 0) / secPerBeat;
+  const coverage = totalOverlap > 0 ? Math.min(1, coveredOverlap / totalOverlap) : 1;
 
   let totalWd = 0;
   let totalWe = 0;
@@ -201,6 +218,7 @@ function collectSectionAudio(
     spectralCentroidHz: emean((f) => f.spectralCentroidHz),
     ...(dynamicRangeDb !== undefined ? { dynamicRangeDb } : {}),
     ...(transientDensity !== undefined ? { transientDensity } : {}),
+    coverage,
   };
 }
 
@@ -223,7 +241,12 @@ export function buildSectionFeatures(state: MusicState): SectionFeatures[] {
   const tempo = state.snapshot.tempo > 0 ? state.snapshot.tempo : 120;
   const secPerBeat = 60 / tempo;
   const secPerBar = secPerBeat * state.barBeats;
-  const raws = sectionize(state.snapshot, state.barBeats, state.arrangement.endBeat);
+  // Zero-length sections (duplicate cue times produce [t, t)) carry no
+  // onsets by construction; analysis's sectionEnergy skips them implicitly,
+  // so features drop them explicitly to keep the two layers aligned.
+  const raws = sectionize(state.snapshot, state.barBeats, state.arrangement.endBeat).filter(
+    (r) => r.endBeat - r.startBeat > EPS,
+  );
 
   // Denominator of activeTrackRatio: unmuted tracks with audible arrangement
   // material anywhere (MIDI notes, or an audio clip occupying time).
@@ -244,8 +267,9 @@ export function buildSectionFeatures(state: MusicState): SectionFeatures[] {
     const audio = collectSectionAudio(state, raw.startBeat, raw.endBeat, secPerBeat);
 
     // Active = MIDI onsets OR an audio clip sounding in this section.
+    const audioActiveIdx = activeAudioTrackIdx(state, raw.startBeat, raw.endBeat);
     const activeIdx = midi.trackIdx;
-    for (const i of activeAudioTrackIdx(state, raw.startBeat, raw.endBeat)) activeIdx.add(i);
+    for (const i of audioActiveIdx) activeIdx.add(i);
 
     const density = midi.onsets / Math.max(1e-9, bars);
     const activeTrackRatio = audibleTracks > 0 ? activeIdx.size / audibleTracks : 0;
@@ -260,13 +284,18 @@ export function buildSectionFeatures(state: MusicState): SectionFeatures[] {
       rhythmicActivity = fv(
         normRange(audio.transientDensity * secPerBar, 0, ONSETS_PER_BAR_FULL),
         "audio",
+        audio.coverage,
       );
     }
 
     // --- energy family ---
     // energyMidi is a fact-based proxy: 0 means genuinely no MIDI activity.
+    // EXCEPTION: in a section with active audio but no notes, MIDI silence is
+    // not evidence — the proxy has no jurisdiction and stays undefined
+    // (otherwise unanalyzed audio-only sections would read a fake ~0.33).
+    const hasAudioActivity = audioActiveIdx.size > 0;
     let energyMidi: FeatureValue | undefined;
-    {
+    if (!(midi.onsets === 0 && hasAudioActivity)) {
       const r = weightedMean([
         { v: densityN, w: 0.5 },
         { v: activeTrackRatio, w: 0.25 },
@@ -279,7 +308,11 @@ export function buildSectionFeatures(state: MusicState): SectionFeatures[] {
     }
     const energyAudio =
       audio !== null
-        ? fv(normRange(audio.loudnessDb, LOUDNESS_DB_LO, LOUDNESS_DB_HI), "audio")
+        ? fv(
+            normRange(audio.loudnessDb, LOUDNESS_DB_LO, LOUDNESS_DB_HI),
+            "audio",
+            audio.coverage,
+          )
         : undefined;
     const energy = derived([
       { v: energyMidi?.value, w: 1 },
@@ -329,18 +362,19 @@ export function buildSectionFeatures(state: MusicState): SectionFeatures[] {
       ...(rhythmicActivity !== undefined ? { rhythmicActivity } : {}),
       ...(audio
         ? {
-            lowEnergy: fv(audio.bands.sub + audio.bands.bass, "audio"),
-            midEnergy: fv(audio.bands.lowMid + audio.bands.mid, "audio"),
-            highEnergy: fv(audio.bands.highMid + audio.bands.high, "audio"),
+            lowEnergy: fv(audio.bands.sub + audio.bands.bass, "audio", audio.coverage),
+            midEnergy: fv(audio.bands.lowMid + audio.bands.mid, "audio", audio.coverage),
+            highEnergy: fv(audio.bands.highMid + audio.bands.high, "audio", audio.coverage),
             spectralBrightness: fv(
               normLog(audio.spectralCentroidHz, BRIGHTNESS_HZ_LO, BRIGHTNESS_HZ_HI),
               "audio",
+              audio.coverage,
             ),
             ...(audio.transientDensity !== undefined
-              ? { transientDensity: fv(audio.transientDensity, "audio") }
+              ? { transientDensity: fv(audio.transientDensity, "audio", audio.coverage) }
               : {}),
             ...(audio.dynamicRangeDb !== undefined
-              ? { dynamicRange: fv(audio.dynamicRangeDb, "audio") }
+              ? { dynamicRange: fv(audio.dynamicRangeDb, "audio", audio.coverage) }
               : {}),
           }
         : {}),

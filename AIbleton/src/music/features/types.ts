@@ -46,7 +46,10 @@ export interface FeatureValue {
   value: number;
   source: FeatureSource;
   /** 0-1. On derived features: fraction of the declared input components that
-   * had data (1 = full evidence). Absent on direct measurements. */
+   * had data (1 = full evidence). On audio-sourced features: analysis
+   * coverage — the share of audible audio (beats in scope) that actually
+   * produced features, so a quarter-analyzed aggregate reads 0.25.
+   * Absent when not applicable. */
   confidence?: number;
 }
 
@@ -153,13 +156,17 @@ export interface SectionFeatures {
   // --- Energy family (kept distinct on purpose: §10 of the PR11 spec) ---
 
   /** MIDI activity proxy: weighted(density normalized, activeTrackRatio,
-   * mean velocity). 0 is a real fact (section genuinely silent of notes). */
+   * mean velocity). 0 is a real fact (section genuinely empty). undefined
+   * when the section has ACTIVE AUDIO but no notes — MIDI silence is not
+   * evidence about an audio section's energy. */
   energyMidi?: FeatureValue;
   /** Normalized source-file loudness of overlapping audio clips
    * (heuristic anchors: −45 dBFS = 0, −8 dBFS = 1). */
   energyAudio?: FeatureValue;
   /** Combined section energy: mean of the available energyMidi / energyAudio.
-   * source "derived"; confidence = how many of the two were present. */
+   * source "derived"; confidence = how many of the two were present.
+   * undefined when neither has data — e.g. an audio-only section that was
+   * never analyzed reads "we don't know", not a fabricated number. */
   energy?: FeatureValue;
 
   // --- Heuristic proxies (NOT music-theoretic measurements) ---
