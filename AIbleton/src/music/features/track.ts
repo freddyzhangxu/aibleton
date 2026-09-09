@@ -68,25 +68,52 @@ function trackFeatures(
   const activeRatio = arrEnd > 0 ? Math.min(1, unionBeats(spans) / arrEnd) : 0;
 
   // Repetition: onsets produced by repeat passes ÷ all audible onsets.
+  // Onsets are counted with the final partial pass truncated at the clip end
+  // (same rule as section.ts) — a 4-beat loop over a 10-beat clip sounds
+  // 2.5 passes, matching MusicState's fractional `repeats`, not ceil tiles.
   let repetition: number | undefined;
   {
     let total = 0;
-    let repeated = 0;
+    let singlePass = 0;
     if (!ts.muted) {
       for (const cs of ts.clips) {
         const c = cs.clip;
         if (c.start === null || c.muted || c.kind !== "midi") continue;
         if (cs.material.length === 0) continue;
-        const passes = tileCount(Math.max(0, c.duration), cs.window.loopLen);
-        total += cs.material.length * passes;
-        repeated += cs.material.length * (passes - 1);
+        const dur = Math.max(0, c.duration);
+        const passes = tileCount(dur, cs.window.loopLen);
+        for (let k = 0; k < passes; k++) {
+          for (const n of cs.material) {
+            const rel = n.start - cs.window.winStart + k * cs.window.loopLen;
+            if (rel < dur - 1e-6) total++;
+          }
+        }
+        singlePass += cs.material.length;
       }
     }
-    if (total > 0) repetition = repeated / total;
+    if (total > 0) repetition = (total - singlePass) / total;
   }
 
   // Audio source-file aggregate (single producer — never re-aggregate here).
   const audio = aggregateTrackAudio(ts, secPerBeat);
+
+  // Analysis coverage: share of the track's audible arrangement audio (in
+  // beats) that actually has features. < 1 = budget-skipped or failed clips
+  // — surfaces as `confidence` on the audio-sourced fields.
+  let audioCoverage: number | undefined;
+  if (audio && !ts.muted) {
+    let totalBeats = 0;
+    let coveredBeats = 0;
+    for (const cs of ts.clips) {
+      const c = cs.clip;
+      if (c.kind !== "audio" || c.start === null || c.muted) continue;
+      const d = Math.max(0, c.duration);
+      if (d <= 0) continue;
+      totalBeats += d;
+      if (cs.audio?.features) coveredBeats += d;
+    }
+    if (totalBeats > 0) audioCoverage = Math.min(1, coveredBeats / totalBeats);
+  }
 
   // Rhythmic activity: MIDI onsets when the track has notes; otherwise
   // source-file transients converted to onsets/bar via tempo.
@@ -99,6 +126,7 @@ function trackFeatures(
     rhythmicActivity = fv(
       normRange(audio.transientDensity * secPerBar, 0, ONSETS_PER_BAR_FULL),
       "audio",
+      audioCoverage,
     );
   }
 
@@ -119,11 +147,11 @@ function trackFeatures(
     ...(rhythmicActivity !== undefined ? { rhythmicActivity } : {}),
     ...(audio
       ? {
-          lowEnergy: fv(audio.bands.sub + audio.bands.bass, "audio"),
-          midEnergy: fv(audio.bands.lowMid + audio.bands.mid, "audio"),
-          highEnergy: fv(audio.bands.highMid + audio.bands.high, "audio"),
+          lowEnergy: fv(audio.bands.sub + audio.bands.bass, "audio", audioCoverage),
+          midEnergy: fv(audio.bands.lowMid + audio.bands.mid, "audio", audioCoverage),
+          highEnergy: fv(audio.bands.highMid + audio.bands.high, "audio", audioCoverage),
           ...(audio.transientDensity !== undefined
-            ? { transientDensity: fv(audio.transientDensity, "audio") }
+            ? { transientDensity: fv(audio.transientDensity, "audio", audioCoverage) }
             : {}),
         }
       : {}),
