@@ -439,5 +439,196 @@ console.log("== three-stage equivalence ==");
 }
 
 // ---------------------------------------------------------------------------
+// 22. Audio features (ClipState.audio fixtures — no real files needed:
+// features attach to ClipState directly, exactly what audiofiles' enrichment
+// would have written after decoding source files)
+// ---------------------------------------------------------------------------
+console.log("== audio features ==");
+import type { AudioFeatures } from "../src/dsp.js";
+import type { AudioEnrichStats } from "../src/analysis/types.js";
+
+const feat = (over: Partial<AudioFeatures> = {}): AudioFeatures => ({
+  durationSec: 10,
+  sampleRate: 44100,
+  channels: 2,
+  rmsDb: -12,
+  peakDb: -3,
+  crestDb: 9,
+  loudnessDb: -14,
+  dynamicRangeDb: 10,
+  spectralCentroidHz: 3000,
+  bands: { sub: 0.1, bass: 0.2, lowMid: 0.2, mid: 0.2, highMid: 0.15, high: 0.15 },
+  transientDensity: 4,
+  ...over,
+});
+
+function audioClip(opt: Partial<SnapshotClip> = {}): SnapshotClip {
+  const duration = opt.duration ?? 16;
+  return {
+    kind: "audio",
+    name: opt.name ?? "audio clip",
+    start: opt.start !== undefined ? (opt.start as number | null) : 0,
+    duration,
+    looping: opt.looping ?? true,
+    loopStart: 0,
+    loopEnd: duration,
+    startMarker: 0,
+    muted: opt.muted ?? false,
+    file: opt.file ?? "loop.wav",
+    filePath: opt.filePath ?? "/tmp/loop.wav",
+  };
+}
+
+const AUDIO_CODES = ["WEAK_TRANSIENTS", "THIN_LOW_END", "SQUASHED_DYNAMICS", "DULL_HIGH_END", "HARSH_HIGH_END"];
+const hasCode = (ma: ReturnType<typeof analyzeMusicState>, code: string): boolean =>
+  ma.issues.some((i) => i.code === code);
+
+// Un-enriched: no ClipState.audio anywhere → no audio issues, no trackAudio.
+{
+  const st = buildMusicState(song([track(0, "Kick", [audioClip()], { type: "audio" })]));
+  const ma = analyzeMusicState(st);
+  check("un-enriched → trackAudio undefined", ma.trackAudio === undefined);
+  check("un-enriched → no audio issue codes", !ma.issues.some((i) => AUDIO_CODES.includes(i.code)));
+}
+
+// Kick with squashed crest → WEAK_TRANSIENTS, with track ref + source-file caveat.
+{
+  const st = buildMusicState(song([track(0, "Kick", [audioClip()], { type: "audio" })]));
+  st.tracks[0].clips[0].audio = { features: feat({ crestDb: 1.5 }) };
+  const ma = analyzeMusicState(st);
+  const issue = ma.issues.find((i) => i.code === "WEAK_TRANSIENTS");
+  check("crest 1.5 on kick → WEAK_TRANSIENTS", !!issue, ma.issues.map((i) => i.code).join(" | "));
+  check("WEAK_TRANSIENTS references the track", issue?.tracks?.[0] === 0);
+  check("WEAK_TRANSIENTS carries the source-file caveat", !!issue && issue.message.includes("from clip source files"));
+  check("punchy kick (crest 9) → silent", (() => {
+    const st2 = buildMusicState(song([track(0, "Kick", [audioClip()], { type: "audio" })]));
+    st2.tracks[0].clips[0].audio = { features: feat({ crestDb: 9 }) };
+    return !hasCode(analyzeMusicState(st2), "WEAK_TRANSIENTS");
+  })());
+}
+
+// Bass with thin low bands → THIN_LOW_END.
+{
+  const st = buildMusicState(song([track(0, "Bass", [audioClip()], { type: "audio" })]));
+  st.tracks[0].clips[0].audio = {
+    features: feat({ bands: { sub: 0.05, bass: 0.1, lowMid: 0.3, mid: 0.3, highMid: 0.15, high: 0.1 } }),
+  };
+  const ma = analyzeMusicState(st);
+  check("sub+bass 15% on bass → THIN_LOW_END", hasCode(ma, "THIN_LOW_END"), ma.issues.map((i) => i.code).join(" | "));
+  const ta = ma.trackAudio?.[0];
+  check("trackAudio aggregate present", !!ta && ta.clips === 1);
+}
+
+// Over-compressed → SQUASHED_DYNAMICS (any role).
+{
+  const st = buildMusicState(song([track(0, "Keys", [audioClip()], { type: "audio" })]));
+  st.tracks[0].clips[0].audio = { features: feat({ dynamicRangeDb: 3 }) };
+  check("dynamicRange 3 dB → SQUASHED_DYNAMICS", hasCode(analyzeMusicState(st), "SQUASHED_DYNAMICS"));
+  const st2 = buildMusicState(song([track(0, "Keys", [audioClip()], { type: "audio" })]));
+  st2.tracks[0].clips[0].audio = { features: feat({ dynamicRangeDb: undefined }) };
+  check("dynamicRange undefined (short one-shot) → silent", !hasCode(analyzeMusicState(st2), "SQUASHED_DYNAMICS"));
+}
+
+// Song-wide balance: dull vs harsh (duration-weighted across tracks).
+{
+  const dullSet = song([track(0, "Pad Stem", [audioClip()], { type: "audio" })]);
+  const stD = buildMusicState(dullSet);
+  stD.tracks[0].clips[0].audio = {
+    features: feat({ bands: { sub: 0.1, bass: 0.2, lowMid: 0.35, mid: 0.2, highMid: 0.13, high: 0.02 } }),
+  };
+  const maD = analyzeMusicState(stD);
+  check("song-wide high 2% → DULL_HIGH_END", hasCode(maD, "DULL_HIGH_END"));
+  check("DULL message scoped to source files", maD.issues.find((i) => i.code === "DULL_HIGH_END")?.message.includes("audio clip source files only") ?? false);
+
+  const stH = buildMusicState(song([track(0, "Hats Stem", [audioClip()], { type: "audio" })]));
+  stH.tracks[0].clips[0].audio = {
+    features: feat({ bands: { sub: 0.02, bass: 0.03, lowMid: 0.1, mid: 0.2, highMid: 0.25, high: 0.4 } }),
+  };
+  check("song-wide high+highMid 65% → HARSH_HIGH_END", hasCode(analyzeMusicState(stH), "HARSH_HIGH_END"));
+
+  // Field-report regression: loud sub-heavy kick + hats 28 dB down — the
+  // quiet hats must NOT skew the mix verdict into HARSH (energy-weighted).
+  const stFR = buildMusicState(
+    song([
+      track(0, "Kick", [audioClip({ name: "kick" })], { type: "audio" }),
+      track(1, "Hats", [audioClip({ name: "hats" })], { type: "audio" }),
+    ]),
+  );
+  stFR.tracks[0].clips[0].audio = {
+    features: feat({ rmsDb: -14, bands: { sub: 0.61, bass: 0.35, lowMid: 0.02, mid: 0.01, highMid: 0.005, high: 0.005 } }),
+  };
+  stFR.tracks[1].clips[0].audio = {
+    features: feat({ rmsDb: -42.4, bands: { sub: 0, bass: 0, lowMid: 0.02, mid: 0.02, highMid: 0.04, high: 0.92 } }),
+  };
+  const maFR = analyzeMusicState(stFR);
+  check("quiet hats 28 dB down → HARSH stays silent", !hasCode(maFR, "HARSH_HIGH_END"),
+    maFR.issues.map((i) => i.code).join(" | ") || "none");
+}
+
+// Aggregate weighting + failure accounting.
+{
+  const st = buildMusicState(
+    song([track(0, "Drums", [audioClip({ name: "a", duration: 4 }), audioClip({ name: "b", duration: 16 })], { type: "audio" })]),
+  );
+  st.tracks[0].clips[0].audio = { features: feat({ crestDb: 2 }) };
+  st.tracks[0].clips[1].audio = { features: feat({ crestDb: 10 }) };
+  const ta = analyzeMusicState(st).trackAudio?.[0];
+  // (2*4 + 10*16) / 20 = 8.4 — the long clip dominates the weighted mean.
+  check("aggregate weighted by clip duration", !!ta && Math.abs(ta.crestDb - 8.4) < 0.01, String(ta?.crestDb));
+
+  // Bands/centroid are ENERGY-weighted (seconds × 10^(rmsDb/10)): a clip
+  // 30 dB down must not pull the track's balance toward its own spectrum.
+  const stE = buildMusicState(
+    song([track(0, "Drums", [audioClip({ name: "loud", duration: 16 }), audioClip({ name: "quiet", duration: 16 })], { type: "audio" })]),
+  );
+  stE.tracks[0].clips[0].audio = {
+    features: feat({ rmsDb: -10, bands: { sub: 0.6, bass: 0.3, lowMid: 0.05, mid: 0.03, highMid: 0.01, high: 0.01 } }),
+  };
+  stE.tracks[0].clips[1].audio = {
+    features: feat({ rmsDb: -40, bands: { sub: 0, bass: 0, lowMid: 0.02, mid: 0.03, highMid: 0.05, high: 0.9 } }),
+  };
+  const taE = analyzeMusicState(stE).trackAudio?.[0];
+  // Duration-weighted would read high ≈ 0.46; energy-weighted ≈ 0.011.
+  check("bands follow the LOUD clip (energy-weighted)", !!taE && taE.bands.high < 0.05 && taE.bands.sub > 0.55,
+    taE ? `high=${taE.bands.high.toFixed(3)} sub=${taE.bands.sub.toFixed(3)}` : "null");
+
+  const st2 = buildMusicState(song([track(0, "Drums", [audioClip(), audioClip({ name: "b" })], { type: "audio" })]));
+  st2.tracks[0].clips[0].audio = { features: feat() };
+  st2.tracks[0].clips[1].audio = { error: "unreadable (missing or denied)" };
+  const ta2 = analyzeMusicState(st2).trackAudio?.[0];
+  check("failed clip counted, excluded from aggregate", !!ta2 && ta2.clips === 1 && ta2.failedClips === 1);
+
+  const st3 = buildMusicState(song([track(0, "Drums", [audioClip()], { type: "audio" })]));
+  st3.tracks[0].clips[0].audio = { error: "unreadable (missing or denied)" };
+  const ma3 = analyzeMusicState(st3);
+  check("all clips failed → no aggregate, no false claims", !ma3.trackAudio && !ma3.issues.some((i) => AUDIO_CODES.includes(i.code)));
+}
+
+// Presentation: audioRun → feat rendered, caveat switches, note explains empty runs.
+{
+  const audioRun: AudioEnrichStats = { computed: 1, cached: 0, failed: 0, skipped: 0 };
+  const st = buildMusicState(song([track(0, "Kick", [audioClip()], { type: "audio" })]));
+  st.tracks[0].clips[0].audio = { features: feat({ crestDb: 1.5 }) };
+  const sa = presentAnalysis(st, analyzeMusicState(st), 5800, undefined, audioRun);
+  check("audio:true → audioRun echo", sa.audioRun?.computed === 1 && sa.audioRun.note === undefined);
+  check("audio:true → feat rendered (rounded)", sa.tracks[0].audio?.feat?.crest === 1.5 && sa.tracks[0].audio?.feat?.bands.sub === 0.1,
+    JSON.stringify(sa.tracks[0].audio?.feat));
+  check("audio:true → caveat switches to source-file variant", sa.caveat.includes("SOURCE FILES"));
+  check("no audioRun → MIDI-only caveat", !presentAnalysis(st, analyzeMusicState(st), 5800).caveat.includes("SOURCE FILES"));
+
+  const squeezed = presentAnalysis(st, analyzeMusicState(st), 800, undefined, audioRun);
+  check("fitBudget drops feat before files under pressure", !squeezed.tracks.some((t) => t.audio?.feat));
+
+  const empty = presentAnalysis(buildMusicState(song([])), analyzeMusicState(buildMusicState(song([]))), 5800, undefined, audioRun);
+  check("zero-audio Set → note says so", empty.audioRun?.note === "no audio clips in the Set", empty.audioRun?.note);
+
+  const stF = buildMusicState(song([track(0, "Kick", [audioClip()], { type: "audio" })]));
+  stF.tracks[0].clips[0].audio = { error: "unreadable (missing or denied)" };
+  const failedRun: AudioEnrichStats = { computed: 0, cached: 0, failed: 1, skipped: 0 };
+  const saF = presentAnalysis(stF, analyzeMusicState(stF), 5800, undefined, failedRun);
+  check("clips present but none analyzed → note explains", saF.audioRun?.note === "audio clips present but none analyzed (failed 1, skipped 0)", saF.audioRun?.note);
+}
+
+// ---------------------------------------------------------------------------
 console.log(failed ? `\n${failed} 项失败 / ${passed + failed}` : `\n全部通过 (${passed})`);
 process.exit(failed ? 1 : 0);

@@ -20,6 +20,7 @@ import { rhythmEntropy } from "../musicstate/builder.js";
 import type { MusicState } from "../musicstate/types.js";
 import type { ContextSelection } from "./select.js";
 import type {
+  AudioEnrichStats,
   ClipEntry,
   MusicAnalysis,
   SongAnalysis,
@@ -28,10 +29,18 @@ import type {
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-const CAVEAT =
+const CAVEAT_MIDI_ONLY =
   "MIDI/structure-based only: audio clips contribute filename + duration, " +
   "no loudness/timbre/pitch analysis. Loop repeats estimated virtually " +
   "(material x repeats). Track indices match get_song_overview.";
+
+const CAVEAT_WITH_AUDIO =
+  "Audio features (loudness/crest/dynamic-range/bands/transients) describe " +
+  "clip SOURCE FILES — pre-warp, pre-gain, pre-device; the audible result " +
+  "may differ. Loop repeats estimated virtually (material x repeats). " +
+  "Track indices match get_song_overview.";
+
+const caveatText = (audioRan: boolean): string => (audioRan ? CAVEAT_WITH_AUDIO : CAVEAT_MIDI_ONLY);
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -54,12 +63,22 @@ function round1(x: number): number {
   return Math.round(x * 10) / 10;
 }
 
+function round3(x: number): number {
+  return Math.round(x * 1000) / 1000;
+}
+
 // ---------------------------------------------------------------------------
 // Budget fitting (callTool hard-truncates at 6000 chars)
 // ---------------------------------------------------------------------------
 
 function fitBudget(analysis: SongAnalysis, budget = 5800): SongAnalysis {
   const size = () => JSON.stringify(analysis).length;
+  if (size() <= budget) return analysis;
+  // Audio feature blocks are the biggest per-track payload (~150 chars each)
+  // and recomputable on demand — they go first, before filenames.
+  for (const t of analysis.tracks) {
+    if (t.audio?.feat) delete t.audio.feat;
+  }
   if (size() <= budget) return analysis;
   for (const t of analysis.tracks) {
     if (t.audio?.files) delete t.audio.files;
@@ -96,12 +115,15 @@ function fitBudget(analysis: SongAnalysis, budget = 5800): SongAnalysis {
 /** Presentation entry point: render MusicAnalysis (plus facts from MusicState
  * it references by index) as model-bound SongAnalysis JSON.
  * budget: JSON char cap; null = no fitBudget cut.
- * selection: from selectMusicContext; omitted = full render (unchanged). */
+ * selection: from selectMusicContext; omitted = full render (unchanged).
+ * audioRun: stats of the analyze_song audio-enrichment run; when present the
+ * caveat switches to the source-file variant and an audioRun echo is added. */
 export function presentAnalysis(
   state: MusicState,
   ma: MusicAnalysis,
   budget: number | null = 5800,
   selection?: ContextSelection,
+  audioRun?: AudioEnrichStats,
 ): SongAnalysis {
   const snap = state.snapshot;
   const num = snap.timeSig.numerator || 4;
@@ -153,6 +175,26 @@ export function presentAnalysis(
         bars: round1(audioClips.reduce((a, c) => a + Math.max(0, c.duration), 0) / barBeats),
         files: audioClips.map((c) => c.file ?? c.name).filter(Boolean).slice(0, 4),
       };
+      const a = ma.trackAudio?.[idx];
+      if (a) {
+        base.audio.feat = {
+          rms: round1(a.rmsDb),
+          crest: round1(a.crestDb),
+          ...(a.dynamicRangeDb !== undefined ? { dyn: round1(a.dynamicRangeDb) } : {}),
+          loud: round1(a.loudnessDb),
+          centroid: Math.round(a.spectralCentroidHz),
+          ...(a.transientDensity !== undefined ? { trans: round2(a.transientDensity) } : {}),
+          bands: {
+            sub: round3(a.bands.sub),
+            bass: round3(a.bands.bass),
+            lowMid: round3(a.bands.lowMid),
+            mid: round3(a.bands.mid),
+            highMid: round3(a.bands.highMid),
+            high: round3(a.bands.high),
+          },
+          ...(a.partial ? { partial: true as const } : {}),
+        };
+      }
     }
     return base;
   });
@@ -273,8 +315,23 @@ export function presentAnalysis(
       notes: sessionNotes,
     },
     issues: issuesOut,
-    caveat: CAVEAT,
+    caveat: caveatText(audioRun !== undefined),
   };
+  if (audioRun) {
+    // Never silent about a run that landed nothing: say WHY (no audio clips
+    // at all, or clips exist but every one failed/was budget-skipped).
+    const anyFeatures = ma.trackAudio?.some((a) => a !== null) ?? false;
+    let note: string | undefined;
+    if (!anyFeatures) {
+      const anyAudio = state.tracks.some((ts) =>
+        ts.clips.some((cs) => cs.clip.kind === "audio" && cs.clip.start !== null),
+      );
+      note = anyAudio
+        ? `audio clips present but none analyzed (failed ${audioRun.failed}, skipped ${audioRun.skipped})`
+        : "no audio clips in the Set";
+    }
+    analysis.audioRun = { ...audioRun, ...(note ? { note } : {}) };
+  }
   if (clipsProjectionOmitted > 0) analysis.clipsOmitted = clipsProjectionOmitted;
   if (selection) {
     analysis.focus = selection.unmatched

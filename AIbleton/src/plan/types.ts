@@ -20,6 +20,7 @@
  */
 
 import type { MusicGoal } from "../goal/types.js";
+import { AUDIO_BAND_NAMES } from "../dsp.js";
 
 // ---------------------------------------------------------------------------
 // ExpectedEffect — one predicted, machine-checkable consequence of a step.
@@ -33,7 +34,9 @@ export type EffectMetric =
   | "role_audible" // a role becomes audible (section-scoped or song-wide)
   | "track_notes" // a track's audible note count moves vs baseline
   | "track_count" // total track count moves vs baseline
-  | "tempo"; // song tempo moves vs baseline
+  | "tempo" // song tempo moves vs baseline
+  | "track_crest" // track's clip SOURCE FILE crest factor (dB) moves vs baseline
+  | "track_band_energy"; // track's clip SOURCE FILE band energy fraction moves vs baseline
 
 export const EFFECT_METRICS: EffectMetric[] = [
   "section_energy",
@@ -42,6 +45,8 @@ export const EFFECT_METRICS: EffectMetric[] = [
   "track_notes",
   "track_count",
   "tempo",
+  "track_crest",
+  "track_band_energy",
 ];
 
 export type EffectDirection = "increase" | "decrease";
@@ -51,8 +56,9 @@ export interface ExpectedEffect {
   /** Required for every metric except role_audible (presence IS the effect). */
   direction?: EffectDirection;
   section?: string; // section_energy / section_tracks (required), role_audible (optional)
-  track?: string; // track_notes: track NAME, not index
+  track?: string; // track_notes / track_crest / track_band_energy: track NAME, not index
   role?: string; // role_audible: any TrackRole, or the group low_end
+  band?: string; // track_band_energy: sub | bass | lowMid | mid | highMid | high
 }
 
 export interface PlanStep {
@@ -66,6 +72,15 @@ export interface PlanStep {
 export interface MusicPlan {
   goal: MusicGoal; // reference to the pending goal, not a copy
   steps: PlanStep[];
+}
+
+/** True when any step predicts a source-file audio effect — the goal gate
+ * must decode clip source files before building its after-view even when the
+ * goal's own criteria contain no audio kinds. */
+export function planNeedsAudio(plan: MusicPlan): boolean {
+  return plan.steps.some((s) =>
+    s.expectedEffects.some((fx) => fx.metric === "track_crest" || fx.metric === "track_band_energy"),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +152,27 @@ function normEffect(raw: unknown, warnings: string[]): ExpectedEffect | null {
         return null;
       }
       return section ? { metric, role, section } : { metric, role };
+    }
+    case "track_crest": {
+      const direction = normDirection(r.direction);
+      if (!track || !direction) {
+        warnings.push(`track_crest 需要 track（轨道名）和 direction（increase|decrease），已忽略`);
+        return null;
+      }
+      return { metric, direction, track };
+    }
+    case "track_band_energy": {
+      const direction = normDirection(r.direction);
+      const band = str(r.band);
+      if (!track || !direction) {
+        warnings.push(`track_band_energy 需要 track（轨道名）和 direction（increase|decrease），已忽略`);
+        return null;
+      }
+      if (!(AUDIO_BAND_NAMES as readonly string[]).includes(band)) {
+        warnings.push(`track_band_energy 的 band「${band || "(空)"}」不可用 — 可用: ${AUDIO_BAND_NAMES.join(", ")}，已忽略`);
+        return null;
+      }
+      return { metric, direction, track, band };
     }
   }
 }

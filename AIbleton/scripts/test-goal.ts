@@ -328,5 +328,95 @@ console.log("== buildGoalView（SongSnapshot 端到端）==");
 }
 
 // ---------------------------------------------------------------------------
+// Audio criteria: track_crest_gte / track_band_gte (judge clip SOURCE FILES)
+// ---------------------------------------------------------------------------
+console.log("== audio criteria ==");
+import { goalNeedsAudio } from "../src/goal/types.js";
+import type { AudioFeatures } from "../src/dsp.js";
+{
+  const ok = normalizeGoal({
+    type: "sound_design",
+    objective: "make the kick punchier",
+    successCriteria: [
+      { kind: "track_crest_gte", track: "Kick", db: 6 },
+      { kind: "track_band_gte", track: "Bass", band: "sub", pct: 0.3 },
+    ],
+  });
+  check("两个音频判据合法接受", !!ok.goal && ok.goal.successCriteria.length === 2, ok.warnings.join(" | "));
+  check("goalNeedsAudio → true", !!ok.goal && goalNeedsAudio(ok.goal));
+
+  const junk = normalizeGoal({
+    type: "sound_design",
+    objective: "x",
+    successCriteria: [
+      { kind: "track_band_gte", track: "Bass", band: "treble", pct: 0.3 }, // band 非法
+      { kind: "track_band_gte", track: "Bass", band: "sub", pct: 1.5 }, // pct 越界
+      { kind: "track_crest_gte", db: 6 }, // 缺 track
+      { kind: "track_crest_gte", track: "Kick", db: 6 },
+    ],
+  });
+  check("坏 band / pct 越界 / 缺 track 全部丢弃", !!junk.goal && junk.goal.successCriteria.length === 1 && junk.warnings.length === 3,
+    junk.warnings.join(" | "));
+  const nonAudio = goal({ successCriteria: [{ kind: "section_energy_gt", a: "Drop", b: "Intro" }] });
+  check("goalNeedsAudio → false（无音频判据）", !goalNeedsAudio(nonAudio));
+}
+
+const audioBands = { sub: 0.2, bass: 0.3, lowMid: 0.2, mid: 0.15, highMid: 0.1, high: 0.05 };
+const gvAudio = (crestDb: number, bands = audioBands): GoalView =>
+  gv({
+    tracks: [
+      { name: "Drums", role: "drums", notes: 36, muted: false },
+      { name: "Bass", role: "bass", notes: 8, muted: false, audio: { crestDb, rmsDb: -12, bands } },
+    ],
+  });
+
+{
+  const gCrest = goal({ successCriteria: [{ kind: "track_crest_gte", track: "Bass", db: 6 }] });
+  check("crest 7 ≥ 6 → met", evaluateGoal(gCrest, before, gvAudio(7)).met);
+  const low = evaluateGoal(gCrest, before, gvAudio(2.5));
+  check("crest 2.5 < 6 → unmet 且报实际值", !low.met && /2\.5 dB/.test(low.criteriaIssues[0]), low.criteriaIssues.join("|"));
+
+  const noTrack = evaluateGoal(goal({ successCriteria: [{ kind: "track_crest_gte", track: "Ghost", db: 6 }] }), before, gvAudio(9));
+  check("轨道不存在 → fail 且列出可用轨道", !noTrack.met && /Drums/.test(noTrack.criteriaIssues[0]), noTrack.criteriaIssues.join("|"));
+
+  const noAudio = evaluateGoal(gCrest, before, gv()); // 无 audio 字段的 view
+  check("未启用音频分析 → fail 且说明原因", !noAudio.met && /无音频特征/.test(noAudio.criteriaIssues[0]), noAudio.criteriaIssues.join("|"));
+
+  const gBand = goal({ successCriteria: [{ kind: "track_band_gte", track: "Bass", band: "sub", pct: 0.15 }] });
+  check("sub 0.2 ≥ 0.15 → met", evaluateGoal(gBand, before, gvAudio(9)).met);
+  check("sub 0.2 < 0.25 → unmet",
+    !evaluateGoal(goal({ successCriteria: [{ kind: "track_band_gte", track: "Bass", band: "sub", pct: 0.25 }] }), before, gvAudio(9)).met);
+}
+
+// End-to-end: snapshot -> buildMusicState -> attach ClipState.audio (what
+// enrichment writes) -> buildGoalView -> evaluateGoal.
+{
+  const audioClip: SnapshotClip = {
+    kind: "audio", name: "kick loop", start: 0, duration: 16,
+    looping: true, loopStart: 0, loopEnd: 16, startMarker: 0, muted: false,
+    file: "kick.wav", filePath: "/tmp/kick.wav",
+  };
+  const audioFeat = (crestDb: number): AudioFeatures => ({
+    durationSec: 8, sampleRate: 44100, channels: 2,
+    rmsDb: -10, peakDb: -3, crestDb, loudnessDb: -12, dynamicRangeDb: 8,
+    spectralCentroidHz: 2500,
+    bands: { sub: 0.4, bass: 0.3, lowMid: 0.1, mid: 0.1, highMid: 0.05, high: 0.05 },
+    transientDensity: 4,
+  });
+  const audioSong = snapSong([snapTrack(0, "Kick", [audioClip], { type: "audio" })]);
+  const viewWith = (crestDb: number): GoalView => {
+    const st = buildMusicState(audioSong);
+    st.tracks[0].clips[0].audio = { features: audioFeat(crestDb) };
+    return buildGoalView(st);
+  };
+  const soft = viewWith(2);
+  const punchy = viewWith(7.5);
+  check("端到端：GoalView 携带音频聚合", soft.tracks[0].audio?.crestDb === 2, JSON.stringify(soft.tracks[0].audio));
+  const g = goal({ successCriteria: [{ kind: "track_crest_gte", track: "Kick", db: 6 }] });
+  check("端到端：换更猛的采样后 gate 通过", evaluateGoal(g, soft, punchy).met);
+  check("端到端：采样没换（压缩器动不了源文件）→ 不通过", !evaluateGoal(g, soft, soft).met);
+}
+
+// ---------------------------------------------------------------------------
 console.log(failed ? `\n${failed} 项失败 / ${passed + failed}` : `\n全部通过 (${passed})`);
 process.exit(failed ? 1 : 0);

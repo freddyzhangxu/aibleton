@@ -14,6 +14,7 @@
  */
 
 import { analyzeMusicState } from "../analysis/index.js";
+import type { AudioBands } from "../dsp.js";
 import type { MusicState } from "../musicstate/types.js";
 
 export interface GoalTrackMeasure {
@@ -21,6 +22,14 @@ export interface GoalTrackMeasure {
   role: string; // TrackRole
   notes: number; // audible arrangement notes incl. loop repeats
   muted: boolean;
+  /** Source-file audio aggregate (interpret.ts's TrackAudioAnalysis) —
+   * present only when audio enrichment ran for this view. */
+  audio?: {
+    crestDb: number;
+    rmsDb: number;
+    dynamicRangeDb?: number;
+    bands: AudioBands;
+  };
 }
 
 export interface GoalSectionMeasure {
@@ -82,12 +91,25 @@ export function buildGoalView(state: MusicState): GoalView {
     }
   });
 
-  const tracks: GoalTrackMeasure[] = state.tracks.map((ts, i) => ({
-    name: ts.track.name,
-    role: ma.trackRoles[i]?.role ?? "unknown",
-    notes: ts.measurements?.audibleNotes ?? 0,
-    muted: ts.muted,
-  }));
+  const tracks: GoalTrackMeasure[] = state.tracks.map((ts, i) => {
+    const a = ma.trackAudio?.[i];
+    return {
+      name: ts.track.name,
+      role: ma.trackRoles[i]?.role ?? "unknown",
+      notes: ts.measurements?.audibleNotes ?? 0,
+      muted: ts.muted,
+      ...(a
+        ? {
+            audio: {
+              crestDb: a.crestDb,
+              rmsDb: a.rmsDb,
+              ...(a.dynamicRangeDb !== undefined ? { dynamicRangeDb: a.dynamicRangeDb } : {}),
+              bands: a.bands,
+            },
+          }
+        : {}),
+    };
+  });
 
   return {
     tempo: state.snapshot.tempo ?? 120,

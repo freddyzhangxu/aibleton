@@ -62,15 +62,16 @@ import {
   type ClipLoopSettings,
 } from "@ableton-extensions/sdk";
 import { analyzeMusicState, analyzeSong, presentAnalysis, selectMusicContext } from "./analysis/index.js";
+import { enrichMusicStateWithAudio } from "./audiofiles.js";
 import { buildMusicState, tileClipNotes } from "./musicstate/builder.js";
 import type { SnapshotClip, SongSnapshot } from "./musicstate/types.js";
 import { postconditionsFor } from "./verify/rules.js";
 import { runVerification } from "./verify/verifier.js";
 import type { ProbeSong } from "./verify/types.js";
-import { CRITERION_KINDS, GOAL_TYPES, normalizeGoal, type GoalEvaluation, type MusicGoal } from "./goal/types.js";
+import { CRITERION_KINDS, GOAL_TYPES, goalNeedsAudio, normalizeGoal, type GoalEvaluation, type MusicGoal } from "./goal/types.js";
 import { buildGoalView, type GoalView } from "./goal/view.js";
 import { evaluateGoal } from "./goal/evaluate.js";
-import { EFFECT_METRICS, normalizePlan, type MusicPlan } from "./plan/types.js";
+import { EFFECT_METRICS, normalizePlan, planNeedsAudio, type MusicPlan } from "./plan/types.js";
 import { buildPlanReport, executedStepIds, type PlanReport } from "./plan/check.js";
 import {
   AGENT_MAX_RETRIES,
@@ -508,7 +509,12 @@ const CRITERION_INPUT_SCHEMA = {
         "in `section` (whole song when section omitted). " +
         "tempo_unchanged / key_unchanged: self-explanatory. " +
         "track_count_gte: total track count >= n. no_new_tracks: no tracks added. " +
-        "tracks_untouched: the named tracks keep identical note content (mixer/device tweaks not covered).",
+        "tracks_untouched: the named tracks keep identical note content (mixer/device tweaks not covered). " +
+        "track_crest_gte: the track's clip SOURCE FILES must reach crest >= db dB (kick punch ≈ 6+ dB). " +
+        "track_band_gte: the track's clip SOURCE FILES must have >= pct (0-1) of spectral energy in `band` " +
+        "(sub|bass|lowMid|mid|highMid|high). WARNING: the audio kinds judge the source file, pre-warp/pre-gain/" +
+        "pre-device — mixer/EQ/compressor/warp edits NEVER move them; only replacing the sample does. Declare " +
+        "them only when sample replacement is an acceptable route.",
     },
     a: { type: "string", description: "section_energy_gt: section that must win" },
     b: { type: "string", description: "section_energy_gt: section to beat, or \"baseline:<name>\"" },
@@ -519,6 +525,13 @@ const CRITERION_INPUT_SCHEMA = {
       description: "A number, or \"baseline\" = the value when the goal was declared",
     },
     names: { type: "array", items: { type: "string" }, description: "tracks_untouched: track names" },
+    track: { type: "string", description: "track_crest_gte / track_band_gte: track name" },
+    db: { type: "number", description: "track_crest_gte: minimum crest factor in dB" },
+    band: {
+      type: "string",
+      description: "track_band_gte: sub | bass | lowMid | mid | highMid | high",
+    },
+    pct: { type: "number", description: "track_band_gte: minimum band energy fraction (0-1)" },
   },
   required: ["kind"],
 };
@@ -533,7 +546,7 @@ const TOOLS = [
   {
     name: "analyze_song",
     description:
-      "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content), and a flat clip map (every arrangement clip's track/clip_index/bar/length + every session clip's track/scene_index — the coordinates arrange_song plans against). MIDI/structure-based only: audio clips contribute filename + duration. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview. Optional focus narrows the read to what matters for the question.",
+      "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content), and a flat clip map (every arrangement clip's track/clip_index/bar/length + every session clip's track/scene_index — the coordinates arrange_song plans against). By default audio clips contribute filename + duration; pass audio:true to decode clip source files (WAV/AIFF) for per-track loudness/crest/dynamic-range/6-band balance and audio-derived issues (weak transients, thin low end, squashed dynamics, dull/harsh top) — features describe the source FILE, pre-warp/pre-gain/pre-device. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview. Optional focus narrows the read to what matters for the question.",
     input_schema: {
       type: "object",
       properties: {
@@ -541,6 +554,11 @@ const TOOLS = [
           type: "string",
           description:
             "Optional: narrow the analysis to what matters — a track name or role (\"bass\", \"drums\", \"vocal\"), a section name, or an issue code (\"MONOTONE_BASS\"). Focused tracks keep full stats and the clip map keeps only their clips; other tracks collapse to one-line summaries (indices stay valid). Omit for the full read.",
+        },
+        audio: {
+          type: "boolean",
+          description:
+            "Optional: decode audio clip source files (WAV/AIFF) and add per-track audio features (rms/crest/dynamic-range/loudness/6-band energy/transient density) plus audio-derived issues. Slower on first run (file reads + FFT), cached afterwards. Features describe the source file, pre-warp/pre-gain/pre-device — not the audible result through the device chain.",
         },
       },
     },
@@ -634,7 +652,11 @@ const TOOLS = [
                         "role_audible: a role (kick|bass|drums|chords|pad|lead|…, or group low_end) is audible afterwards — " +
                         "needs role, optional section (whole song when omitted), NO direction. " +
                         "track_notes: a track's audible note count moves — needs track (name) + direction. " +
-                        "track_count / tempo: total tracks / song tempo moves — need direction only.",
+                        "track_count / tempo: total tracks / song tempo moves — need direction only. " +
+                        "track_crest: the track's clip SOURCE FILE crest factor (dB) moves — needs track + direction. " +
+                        "track_band_energy: the track's clip SOURCE FILE energy fraction in `band` (sub|bass|lowMid|mid|highMid|high) " +
+                        "moves — needs track + direction + band. The audio metrics judge the source file: mixer/warp/device edits " +
+                        "never move them — only replacing the sample does.",
                     },
                     direction: {
                       type: "string",
@@ -642,8 +664,9 @@ const TOOLS = [
                       description: "Required for every metric except role_audible",
                     },
                     section: { type: "string", description: "Section cue name or \"bars N-M\" from analyze_song" },
-                    track: { type: "string", description: "track_notes: track NAME (indices drift, names don't)" },
+                    track: { type: "string", description: "track_notes / track_crest / track_band_energy: track NAME (indices drift, names don't)" },
                     role: { type: "string", description: "role_audible: role name, or group low_end" },
+                    band: { type: "string", description: "track_band_energy: sub | bass | lowMid | mid | highMid | high" },
                   },
                   required: ["metric"],
                 },
@@ -1157,6 +1180,7 @@ Goals (tasks that change the Set):
 - Criteria are a CLOSED vocabulary (see the set_goal schema): pick a kind and fill its parameters. Section names come from analyze_song; "baseline:<name>" compares a section against its state at the moment you declared the goal. Never invent kinds.
 - set_goal snapshots the Set as its baseline. When you stop calling tools, the server evaluates every criterion against the new state. Unmet criteria come back as a 目标校验 message — keep working or explain the blocker; NEVER claim completion while criteria are unmet.
 - Write 1–4 criteria that genuinely define the outcome ("make the drop harder" → section_energy_gt Drop vs baseline:Drop + role_present low_end in Drop). The objective sentence is for humans; only criteria are judged.
+- The audio criteria (track_crest_gte, track_band_gte) judge the track's clip SOURCE FILES — mixer/EQ/compressor/warp edits never move them; only replacing the sample does. Declare them only for sound-design tasks where swapping the sample is a valid route ("kick 没冲击力" → track_crest_gte Kick ≈ 6 dB via search_samples/generate_audio replacement), never for processing-only tasks.
 
 Plans (multi-step tasks):
 - After set_goal, when the task needs 2+ tool calls or multiple stages, call set_plan with your ordered steps BEFORE touching the Set. Each step: a short description, the tool you expect to call, and expectedEffects — what the step should measurably change (closed vocabulary, see the set_plan schema).
@@ -1223,9 +1247,10 @@ Compression and sidechain:
 
 Song analysis (read-only):
 - analyze_song gives an engineering-level read of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's own scale setting, per-track roles (kick/snare/hats/bass/chords/pad/lead/arp/vocal/…) with note/velocity/density/polyphony/entropy stats, section structure (cue points, else 8-bar energy blocks), a session-view summary, and rule-based issues (SINGLE_LOOP, DUPLICATE_CONTENT, LOW_CONTRAST, FLAT_DYNAMICS, MONOTONE_BASS, OFF_KEY, NO_LOW_END/NO_HIGH_END, MUTED_CONTENT, KEY_MISMATCH).
+- When the user's question is about how the material SOUNDS ("bass 太薄", "kick 没冲击力", "mix 太闷", "high-end 太刺", "drop 不够大"), call analyze_song with audio:true: it decodes the audio clips' source files (WAV/AIFF) and adds per-track loudness/crest/dynamic-range/6-band energy/transient density plus audio-derived issues (WEAK_TRANSIENTS, THIN_LOW_END, SQUASHED_DYNAMICS, DULL_HIGH_END, HARSH_HIGH_END). Features describe the SOURCE FILE, pre-warp/pre-gain/pre-device — NOT the audible result through the device chain. First run reads files and is slower; results are cached for the session. MIDI-only tracks (synths) have no source file — audio:true analyzes audio clips only.
 - When the user's question is about specific material ("the bass is boring", "what's the vocal doing"), pass analyze_song's focus parameter ("bass", "vocal"): focused tracks keep full stats, every section shows whether the focused tracks are active in it (focusTracks), relevant issues sort first, and everything else collapses to one-liners — much cheaper than the full read on large Sets, and the focused tracks' details can't be crowded out. Omit focus for song-wide work (arranging, key/energy overview).
 - Call it when the user asks to analyze/review/diagnose the track, before proposing arrangement or structural changes, or when you need key/role context to write a part that fits. It is read-only and needs no confirmation.
-- It is MIDI- and structure-based ONLY: audio clips contribute filename + duration — no loudness, timbre or transcribed pitch. Never claim you listened to the audio.
+- Without audio:true it is MIDI- and structure-based ONLY: audio clips contribute filename + duration. Even with audio:true you are analyzing files, not listening — never claim you listened to the audio.
 - Track indices in its output match get_song_overview, so you can follow up with get_clip_notes on a specific track.
 - Its clip map lists every clip's coordinates: arrangement clips as (t, i) = (track_index, clip_index) with bar/length, session clips as (t, scene). This is the coordinate system arrange_song plans against.
 
@@ -1420,6 +1445,7 @@ function snapshotClip(c: Clip<"1.0.0">, start: number | null): SnapshotClip {
     ...base,
     kind: "audio",
     file: c instanceof AudioClip && c.filePath ? path.basename(c.filePath) : undefined,
+    filePath: c instanceof AudioClip && c.filePath ? String(c.filePath) : undefined,
   };
 }
 
@@ -1866,12 +1892,22 @@ async function runTool(
       // Three-stage: facts (what is in the Set) -> interpretation (what it
       // means) -> presentation (model-bound JSON, budget-fitted). Optional
       // focus runs the Context Selector between interpretation and
-      // presentation (select.ts) for a focused projection.
+      // presentation (select.ts) for a focused projection. audio:true inserts
+      // async source-file enrichment between facts and interpretation
+      // (audiofiles.ts) — buildMusicState itself stays sync and pure.
       const state = buildMusicState(buildSongSnapshot(song));
+      const audioRun =
+        input.audio === true ? await enrichMusicStateWithAudio(state) : undefined;
       const ma = analyzeMusicState(state);
       const focus =
         typeof input.focus === "string" && input.focus.trim() ? input.focus.trim() : undefined;
-      return presentAnalysis(state, ma, 5800, focus ? selectMusicContext(state, ma, focus) : undefined);
+      return presentAnalysis(
+        state,
+        ma,
+        5800,
+        focus ? selectMusicContext(state, ma, focus) : undefined,
+        audioRun,
+      );
     }
     case "set_goal": {
       return handleSetGoal(context, input);
@@ -2921,7 +2957,7 @@ function summarizeView(v: GoalView): Record<string, unknown> {
   };
 }
 
-function handleSetGoal(context: Ctx, input: Record<string, unknown>): unknown {
+async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Promise<unknown> {
   const norm = normalizeGoal(input);
   if (!norm.goal) {
     throw new Error(
@@ -2941,13 +2977,21 @@ function handleSetGoal(context: Ctx, input: Record<string, unknown>): unknown {
     pendingPlan = null;
     warnings.push(`目标已重新声明，之前的计划已清除 — 请重新调用 set_plan。`);
   }
+  // Audio criteria judge clip source files: decode them before capturing the
+  // baseline so the after-view compares like with like. Cache makes the
+  // goalGate re-run nearly free.
+  let baseline = pendingGoal?.baseline;
+  if (!baseline) {
+    const state = buildMusicState(buildSongSnapshot(context.application.song));
+    if (goalNeedsAudio(norm.goal)) await enrichMusicStateWithAudio(state);
+    baseline = buildGoalView(state);
+  }
   pendingGoal = {
     goal: norm.goal,
     // Re-declaring within one turn refines the criteria but keeps the
     // ORIGINAL baseline — "what the user asked for this turn" is anchored at
     // the first declaration.
-    baseline: pendingGoal?.baseline ??
-      buildGoalView(buildMusicState(buildSongSnapshot(context.application.song))),
+    baseline,
     retries: pendingGoal?.retries ?? 0,
     lateBaseline: pendingGoal?.lateBaseline ?? late,
   };
@@ -3040,9 +3084,14 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
   const held = pendingGoal;
   if (!held) return null;
   try {
-    const after = buildGoalView(
-      buildMusicState(buildSongSnapshot(context.application.song)),
-    );
+    // Rebuild the after-view against the current Set; when the goal (or a
+    // plan built on it) judges source-file audio, decode first — the feature
+    // cache makes this nearly free after the set_goal baseline run.
+    const afterState = buildMusicState(buildSongSnapshot(context.application.song));
+    if (goalNeedsAudio(held.goal) || (pendingPlan && planNeedsAudio(pendingPlan))) {
+      await enrichMusicStateWithAudio(afterState);
+    }
+    const after = buildGoalView(afterState);
     const ev = evaluateGoal(held.goal, held.baseline, after);
     // Plan diagnosis rides the SAME before/after views, so a plan effect and
     // a goal criterion can never disagree about the numbers. The plan never

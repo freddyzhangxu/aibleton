@@ -125,6 +125,48 @@ function judgeTrackNotes(fx: ExpectedEffect, before: GoalView, after: GoalView):
   };
 }
 
+/** track_crest / track_band_energy: the track's clip SOURCE FILE features
+ * move vs baseline. Both views need the audio aggregate — a view built
+ * without enrichment fails closed with "无音频特征" as actual. */
+function judgeTrackAudio(
+  fx: ExpectedEffect & { metric: "track_crest" | "track_band_energy" },
+  before: GoalView,
+  after: GoalView,
+): EffectCheck {
+  const isCrest = fx.metric === "track_crest";
+  const id = isCrest ? `track[${fx.track}].crest` : `track[${fx.track}].band[${fx.band}]`;
+  const label = isCrest ? "crest" : `${fx.band} 频段能量占比`;
+  const norm = fx.track!.trim().toLowerCase();
+  const ta = after.tracks.find((t) => t.name.toLowerCase() === norm);
+  if (!ta) {
+    return {
+      id,
+      observed: false,
+      expected: `轨道「${fx.track}」存在`,
+      actual: `现有轨道: ${after.tracks.map((t) => t.name).join(", ") || "(空)"}`,
+    };
+  }
+  const tb = before.tracks.find((t) => t.name.toLowerCase() === norm);
+  const take = (t: typeof ta): number | undefined =>
+    isCrest ? t.audio?.crestDb : t.audio?.bands[fx.band as keyof NonNullable<typeof t.audio>["bands"]];
+  const vb = tb ? take(tb) : undefined;
+  const va = take(ta);
+  if (vb === undefined || va === undefined) {
+    return {
+      id,
+      observed: false,
+      expected: `「${ta.name}」${label}${DIR_LABEL[fx.direction!]}（基线对比）`,
+      actual: "无音频特征（目标声明/校验时未启用音频分析）",
+    };
+  }
+  return {
+    id,
+    observed: moved(fx.direction!, vb, va),
+    expected: `「${ta.name}」源文件 ${label}${DIR_LABEL[fx.direction!]}（基线 ${fmt(vb)}）`,
+    actual: `${fmt(vb)} → ${fmt(va)}`,
+  };
+}
+
 function judgeRoleAudible(fx: ExpectedEffect, after: GoalView): EffectCheck {
   const want = ROLE_GROUPS[fx.role!] ?? [fx.role!];
   const id = fx.section ? `role[${fx.role}]@${fx.section}` : `role[${fx.role}]`;
@@ -173,6 +215,13 @@ export function checkEffect(fx: ExpectedEffect, before: GoalView, after: GoalVie
     }
     case "role_audible":
       return judgeRoleAudible(fx, after);
+    case "track_crest":
+    case "track_band_energy":
+      return judgeTrackAudio(
+        fx as ExpectedEffect & { metric: "track_crest" | "track_band_energy" },
+        before,
+        after,
+      );
   }
 }
 
