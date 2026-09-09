@@ -5,8 +5,17 @@
 <h1 align="center">AIbleton</h1>
 
 <p align="center">
-  面向 Ableton Live 的开源智能体音乐制作平台。<br>
-  用 AI 聊天、创作、编曲、编辑、控制你的音乐 —— Codex、Claude、Gemini，或任何 OpenAI 兼容模型。
+  <b>Ableton Live 里的 AI 音乐制作智能体。</b><br>
+  AIbleton 理解你的 Live Set，创作与编辑音乐，分析编排，<br>
+  把自然语言的想法变成 Ableton Live 里的真实改动。
+</p>
+
+<p align="center">
+  聊天 · 创作 · 分析 · 编曲 · 编辑 · 控制
+</p>
+
+<p align="center">
+  在你的 Live 工作流中直接使用 <b>Codex、Claude、Gemini 或其他兼容 AI 模型</b>。
 </p>
 
 <p align="center">
@@ -34,23 +43,25 @@
 
 用户无需安装 Node.js —— 扩展运行在 Live 自带的 Extension Host 中。
 
-## 简介
+## 什么是 AIbleton？
 
-AIbleton 把 AI 制作智能体直接放进 Ableton Live。对它说
-*「做一个 140 BPM 的 4 小节 808 鼓型」*、*「给 2 轨加个 Auto Filter，截止频率扫到 800 Hz」*、
-*「在我本地采样里找一条 tech house loop 拖进编排」* —— 它会直接在你的 Live Set 里完成。
+大多数 AI 音乐工具只能生成音乐或给你建议。
 
-它同时也是随身的操作指导：问它*「贝斯怎么对底鼓做侧链压缩？」*、
-*「这条 loop 的 warp 在哪里设置？」*，它会一步步讲解操作方法 —— 或者直接帮你做完。
+**AIbleton 能真正处理你在 Ableton Live 里已经打开的音乐。**
 
-接入 Stable Audio 等 AI 音乐模型后，还能用一句话从零生成音频：loop 上编排，one-shot 进 Simpler。
+你可以这样问：
 
-项目包含两个部分：
+> 「这个工程现在是什么状态？」
 
-| 组件 | 说明 |
-|---|---|
-| **[AIbleton/](AIbleton/)** | Live 12 扩展本体：聊天界面 + 本地智能体服务，内置 30+ 个读写 Live Set 的工具 |
-| **[AIbletonBar/](AIbletonBar/)** | 原生悬浮侧边栏（macOS / Windows），把同一个聊天界面挂在 Live 旁边，IDE 式体验，**⌥⌘A** / **Win+Alt+A** 呼出 |
+> 「写一条 A 小调的 4 小节 bassline。」
+
+> 「让 bass 别那么满。」
+
+> 「分析一下编排，告诉我还缺什么。」
+
+> 「给合成器加一个 Auto Filter，扫动截止频率。」
+
+智能体可以**检查你的 Live Set、对其进行推理，并直接在 Live 中执行改动。**
 
 ## 截图
 
@@ -60,210 +71,127 @@ AIbleton 把 AI 制作智能体直接放进 Ableton Live。对它说
 | **AI 找采样并经 Wi-Fi 推送到 Move** | **……随即出现在设备上（move.local）** |
 | ![AIbleton 向 Ableton Move 上传雷鬼鼓采样](docs/screenshots/move-upload-samples.png) | ![move.local 中看到的 Move 上 Reggae Drum 采样文件夹](docs/screenshots/move-samples-webui.png) |
 
-## 功能
+## 核心能力
 
-- **在 Live 里聊天** —— 右键任意轨道 / 场景 / Clip → Extensions → **AIbleton: Open**，
-  在模态对话框中与智能体对话；
-  同一界面也可以在浏览器打开 `http://localhost:17666`，或用 AIbletonBar。
-- **模型自由选择** —— OpenAI Codex、Claude、Google Gemini，或任何 OpenAI 兼容端点
-  （Grok、DeepSeek、OpenRouter、Ollama……），在对话框里随时切换。前三家自动复用
-  本地 CLI 凭证（Codex CLI 含 ChatGPT 账号登录、Claude Code、Gemini CLI），也可
-  手动填写；Custom 槽位填 API 地址 + 模型即可，走标准 `/chat/completions` 协议
-  （本地服务可留空 API Key）。工具栏的思考强度（Effort）选项可以在速度与推理
-  深度之间取舍。
-- **音乐人记忆（Artist Memory）** —— 告诉智能体一次你的风格（「我做 124 左右的
-  melodic techno，A 小调，喜欢温暖的模拟 pad」），它就会跨对话记住：记忆以纯
-  JSON 存在 `memory.json` 里，每次对话都作为音乐决策的默认上下文注入；当你提到
-  长期的风格偏好时，智能体还会自己调用 `update_memory` 工具写入。也可在
-  设置 → 音乐人记忆 里直接查看编辑，或手动分享这个文件。
-- **文件附件** —— 可附加图片或文本文件，也可以直接丢入 `.mid` 文件或整个 `.als`
-  Live 工程：二进制音乐文件会被解析成紧凑的文本摘要供模型阅读，所以你可以问
-  *「这条 loop 是什么调？」*、*「把这条 bassline 复刻到第 3 轨」*。
-  点击选择、拖入窗口或 ⌘V 粘贴均可。
-- **MIDI 生成与编辑** —— 自然语言生成编排视图或 Session 视图的 MIDI Clip，
-  也可以读取并改写现有 Clip 里的音符，支持逐音符音高 / 时值 / 力度与摇摆（swing）。
-- **Set 分析与一键编曲** —— `analyze_song` 通读当前 Set：检测调性、逐轨角色、
-  音符/密度统计、段落结构、规则化问题清单，外加一张记录每个 Clip 坐标的
-  clip map；加 `audio: true` 还会解码音频 Clip 的源文件（WAV/AIFF），给出逐轨
-  响度、峰值余量（crest）、动态范围、六频段能量与瞬态密度 —— 足以判断
-  「bass 太薄」「kick 没冲击力」「高频太刺」这类听感问题（基于源文件：
-  不含 warp、增益与设备链的影响）。`arrange_song` 再据此用一次调用完成整个
-  编排 —— 放置计划先校验后执行（引用错误时零写入直接中止），整体合并为
-  一步撤销，支持 `dry_run` 预览和按小节范围清空重建。
-- **一键 808 鼓组** —— 自动搭建 Drum Rack，用 Simpler 装载官方 808 采样，
-  按 GM 风格音符表直接编程，出声即用。
-- **采样搜索与导入** —— 搜索本地 Splice 同步目录、Ableton User Library、
-  官方 Packs 与 Core Library，导入音频或装载到 Simpler。索引时自动从文件名/
-  文件夹解析 BPM 与调式（排除 "808" 这类设备型号数字），查询侧做同义词扩展
-  （dark → rumble/industrial/sub……），结果按 精确 BPM/调 > 近 BPM >
-  关系大小调 > 关键词相关性 排序。
-- **AI 音频生成** —— 用 Stable Audio、ElevenLabs、MiniMax 或任意自定义 HTTP API
-  （中转站、自托管 MusicGen、Suno 类服务，同步异步皆可）把文字描述渲染成音频并
-  直接进工程：loop 上编排、one-shot 进 Simpler；文件落在 User Library，随取随用。
-- **联网搜索（默认关闭）** —— 在 设置 → 联网搜索 打开后，智能体可以搜网页
-  （`web_search`，Bing 主引擎 + DuckDuckGo 自动兜底，均免 key，搜索语言跟随
-  界面语言）并读取页面正文（`web_fetch`）：版本更新、价格、教程等时效问题
-  直接查，粘贴的 URL 也能总结，回答附来源链接。只读、免确认，自动走系统代理。
-- **设备控制** —— 插入设备（Operator、Auto Filter……），按模糊名称读写参数
-  （"freq" → Filter Freq）。
-- **轨道与场景操作** —— 创建 / 重命名 / 静音 / 独奏 / 布防轨道，调节音量与声像，
-  创建与重命名场景，设置 BPM。
-- **支持 Ableton Move** —— 与 Move 硬件双向联动：`create_move_track` 创建经 USB-C
-  驱动 Move 的 MIDI 轨（固件 ≥ 1.5，Standalone 模式）；WiFi 文件管线（`move_pair` /
-  `move_upload_sample` / `move_download_set` / 浏览工具）把 AI 生成的采样直推设备、
-  把 Set 拉回电脑——原生固件，无需 SSH。`move_analyze_set` 下载 Set 后用与
-  `analyze_song` 相同的引擎分析 —— 调性、轨道角色、问题清单 —— 外加 Move
-  专属信息：混音电平、设备链、采样清单（时长 + pack/user 来源）。
-  每个 Set 需手动设一次输出路由 —— 见 [docs/move.zh-CN.md](docs/move.zh-CN.md)。
-- **操作指导** —— 解答 Live 本身的使用问题（混音、warp、路由、快捷键……），
-  在你工作的地方直接给出分步讲解。
-- **多语言界面** —— 聊天界面支持 English、中文、Deutsch、Français、日本語、
-  Español、Italiano，与 Live 自身的语言列表一致。
+### 理解
+- 分析当前 Live Set
+- 查看轨道、Clip、MIDI 与设备
+- 检测调性、轨道角色与音乐统计
+- 分析编排结构
+- 分析音频特征
 
-## 环境要求
+### 创作
+- 生成 MIDI 与鼓型
+- 创建与编辑 Clip
+- 用支持的 provider 生成音频
+- 加载乐器、采样与鼓组
 
-- **Ableton Live 12**（12.4.5+），配套 Extensions SDK beta
-- **Node.js ≥ 24.14.1** —— 仅开发者从源码构建时需要；安装 `.ablx` 的最终用户
-  **无需**安装 Node.js（扩展运行在 Live 自带的 Extension Host 中）
-- **任一 AI 服务商凭证** —— OpenAI Codex、Claude、Google Gemini，或任何
-  OpenAI 兼容端点（Grok、DeepSeek、OpenRouter、Ollama……）。前三家自动复用对应
-  本地 CLI 的配置：Codex CLI 的 `~/.codex/auth.json`（API Key 或 ChatGPT
-  账号登录）、Claude Code 的 `~/.claude/settings.json`、Gemini CLI 的
-  `~/.gemini/.env`；也可用环境变量（`OPENAI_*`、`ANTHROPIC_*`、
-  `GEMINI_API_KEY` / `GOOGLE_API_KEY`），或在对话框「设置 → AI 配置」里手动填写
-  —— Custom 槽位只需 API 地址和模型（本地服务可留空 Key）。
-  扩展本身不存储任何敏感信息。
-- **macOS 或 Windows** —— 仅 AIbletonBar 需要；扩展本体与平台无关
+### 编曲
+- 构建与修改编排
+- 放置、移动、清除 Clip
+- 用自然语言指令创建段落
+- 应用前预览与校验改动
 
-## 安装
+### 编辑与控制
+- 创建与管理轨道、场景
+- 插入与控制设备
+- 调整混音与设备参数
+- 让 AI 智能体直接控制 Ableton Live
 
-### 普通用户 —— 直接安装 `.ablx`
+### 搜索与记忆
+- 搜索本地采样库
+- 联网搜索
+- 维护音乐人记忆（Artist Memory）与风格偏好
 
-需要 **Ableton Live 12.4.5 beta** 或更高版本。下载
-[AIbleton-0.9.6.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.6/AIbleton-0.9.6.ablx) 后，
-打开 Live 的 **设置 → Extensions** 页面，把 `.ablx` 文件拖进去即可 —— 无需 Node.js、无需命令行。
-
-安装完成后：右键轨道、场景或 Clip → Extensions → **AIbleton: Open** —— 或在浏览器打开
-`http://localhost:17666`。
-
-### 开发者模式 —— 从源码构建运行
-
-```sh
-cd AIbleton
-npm install
-
-# .env 中的 EXTENSION_HOST_PATH 需指向 Live 的 Extension Host 模块
-#（SDK 生成器会自动填写；Live 安装路径变动时请手动修改）
-
-npm start        # 构建并在 Live 的 Extension Host 中运行
-```
-
-然后在 Live 里：右键轨道、场景或 Clip → Extensions → **AIbleton: Open** —— 或在浏览器打开
-`http://localhost:17666`。
-
-### 常用命令
-
-```sh
-npm start          # 开发构建 + 在 Live 中运行
-npm run build      # 生产构建 src/extension.ts
-npm run build:dev  # 开发构建（含 sourcemap，不压缩）
-npm run package    # 生产构建 + 打包可分发的 .ablx 文件
-```
-
-### AIbletonBar（可选侧边栏）
-
-macOS：
-
-```sh
-cd AIbletonBar
-./build.sh            # 编译 AIbletonBar.app（swiftc 直编，无第三方依赖）
-open AIbletonBar.app
-```
-
-Windows（可从 macOS 交叉编译，也可在 Windows 的 Git Bash 里跑 —— 需要 .NET SDK）：
-
-```sh
-cd AIbletonBar/windows
-./build.sh            # 发布单文件 AIbletonBar.exe（WinForms + WebView2）
-```
-
-- **⌥⌘A**（macOS）/ **Win+Alt+A**（Windows）全局呼出 / 隐藏；面板吸附屏幕右缘、全高、置顶（macOS 下随所有 Space 显示）。
-- 支持聊天里的文件附件功能，调起系统原生文件选择器。
-- Live 未加载扩展时显示离线占位页，连上后自动恢复（3 秒轮询）。
+### Ableton Move
+- 分析 Move Set
+- 传输采样
+- 处理 Move MIDI 与工程
+- 把 Move 接入 AI 辅助工作流
 
 ## 工作原理
 
-扩展在 Live 的 Extension Host 内启动一个本地 HTTP 服务（端口 `17666`）。
-聊天页面通过一组基于 Extensions SDK 的工具与所选模型（Codex / Claude /
-Gemini / 自定义 OpenAI 兼容端点）对话 —— `get_song_overview`、`analyze_song`、
-`arrange_song`、`write_midi_clip`、`write_session_clip`、`load_drum_kit`、
-`search_samples`、`import_audio_clip`、`generate_audio`、`insert_device`、
-`set_device_parameter`、`set_track_mixer`、场景与速度工具、Ableton Move
-工具等，外加免 key 联网的 `web_search` / `web_fetch`。
-每一句回答都可以直接读写当前打开的 Live Set。
-
-```
-┌────────────────────┐      ┌──────────────────────┐      ┌────────────────┐
-│ 聊天界面           │      │ 智能体服务           │      │ 模型 API       │
-│（对话框 / 浏览器   │─────▶│ localhost:17666      │─────▶│ Codex / Claude │
-│  / AIbletonBar）   │      │ + 30+ 个 Live 工具   │◀─────│ Gemini / 任意  │
-└────────────────────┘      │                      │      │ OpenAI 兼容    │
-                            │                      │      └────────────────┘
-                            │                      │      ┌────────────────┐
-                            │                      │─────▶│ 音频 API       │
-                            │                      │◀─────│ Stable Audio / │
-                            └──────────┬───────────┘      │ ElevenLabs /   │
-                                       │ Extensions SDK   │ MiniMax /      │
-                                       ▼                  │ 自定义 HTTP    │
-                              ┌──────────────────┐        └────────────────┘
-                              │ Ableton Live 12  │
-                              │ （当前 Live Set）│
-                              └──────────────────┘
+```text
+        用户意图
+             ↓
+         AI 智能体
+             ↓
+       理解 Live Set
+             ↓
+         推理 / 规划
+             ↓
+         Live 操作
+             ↓
+        Ableton Live
+             ↓
+        更新后的工程
 ```
 
-`generate_audio` 是独立于聊天模型的另一套 provider 体系：独立密钥
-（设置 → 音频生成），由服务端直接调用，不经过 LLM 转发。渲染结果存入
-User Library › AIbleton，再由模型用 `import_audio_clip` / `load_sample`
-放进工程。
+AIbleton 把 **AI 模型**与 **Live 集成层**分离 —— 你可以自由更换模型，用同一套工具处理你的音乐。
 
-## 项目结构
+## 音乐状态（Music State）
 
-```
-AIbleton/          Live 扩展（TypeScript）
-├── src/extension.ts   入口 —— 注册右键菜单动作，启动服务
-├── src/server.ts      智能体服务 + 工具实现（Codex / Claude / Gemini / OpenAI 兼容）
-├── src/analysis.ts    analyze_song 引擎 —— 调性/角色/问题检测 + arrange_song 赖以规划的 clip map
-├── src/audiogen.ts    音频生成 provider（Stable Audio / ElevenLabs / MiniMax / 自定义 HTTP）
-├── src/websearch.ts   web_search（Bing + DuckDuckGo 兜底，免 key）+ web_fetch，代理感知
-├── src/samplemeta.ts  search_samples 的 BPM/调式文件名解析 + 同义词扩展 + 相关性排序
-├── src/fileparsers.ts 把 .mid / .als 附件解析成文本摘要供模型阅读
-├── src/move.ts        Ableton Move WiFi 文件管线（配对 / 上传 / 下载 / 浏览）
-├── src/movebundle.ts  .ablbundle 解析器 + Move Set → 快照转换（move_analyze_set）
-├── ui/interface.html  聊天界面
-├── scripts/           冒烟测试（npx tsx scripts/test-*.ts；smoke-samplelib.ts 用真实采样库离线冒烟）
-└── vendor/            Extensions SDK beta 包（已 gitignore，见下方说明）
+AIbleton 正在向更深层的 Live Set 音乐状态表示演进：
 
-AIbletonBar/       macOS 悬浮侧边栏（Swift，约 180 行，无依赖）
-├── main.swift
-├── build.sh           swiftc 编译 + ad-hoc 签名
-└── Resources/         应用图标与 Logo
+```text
+Live Set
+   ↓
+Music State
+   ↓
+Musical Understanding
+   ↓
+Agent Reasoning
+   ↓
+Action
+   ↓
+Feedback
 ```
 
-## 当前状态
+目标是从简单的 AI 指令，走向一个能理解音乐工程不断演化的结构、关系与意图的智能体。
 
-AIbleton 现已开源。Ableton Extensions SDK 仍处于 **beta** 阶段，其安装包不允许
-再分发，因此 `vendor/` 目录已被 gitignore —— 自行构建扩展需要先获取 SDK beta
-权限（见 https://ableton.github.io/extensions-sdk/）。SDK beta 1 只提供右键菜单
-和模态对话框，这正是 AIbletonBar 以独立侧边栏 App 形式存在的原因。
+## 安装
+
+### 环境要求
+
+- Ableton Live 12.4.5+
+- Ableton Extensions SDK 支持
+- 一个 AI 服务商
+
+从上方 [下载](#下载) 区获取最新的 `.ablx`，然后安装到：
+
+**Ableton Live → 设置 → Extensions**
+
+AIbleton 还提供可选的 **AIbletonBar** 悬浮界面（macOS / Windows）。
+
+## 开发
+
+```bash
+git clone https://github.com/freddyzhangxu/aibleton.git
+cd aibleton/AIbleton
+npm install
+npm start
+```
+
+开发与 SDK 配置详见仓库文档。
 
 ## 路线图
 
-- **更深度的 Live 集成** —— 待 SDK 正式版提供面板 API 后，把侧边栏直接搬进 Live 内部。
+AIbleton 正在走向更强大的**智能体音乐制作工作流**：
 
-## 免责声明
+- **Music State** —— 当前音乐状态的结构化表示
+- **State Diff & Snapshots** —— 理解并追踪变化
+- **更深的音乐理解** —— 关系、角色与编排意图
+- **音频反馈闭环** —— 创作 → 分析 → 评估 → 改进
+- **更深的 Ableton 集成** —— 跟进 Extensions SDK 的能力演进
 
-AIbleton 是独立的开源项目，与 Ableton AG 无任何隶属关系，亦未获得其背书。
-"Ableton" 与 "Live" 是 Ableton AG 的商标。
+## 当前状态
+
+AIbleton 是一个基于 Ableton Extensions SDK 构建的**开源实验项目**。
+
+SDK 仍在演进，API 与能力可能发生变化。
+
+> AIbleton 与 Ableton AG 无任何隶属关系，亦未获得其背书。  
+> "Ableton" 与 "Live" 是 Ableton AG 的商标。
 
 ## 许可证
 
