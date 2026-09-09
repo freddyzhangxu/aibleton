@@ -295,14 +295,16 @@ function featsDurationsSorted(track: SnapshotTrack): number[] {
 // Sections
 // ---------------------------------------------------------------------------
 
-interface RawSection {
+/** Exported for the features layer (music/features/section.ts) so section
+ * boundaries have a single producer — features never re-sectionizes. */
+export interface RawSection {
   name: string;
   startBeat: number;
   endBeat: number;
   bars: [number, number];
 }
 
-function sectionize(
+export function sectionize(
   snap: SongSnapshot,
   barBeats: number,
   arrEndBeat: number,
