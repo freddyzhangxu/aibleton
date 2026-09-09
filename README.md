@@ -91,10 +91,14 @@ The project has two parts:
   velocity, with swing support.
 - **Set analysis & one-call arranging** — `analyze_song` reads the open Set: detected
   key, per-track roles, note/density stats, section structure, rule-based issues,
-  and a flat clip map with every clip's coordinates. `arrange_song` then builds or
-  rebuilds the arrangement from a placement plan in ONE call — validated before
-  anything changes (bad references abort with zero writes), executed as a single
-  undo step, with a `dry_run` preview and an optional bar-range clear for rebuilds.
+  and a flat clip map with every clip's coordinates. With `audio: true` it also
+  decodes audio clips' source files (WAV/AIFF) for per-track loudness, crest,
+  dynamic range, 6-band energy and transient density — enough to judge "thin bass",
+  "soft kick" or "harsh top" (source-file based: pre-warp, pre-gain, pre-device).
+  `arrange_song` then builds or rebuilds the arrangement from a placement plan in
+  ONE call — validated before anything changes (bad references abort with zero
+  writes), executed as a single undo step, with a `dry_run` preview and an
+  optional bar-range clear for rebuilds.
 - **One-shot 808 kit** — builds a Drum Rack with Simpler pads loaded with real factory
   808 samples, ready to program against a GM-style note map.
 - **Sample search & import** — searches your local Splice sync folder, Ableton User

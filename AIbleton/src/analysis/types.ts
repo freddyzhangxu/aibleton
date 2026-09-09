@@ -9,6 +9,8 @@
  * content: numbers rounded, issues stringified, tail cut by fitBudget.
  */
 
+import type { AudioBands } from "../dsp.js";
+
 // ---------------------------------------------------------------------------
 // Interpretation output (MusicState -> MusicAnalysis, interpret.ts)
 // ---------------------------------------------------------------------------
@@ -52,12 +54,46 @@ export type IssueCode =
   | "EMPTY_SET" | "NO_ARRANGEMENT" | "SINGLE_LOOP" | "LOW_CONTRAST"
   | "DUPLICATE_CONTENT" | "KEY_MISMATCH" | "OFF_KEY"
   | "NO_LOW_END" | "NO_HIGH_END" | "FLAT_DYNAMICS" | "MONOTONE_BASS"
-  | "MUTED_CONTENT";
+  | "MUTED_CONTENT"
+  | "WEAK_TRANSIENTS" | "THIN_LOW_END" | "SQUASHED_DYNAMICS"
+  | "DULL_HIGH_END" | "HARSH_HIGH_END";
 
 export interface MusicIssue {
   code: IssueCode;
   message: string; // human-readable evidence; presentation emits "CODE: message"
   tracks?: number[]; // track indices involved (DUPLICATE_CONTENT, FLAT_DYNAMICS, MONOTONE_BASS)
+}
+
+/**
+ * Per-track aggregate of the audio features of its audible arrangement
+ * clips (bands/centroid energy-weighted, the rest duration-weighted — see
+ * interpret.aggregateTrackAudio). Single producer; present.ts and
+ * goal/view.ts both consume this, never re-aggregate. Features describe
+ * clip SOURCE FILES (pre-warp, pre-gain, pre-device), not the audible
+ * result.
+ */
+export interface TrackAudioAnalysis {
+  clips: number; // arrangement clips contributing features
+  failedClips: number; // attempted but unreadable/undecodable
+  durationSec: number; // sum of contributing clip durations
+  rmsDb: number;
+  crestDb: number;
+  loudnessDb: number;
+  dynamicRangeDb?: number; // undefined when no contributing clip had it
+  spectralCentroidHz: number;
+  bands: AudioBands;
+  transientDensity?: number;
+  partial?: true; // any contributing clip was truncated
+}
+
+/** Stats of one audiofiles.enrichMusicStateWithAudio run. The shape lives in
+ * this pure module so audiofiles (impure) can be imported BY, not import
+ * FROM, the analysis layer. */
+export interface AudioEnrichStats {
+  computed: number; // files decoded + analyzed this run
+  cached: number; // clips served from the feature cache
+  failed: number; // clips attempted but errored
+  skipped: number; // eligible clips left unprocessed (file/time budget)
 }
 
 /** Reserved slot — no producer yet. A future PR derives suggestions from
@@ -73,6 +109,10 @@ export interface MusicAnalysis {
   trackRoles: TrackRoleAnalysis[];
   issues: MusicIssue[];
   recommendations?: MusicRecommendation[];
+  /** Parallel to trackRoles, indexed by state.tracks position; null per
+   * track without analyzed audio. undefined when no clip anywhere has
+   * features (audio enrichment never ran). */
+  trackAudio?: (TrackAudioAnalysis | null)[];
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +132,24 @@ export interface TrackAnalysis {
   uniq?: number; // unique pitches
   clips: number;
   muted?: true;
-  audio?: { clips: number; bars: number; files?: string[] };
+  audio?: {
+    clips: number;
+    bars: number;
+    files?: string[];
+    /** Source-file audio features (present only when analyze_song ran with
+     * audio:true). rms/crest/dyn/loud in dBFS, centroid in Hz, trans in
+     * onsets/sec, bands as energy fractions summing to ≈1. */
+    feat?: {
+      rms: number;
+      crest: number;
+      dyn?: number;
+      loud: number;
+      centroid: number;
+      trans?: number;
+      bands: AudioBands;
+      partial?: true;
+    };
+  };
 }
 
 /** One clip in the flat clip map — the coordinate system arrange_song plans
@@ -133,4 +190,7 @@ export interface SongAnalysis {
   issues: string[];
   caveat: string;
   focus?: FocusEcho;
+  /** Present when analyze_song ran with audio:true. note explains when no
+   * features landed ("no audio clips in the Set" / all skipped/failed). */
+  audioRun?: AudioEnrichStats & { note?: string };
 }

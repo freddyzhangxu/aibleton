@@ -16,6 +16,7 @@
  */
 
 import { audibleWindow, materialNotes } from "../musicstate/builder.js";
+import type { AudioFeatures } from "../dsp.js";
 import type {
   ClipWindow,
   MusicState,
@@ -24,12 +25,14 @@ import type {
   SnapshotTrack,
   SongSnapshot,
   TrackMeasurements,
+  TrackState,
 } from "../musicstate/types.js";
 import type {
   KeyAnalysis,
   MusicAnalysis,
   MusicIssue,
   SectionAnalysis,
+  TrackAudioAnalysis,
   TrackRole,
 } from "./types.js";
 
@@ -406,6 +409,100 @@ function fingerprint(cm: ClipMaterial): string {
 }
 
 // ---------------------------------------------------------------------------
+// Audio feature aggregation (ClipState.audio -> per-track TrackAudioAnalysis)
+// ---------------------------------------------------------------------------
+
+/**
+ * Aggregate one track's analyzed audio clips into a single measurement.
+ * Eligible clips: audible arrangement clips with features — the same
+ * predicate audiofiles.enrichMusicStateWithAudio fills and present.ts's
+ * audio block renders, so a computed feature always aggregates and an
+ * aggregated feature is always audible.
+ *
+ * Two weightings, by what the quantity means:
+ * - bands + spectralCentroidHz are ENERGY-weighted (seconds × 10^(rmsDb/10))
+ *   — that is exactly how spectra combine, so a whisper-quiet clip can't
+ *   skew the balance verdict of a loud one.
+ * - crest/rms/loudness/dynamicRange/transients are DURATION-weighted — they
+ *   don't combine linearly over energy, and the dB-domain mean is the
+ *   documented approximation.
+ * Features describe clip SOURCE FILES — pre-warp, pre-gain, pre-device —
+ * not the audible result.
+ */
+export function aggregateTrackAudio(ts: TrackState, secPerBeat: number): TrackAudioAnalysis | null {
+  let failedClips = 0;
+  const contributors: { f: AudioFeatures; wd: number; we: number }[] = [];
+  for (const cs of ts.clips) {
+    const c = cs.clip;
+    if (c.kind !== "audio" || c.start === null || c.muted || !cs.audio) continue;
+    if (cs.audio.error) {
+      failedClips++;
+      continue;
+    }
+    if (!cs.audio.features) continue;
+    const wd = Math.max(0, c.duration) * secPerBeat;
+    contributors.push({ f: cs.audio.features, wd, we: wd * 10 ** (cs.audio.features.rmsDb / 10) });
+  }
+  if (contributors.length === 0) return null;
+
+  let totalWd = 0;
+  let totalWe = 0;
+  for (const c of contributors) {
+    totalWd += c.wd;
+    totalWe += c.we;
+  }
+  if (totalWd <= 0) totalWd = contributors.length; // zero-length clips: unweighted mean
+
+  const dmean = (get: (f: AudioFeatures) => number): number =>
+    contributors.reduce((a, c) => a + get(c.f) * c.wd, 0) / totalWd;
+  const dmeanOpt = (get: (f: AudioFeatures) => number | undefined): number | undefined => {
+    let sum = 0;
+    let w = 0;
+    for (const c of contributors) {
+      const v = get(c.f);
+      if (v !== undefined) {
+        sum += v * c.wd;
+        w += c.wd;
+      }
+    }
+    return w > 0 ? sum / w : undefined;
+  };
+  // All-silent contributors (rmsDb at the −100 floor) carry ≈0 energy —
+  // if every clip is silent the bands are meaningless anyway: fall back to
+  // duration weighting so the numbers stay finite.
+  const ew = totalWe > 1e-9 ? totalWe : totalWd;
+  const emean = (get: (f: AudioFeatures) => number): number =>
+    contributors.reduce((a, c) => a + get(c.f) * (totalWe > 1e-9 ? c.we : c.wd), 0) / ew;
+
+  const dynamicRangeDb = dmeanOpt((f) => f.dynamicRangeDb);
+  const transientDensity = dmeanOpt((f) => f.transientDensity);
+  return {
+    clips: contributors.length,
+    failedClips,
+    durationSec: contributors.reduce((a, c) => a + c.wd, 0),
+    rmsDb: dmean((f) => f.rmsDb),
+    crestDb: dmean((f) => f.crestDb),
+    loudnessDb: dmean((f) => f.loudnessDb),
+    ...(dynamicRangeDb !== undefined ? { dynamicRangeDb } : {}),
+    spectralCentroidHz: emean((f) => f.spectralCentroidHz),
+    bands: {
+      sub: emean((f) => f.bands.sub),
+      bass: emean((f) => f.bands.bass),
+      lowMid: emean((f) => f.bands.lowMid),
+      mid: emean((f) => f.bands.mid),
+      highMid: emean((f) => f.bands.highMid),
+      high: emean((f) => f.bands.high),
+    },
+    ...(transientDensity !== undefined ? { transientDensity } : {}),
+    ...(contributors.some((c) => c.f.partial) ? { partial: true as const } : {}),
+  };
+}
+
+/** Suffix every audio-derived issue message carries: features describe the
+ * clip source files, not what Live plays through the device chain. */
+const AUDIO_CAVEAT = "(from clip source files — warp/gain/devices not reflected)";
+
+// ---------------------------------------------------------------------------
 // Issues
 // ---------------------------------------------------------------------------
 
@@ -431,6 +528,8 @@ function detectIssues(ctx: {
   mutedTrackNotes: number;
   mutedClipNotes: number;
   mutedNotes: number;
+  /** Parallel to perTrack/state.tracks; null entries = no analyzed audio. */
+  trackAudio: (TrackAudioAnalysis | null)[];
 }): MusicIssue[] {
   const issues: MusicIssue[] = [];
   const { snap, key } = ctx;
@@ -559,6 +658,67 @@ function detectIssues(ctx: {
       });
     }
   }
+  // Audio rules: judge per-track source-file aggregates (trackAudio aligns
+  // with perTrack). Roles are name-driven for audio-only tracks, so a kick
+  // sample on a track named "Stem 1" (role unknown) intentionally can't
+  // fire WEAK_TRANSIENTS — no evidence, no claim.
+  for (let i = 0; i < ctx.perTrack.length; i++) {
+    const a = ctx.trackAudio[i];
+    if (!a) continue;
+    const pt = ctx.perTrack[i];
+    if ((pt.role === "kick" || pt.role === "drums") && a.crestDb < 3) {
+      issues.push({
+        code: "WEAK_TRANSIENTS",
+        message: `"${pt.track.name}" crest ${round2(a.crestDb)} dB — transients are squashed, the ${pt.role === "kick" ? "kick" : "drums"} will lack impact ${AUDIO_CAVEAT}`,
+        tracks: [pt.track.index],
+      });
+    }
+    if (pt.role === "bass" && a.bands.sub + a.bands.bass < 0.25) {
+      issues.push({
+        code: "THIN_LOW_END",
+        message: `"${pt.track.name}" sub+bass energy is ${Math.round((a.bands.sub + a.bands.bass) * 100)}% of its spectrum — bass sounds thin ${AUDIO_CAVEAT}`,
+        tracks: [pt.track.index],
+      });
+    }
+    if (a.dynamicRangeDb !== undefined && a.dynamicRangeDb < 6) {
+      issues.push({
+        code: "SQUASHED_DYNAMICS",
+        message: `"${pt.track.name}" loudness range ${round2(a.dynamicRangeDb)} dB — over-compressed/flat ${AUDIO_CAVEAT}`,
+        tracks: [pt.track.index],
+      });
+    }
+  }
+  // Song-wide audio balance, ENERGY-weighted over analyzed tracks (track
+  // energy ∝ seconds × 10^(rmsDb/10)) — a track 28 dB down must not pull the
+  // mix's balance verdict toward its own spectrum.
+  {
+    let totalE = 0;
+    let high = 0;
+    let highMid = 0;
+    for (const a of ctx.trackAudio) {
+      if (!a) continue;
+      const e = a.durationSec * 10 ** (a.rmsDb / 10);
+      totalE += e;
+      high += a.bands.high * e;
+      highMid += a.bands.highMid * e;
+    }
+    if (totalE > 0) {
+      const highFrac = high / totalE;
+      const highMidFrac = highMid / totalE;
+      if (highFrac < 0.05) {
+        issues.push({
+          code: "DULL_HIGH_END",
+          message: `high-band energy is ${Math.round(highFrac * 100)}% across audio clips — the mix may sound dull/muffled (based on audio clip source files only)`,
+        });
+      }
+      if (highFrac + highMidFrac > 0.35) {
+        issues.push({
+          code: "HARSH_HIGH_END",
+          message: `high/high-mid energy is ${Math.round((highFrac + highMidFrac) * 100)}% across audio clips — the top end may sound harsh (based on audio clip source files only)`,
+        });
+      }
+    }
+  }
   const mutedParts: string[] = [];
   if (ctx.mutedTrackNotes > 0) mutedParts.push(`${ctx.mutedTrackNotes} notes on muted tracks`);
   if (ctx.mutedClipNotes > 0) mutedParts.push(`${ctx.mutedClipNotes} notes in muted clips`);
@@ -595,6 +755,12 @@ export function analyzeMusicState(state: MusicState): MusicAnalysis {
   const key = detectKey(hist);
 
   const roles = perTrack.map((pt) => inferRole(pt.track, pt.feats, pt.isDrums, barBeats));
+
+  // Per-track audio aggregates, straight from state.tracks (NOT perTrack —
+  // its clipMats view drops the ClipState wrapper where audio features
+  // live). All null when audio enrichment never ran.
+  const secPerBeat = 60 / (snap.tempo > 0 ? snap.tempo : 120);
+  const trackAudio = state.tracks.map((ts) => aggregateTrackAudio(ts, secPerBeat));
 
   // Arrangement extent comes from the facts layer (any clip kind counts,
   // muted or not — it still occupies time).
@@ -688,6 +854,7 @@ export function analyzeMusicState(state: MusicState): MusicAnalysis {
     mutedTrackNotes,
     mutedClipNotes,
     mutedNotes: mutedNoteCount,
+    trackAudio,
   });
 
   return {
@@ -708,5 +875,6 @@ export function analyzeMusicState(state: MusicState): MusicAnalysis {
       isDrums: pt.isDrums,
     })),
     issues,
+    ...(trackAudio.some((a) => a !== null) ? { trackAudio } : {}),
   };
 }

@@ -125,6 +125,45 @@ function judgeTracksUntouched(names: string[], before: GoalView, after: GoalView
   };
 }
 
+/** Track lookup shared by the audio judges: exact (case-insensitive) name,
+ * mirroring judgeTracksUntouched. A missing track fails with what exists. */
+function findTrack(view: GoalView, name: string): GoalView["tracks"][number] | undefined {
+  const norm = name.trim().toLowerCase();
+  return view.tracks.find((t) => t.name.toLowerCase() === norm);
+}
+
+const trackMissing = (name: string, view: GoalView): string =>
+  `可用轨道: ${view.tracks.map((t) => t.name).join(", ") || "(无)"}`;
+
+const NO_AUDIO = "无音频特征（目标声明/校验时未启用音频分析）";
+
+function judgeTrackCrestGte(track: string, db: number, after: GoalView): GoalCheck {
+  const id = `track[${track}].crest`;
+  const t = findTrack(after, track);
+  if (!t) return { id, passed: false, expected: `轨道「${track}」存在`, actual: trackMissing(track, after) };
+  if (!t.audio) return { id, passed: false, expected: `「${t.name}」有音频特征`, actual: NO_AUDIO };
+  return {
+    id,
+    passed: t.audio.crestDb >= db,
+    expected: `「${t.name}」源文件 crest ≥ ${fmt(db)} dB`,
+    actual: `${fmt(t.audio.crestDb)} dB`,
+  };
+}
+
+function judgeTrackBandGte(track: string, band: string, pct: number, after: GoalView): GoalCheck {
+  const id = `track[${track}].band[${band}]`;
+  const t = findTrack(after, track);
+  if (!t) return { id, passed: false, expected: `轨道「${track}」存在`, actual: trackMissing(track, after) };
+  if (!t.audio) return { id, passed: false, expected: `「${t.name}」有音频特征`, actual: NO_AUDIO };
+  const v = t.audio.bands[band as keyof typeof t.audio.bands];
+  return {
+    id,
+    passed: v >= pct,
+    expected: `「${t.name}」源文件 ${band} 频段能量占比 ≥ ${fmt(pct)}`,
+    actual: `${fmt(v)}`,
+  };
+}
+
 function judge(c: Criterion, before: GoalView, after: GoalView): GoalCheck {
   switch (c.kind) {
     case "section_energy_gt":
@@ -165,6 +204,10 @@ function judge(c: Criterion, before: GoalView, after: GoalView): GoalCheck {
       };
     case "tracks_untouched":
       return judgeTracksUntouched(c.names, before, after);
+    case "track_crest_gte":
+      return judgeTrackCrestGte(c.track, c.db, after);
+    case "track_band_gte":
+      return judgeTrackBandGte(c.track, c.band, c.pct, after);
   }
 }
 

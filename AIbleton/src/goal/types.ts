@@ -14,6 +14,8 @@
  * name or the "bars N-M" labels analyze_song emits, clips by (t, i).
  */
 
+import { AUDIO_BAND_NAMES, type AudioBandName } from "../dsp.js";
+
 export type GoalType =
   | "create"
   | "edit"
@@ -44,6 +46,12 @@ export interface GoalTarget {
  * section name, or "baseline:<name>" to compare a section against its own
  * pre-change density. role_present accepts any TrackRole plus the group
  * "low_end" (kick|bass).
+ *
+ * The audio kinds (track_crest_gte, track_band_gte) judge the track's clip
+ * SOURCE FILES — mixer/warp/device edits never move them; only replacing the
+ * sample does. Declaring them triggers source-file analysis at baseline and
+ * gate time (goalNeedsAudio); declaring them for a task the model should
+ * solve with processing is a route to a doomed retry loop.
  */
 export type Criterion =
   | { kind: "section_energy_gt"; a: string; b: string }
@@ -53,7 +61,9 @@ export type Criterion =
   | { kind: "key_unchanged" }
   | { kind: "track_count_gte"; n: number | "baseline" }
   | { kind: "no_new_tracks" }
-  | { kind: "tracks_untouched"; names: string[] };
+  | { kind: "tracks_untouched"; names: string[] }
+  | { kind: "track_crest_gte"; track: string; db: number }
+  | { kind: "track_band_gte"; track: string; band: AudioBandName; pct: number };
 
 export const CRITERION_KINDS = [
   "section_energy_gt",
@@ -64,6 +74,8 @@ export const CRITERION_KINDS = [
   "track_count_gte",
   "no_new_tracks",
   "tracks_untouched",
+  "track_crest_gte",
+  "track_band_gte",
 ] as const;
 
 export interface MusicGoal {
@@ -163,10 +175,41 @@ function normCriterion(raw: unknown, warnings: string[]): Criterion | null {
       }
       return { kind, names };
     }
+    case "track_crest_gte": {
+      const track = str(r.track);
+      const db = typeof r.db === "number" && Number.isFinite(r.db) ? r.db : null;
+      if (!track || db === null) {
+        warnings.push(`track_crest_gte 需要 track（轨道名）和 db（数字），已忽略`);
+        return null;
+      }
+      return { kind, track, db };
+    }
+    case "track_band_gte": {
+      const track = str(r.track);
+      const band = str(r.band);
+      const pct = typeof r.pct === "number" && Number.isFinite(r.pct) ? r.pct : null;
+      if (!track || pct === null || pct <= 0 || pct >= 1) {
+        warnings.push(`track_band_gte 需要 track（轨道名）和 pct（0-1 之间的小数），已忽略`);
+        return null;
+      }
+      if (!(AUDIO_BAND_NAMES as readonly string[]).includes(band)) {
+        warnings.push(`track_band_gte 的 band「${band || "(空)"}」不可用 — 可用: ${AUDIO_BAND_NAMES.join(", ")}，已忽略`);
+        return null;
+      }
+      return { kind, track, band: band as AudioBandName, pct };
+    }
     default:
       warnings.push(`未知 kind「${kind || "(空)"}」已忽略 — 可用: ${CRITERION_KINDS.join(", ")}`);
       return null;
   }
+}
+
+/** True when any condition judges clip source-file audio — the server runs
+ * source-file analysis before capturing the baseline/after views only then. */
+export function goalNeedsAudio(goal: MusicGoal): boolean {
+  return [...goal.constraints, ...goal.successCriteria].some(
+    (c) => c.kind === "track_crest_gte" || c.kind === "track_band_gte",
+  );
 }
 
 export function normalizeGoal(input: Record<string, unknown>): NormalizedGoal {

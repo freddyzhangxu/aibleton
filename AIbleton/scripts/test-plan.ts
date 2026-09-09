@@ -409,5 +409,85 @@ console.log("== 端到端（SongSnapshot → 计划报告）==");
 }
 
 // ---------------------------------------------------------------------------
+// Audio effect metrics: track_crest / track_band_energy (source-file based)
+// ---------------------------------------------------------------------------
+console.log("== audio metrics ==");
+import { planNeedsAudio } from "../src/plan/types.js";
+{
+  const ok = normalizePlan(
+    {
+      steps: [
+        {
+          description: "Replace the kick sample with a punchier one",
+          tool: "analyze_song",
+          expectedEffects: [
+            { metric: "track_crest", track: "Kick", direction: "increase" },
+            { metric: "track_band_energy", track: "Bass", band: "sub", direction: "increase" },
+          ],
+        },
+      ],
+    },
+    VALID_TOOLS,
+  );
+  check("音频 metric 合法接受", !!ok.steps && ok.steps[0].expectedEffects.length === 2, ok.warnings.join(" | "));
+  check("planNeedsAudio → true", !!ok.steps && planNeedsAudio(plan(ok.steps)));
+
+  const junk = normalizePlan(
+    {
+      steps: [
+        {
+          description: "x",
+          expectedEffects: [
+            { metric: "track_band_energy", track: "Bass", band: "treble", direction: "increase" }, // band 非法
+            { metric: "track_crest", direction: "increase" }, // 缺 track
+            { metric: "track_crest", track: "Kick" }, // 缺 direction
+          ],
+        },
+      ],
+    },
+    VALID_TOOLS,
+  );
+  check("坏 band / 缺 track / 缺 direction 的效果全部丢弃（步骤本身因 description 存活）",
+    !!junk.steps && junk.steps[0].expectedEffects.length === 0 && junk.warnings.length === 3,
+    junk.warnings.join(" | "));
+  const midiPlan = plan([{ id: "s1", description: "x", expectedEffects: [{ metric: "tempo", direction: "increase" }] }]);
+  check("planNeedsAudio → false（无音频 metric）", !planNeedsAudio(midiPlan));
+}
+
+const bandsA = { sub: 0.2, bass: 0.3, lowMid: 0.2, mid: 0.15, highMid: 0.1, high: 0.05 };
+const gvWithAudio = (crestDb: number, sub = 0.2): GoalView =>
+  gv({
+    tracks: [
+      { name: "Drums", role: "drums", notes: 36, muted: false },
+      { name: "Bass", role: "bass", notes: 8, muted: false,
+        audio: { crestDb, rmsDb: -12, bands: { ...bandsA, sub } } },
+    ],
+  });
+
+{
+  const fxCrest = { metric: "track_crest", track: "Bass", direction: "increase" } as const;
+  check("crest 3 → 7 → observed",
+    checkEffect(fxCrest, gvWithAudio(3), gvWithAudio(7)).observed);
+  check("crest 7 → 3（方向反了）→ not observed",
+    !checkEffect(fxCrest, gvWithAudio(7), gvWithAudio(3)).observed);
+  check("after 无音频特征 → not observed + 说明",
+    (() => {
+      const r = checkEffect(fxCrest, gvWithAudio(3), gv());
+      return !r.observed && /无音频特征/.test(r.actual ?? "");
+    })());
+  check("baseline 无音频特征 → not observed（fail closed）",
+    !checkEffect(fxCrest, gv(), gvWithAudio(7)).observed);
+
+  const fxBand = { metric: "track_band_energy", track: "Bass", band: "sub", direction: "increase" } as const;
+  check("sub 0.2 → 0.35 → observed", checkEffect(fxBand, gvWithAudio(9, 0.2), gvWithAudio(9, 0.35)).observed);
+  check("sub 0.2 → 0.2（没动）→ not observed", !checkEffect(fxBand, gvWithAudio(9, 0.2), gvWithAudio(9, 0.2)).observed);
+  check("轨道不存在 → not observed 且列出现有轨道",
+    (() => {
+      const r = checkEffect({ ...fxBand, track: "Ghost" }, gvWithAudio(9), gvWithAudio(9));
+      return !r.observed && /Drums/.test(r.actual ?? "");
+    })());
+}
+
+// ---------------------------------------------------------------------------
 console.log(failed ? `\n${failed} 项失败 / ${passed + failed}` : `\n全部通过 (${passed})`);
 process.exit(failed ? 1 : 0);

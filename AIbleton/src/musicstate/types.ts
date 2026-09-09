@@ -15,6 +15,8 @@
  * "what does it mean".
  */
 
+import type { AudioFeatures } from "../dsp.js";
+
 // ---------------------------------------------------------------------------
 // Snapshot input (built by server.ts from SDK objects)
 // ---------------------------------------------------------------------------
@@ -39,6 +41,7 @@ export interface SnapshotClip {
   muted: boolean;
   notes?: SnapshotNote[]; // midi only
   file?: string; // audio only: basename
+  filePath?: string; // audio only: absolute path from the SDK (source of audio analysis)
   arrIndex?: number; // index in track.arrangementClips — matches clip_index of get/set_clip_notes
   scene?: number; // clip-slot index, session clips only — matches scene_index of write_session_clip
 }
@@ -85,6 +88,12 @@ export interface ClipState {
   clip: SnapshotClip;
   window: ClipWindow;
   material: SnapshotNote[];
+  /**
+   * Filled post-build by audiofiles.enrichMusicStateWithAudio (async, impure).
+   * undefined = not attempted (no filePath, MIDI clip, or budget-skipped).
+   * `error` means the file was attempted but could not be decoded/read.
+   */
+  audio?: { features?: AudioFeatures; error?: string };
 }
 
 /** Raw per-track measurements over audible arrangement material. No rounding
