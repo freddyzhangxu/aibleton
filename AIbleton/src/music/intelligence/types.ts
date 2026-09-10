@@ -33,6 +33,7 @@ import type {
 } from "../relationships/types.js";
 import type { MusicalObservation, MusicalReasoning } from "../reasoning/types.js";
 import type { CreativeAction, CreativeActionSet } from "../actions/types.js";
+import type { ReferenceIntelligence } from "../reference/types.js";
 
 // ---------------------------------------------------------------------------
 // The chain container
@@ -46,6 +47,11 @@ export interface MusicIntelligence {
   /** Candidate musical interventions derived from the reasoning (PR14) —
    * semantic hints for the planner, never commands. */
   actions: CreativeActionSet;
+  /** Reference-track comparison (PR16) — attached by the caller AFTER the
+   * pure chain is built (the reference comes from outside the MusicState);
+   * undefined without a reference, and the whole chain behaves exactly as
+   * before. Evidence source, never an edit target by itself. */
+  reference?: ReferenceIntelligence;
 }
 
 // ---------------------------------------------------------------------------

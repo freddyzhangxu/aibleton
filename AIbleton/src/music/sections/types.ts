@@ -35,6 +35,7 @@
 import type { FeatureValue, SectionFeatures } from "../features/types.js";
 import type { MusicalObservation } from "../reasoning/types.js";
 import type { CreativeAction } from "../actions/types.js";
+import type { ReferencePlanningContext } from "../reference/types.js";
 
 // ---------------------------------------------------------------------------
 // Section target resolution
@@ -148,6 +149,11 @@ export interface SectionPlanningContext {
     durationBeats?: number;
     sectionCount: number;
   };
+
+  /** External reference-track comparison for THIS target (PR16) — present
+   * only when a reference was provided AND aligned. Guidance, never a
+   * command: User Goal > Reference, always. */
+  reference?: ReferencePlanningContext;
 
   coverage: {
     featureCoverage: number; // share of projection fields with data

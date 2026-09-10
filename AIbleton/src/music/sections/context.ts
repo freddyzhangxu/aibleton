@@ -29,6 +29,7 @@ import type { SectionFeatures } from "../features/types.js";
 import type { MusicalObservation } from "../reasoning/types.js";
 import type { CreativeAction } from "../actions/types.js";
 import type { MusicIntelligence } from "../intelligence/types.js";
+import { buildReferencePlanningContext } from "../reference/index.js";
 import { resolveSectionTarget } from "./resolve.js";
 import { selectSectionReferences } from "./reference.js";
 import type {
@@ -162,6 +163,13 @@ export function buildSectionPlanningContext(
   const features = projectSectionFeatures(targetFeatures, goal, actions, observations);
   const song = intel.features.song;
 
+  // PR16: the external reference comparison for THIS target rides along when
+  // the caller attached a ReferenceIntelligence AND the target aligned. No
+  // alignment → no block — never a fabricated pairing.
+  const reference = intel.reference
+    ? buildReferencePlanningContext(target, intel.features.sections, intel.reference)
+    : undefined;
+
   return {
     target,
     references,
@@ -169,6 +177,7 @@ export function buildSectionPlanningContext(
     targetFeatures,
     observations,
     actions,
+    ...(reference !== undefined ? { reference } : {}),
     song: {
       tempo: song.tempo,
       durationBeats: song.durationBeats,
