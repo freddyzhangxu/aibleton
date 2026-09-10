@@ -74,6 +74,12 @@ import { evaluateGoal } from "./goal/evaluate.js";
 import { EFFECT_METRICS, normalizePlan, planNeedsAudio, type MusicPlan } from "./plan/types.js";
 import { buildPlanReport, executedStepIds, type PlanReport } from "./plan/check.js";
 import {
+  buildMusicIntelligence,
+  presentGoalContext,
+  projectGoalContext,
+  type MusicIntelligence,
+} from "./music/intelligence/index.js";
+import {
   AGENT_MAX_RETRIES,
   AGENT_MAX_ROUNDS,
   AGENT_MAX_STEPS,
@@ -574,7 +580,9 @@ const TOOLS = [
       "fill its parameters — never invent kinds. Use analyze_song first to learn section names, then write 1–4 " +
       "criteria that actually define the outcome (\"make the drop harder\" → section_energy_gt Drop vs Intro + " +
       "role_present low_end in Drop). Skip set_goal for questions, analysis requests, and single-parameter tweaks " +
-      "(those results are already verified per-call).",
+      "(those results are already verified per-call). The result carries a music block — measured features, " +
+      "contrasts and evidence-backed observations relevant to your declared goal; base your criteria thresholds " +
+      "and set_plan steps on those numbers, never on guesses.",
     input_schema: {
       type: "object",
       properties: {
@@ -1180,6 +1188,7 @@ Goals (tasks that change the Set):
 - Criteria are a CLOSED vocabulary (see the set_goal schema): pick a kind and fill its parameters. Section names come from analyze_song; "baseline:<name>" compares a section against its state at the moment you declared the goal. Never invent kinds.
 - set_goal snapshots the Set as its baseline. When you stop calling tools, the server evaluates every criterion against the new state. Unmet criteria come back as a 目标校验 message — keep working or explain the blocker; NEVER claim completion while criteria are unmet.
 - Write 1–4 criteria that genuinely define the outcome ("make the drop harder" → section_energy_gt Drop vs baseline:Drop + role_present low_end in Drop). The objective sentence is for humans; only criteria are judged.
+- set_goal's result includes a music block: measured features and observations relevant to your declared goal (target section/track energy, density, rhythmic activity, contrasts like Build→Drop, repetition like Drop 1↔Drop 2, each observation with its evidence chain). Base your criteria thresholds and set_plan steps on THESE numbers — cite them, never guess them. A missing key means "no data" (e.g. audio not analyzed), not zero.
 - The audio criteria (track_crest_gte, track_band_gte) judge the track's clip SOURCE FILES — mixer/EQ/compressor/warp edits never move them; only replacing the sample does. Declare them only for sound-design tasks where swapping the sample is a valid route ("kick 没冲击力" → track_crest_gte Kick ≈ 6 dB via search_samples/generate_audio replacement), never for processing-only tasks.
 
 Plans (multi-step tasks):
@@ -2876,6 +2885,10 @@ async function verifyToolResult(
 let pendingGoal: {
   goal: MusicGoal;
   baseline: GoalView;
+  /** The music/ stack chained over the SAME state the baseline view was
+   * built from — the goal's projected reasoning slice rides the set_goal
+   * result so the plan is written against measured evidence (PR13.5). */
+  intel: MusicIntelligence;
   retries: number;
   /** Declared after mutations already happened this turn — relative
    * ("baseline") criteria then compare against a mid-task state. */
@@ -2980,21 +2993,41 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
   // Audio criteria judge clip source files: decode them before capturing the
   // baseline so the after-view compares like with like. Cache makes the
   // goalGate re-run nearly free.
-  let baseline = pendingGoal?.baseline;
-  if (!baseline) {
+  let held = pendingGoal ? { baseline: pendingGoal.baseline, intel: pendingGoal.intel } : null;
+  if (!held) {
     const state = buildMusicState(buildSongSnapshot(context.application.song));
     if (goalNeedsAudio(norm.goal)) await enrichMusicStateWithAudio(state);
-    baseline = buildGoalView(state);
+    // Chain the music/ stack over the SAME state the baseline view measures.
+    // Roles come from the interpretation layer so a role-named goal resolves
+    // against the very labels role_present will judge. Audio features stay
+    // undefined unless the goal already needed decoding — the honesty rules
+    // carry that through to the projection.
+    held = {
+      baseline: buildGoalView(state),
+      intel: buildMusicIntelligence(state, analyzeMusicState(state)),
+    };
   }
   pendingGoal = {
     goal: norm.goal,
     // Re-declaring within one turn refines the criteria but keeps the
     // ORIGINAL baseline — "what the user asked for this turn" is anchored at
     // the first declaration.
-    baseline,
+    baseline: held.baseline,
+    intel: held.intel,
     retries: pendingGoal?.retries ?? 0,
     lateBaseline: pendingGoal?.lateBaseline ?? late,
   };
+  // The planner's evidence: the goal's projected slice of the music/ stack,
+  // riding the tool result so set_plan is written against measured numbers.
+  // Re-declares re-project the STORED intelligence against the NEW goal —
+  // the baseline stays anchored, the focus follows the current goal. An
+  // intelligence bug must never sink a working goal declaration.
+  let music: Record<string, unknown> | undefined;
+  try {
+    music = presentGoalContext(projectGoalContext(pendingGoal.intel, norm.goal));
+  } catch (err) {
+    debugLog(context, `INTEL failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
   debugLog(
     context,
     `GOAL set (${norm.goal.type}): ${norm.goal.objective} · criteria=${norm.goal.successCriteria.length} constraints=${norm.goal.constraints.length}`,
@@ -3006,6 +3039,7 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
     criteria: norm.goal.successCriteria.length,
     constraints: norm.goal.constraints.length,
     baseline: summarizeView(pendingGoal.baseline),
+    ...(music ? { music } : {}),
     ...(warnings.length ? { warnings } : {}),
   };
 }
