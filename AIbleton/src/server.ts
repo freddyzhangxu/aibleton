@@ -63,6 +63,7 @@ import {
   type ClipLoopSettings,
 } from "@ableton-extensions/sdk";
 import { analyzeMusicState, analyzeSong, presentAnalysis, selectMusicContext } from "./analysis/index.js";
+import { pcName } from "./analysis/interpret.js";
 import { enrichMusicStateWithAudio } from "./audiofiles.js";
 import { buildMusicState, tileClipNotes } from "./musicstate/builder.js";
 import type { SnapshotClip, SongSnapshot } from "./musicstate/types.js";
@@ -534,7 +535,12 @@ const CRITERION_INPUT_SCHEMA = {
         "section_tracks_gte: a section's active-track count >= n. " +
         "role_present: a role (kick|bass|drums|chords|pad|lead|…, or the group low_end = kick|bass) is audible " +
         "in `section` (whole song when section omitted). " +
-        "tempo_unchanged / key_unchanged: self-explanatory. " +
+        "tempo_unchanged / key_unchanged: self-explanatory (with Scale Mode on, key_unchanged judges Live's " +
+        "declared scale — user-set ground truth — not the detected key). " +
+        "in_key: at most 15% of note duration outside the governing scale (Live's declared scale when Scale " +
+        "Mode is on, else the detected key; drums excluded). off_key_lte: same ratio <= pct (0-1). Both FAIL " +
+        "as unmeasurable when no scale is usable or note material is too thin — turn Scale Mode on first if " +
+        "the user declared a key. " +
         "track_count_gte: total track count >= n. no_new_tracks: no tracks added. " +
         "tracks_untouched: the named tracks keep identical note content (mixer/device tweaks not covered). " +
         "track_crest_gte: the track's clip SOURCE FILES must reach crest >= db dB (kick punch ≈ 6+ dB). " +
@@ -558,7 +564,10 @@ const CRITERION_INPUT_SCHEMA = {
       type: "string",
       description: "track_band_gte: sub | bass | lowMid | mid | highMid | high",
     },
-    pct: { type: "number", description: "track_band_gte: minimum band energy fraction (0-1)" },
+    pct: {
+      type: "number",
+      description: "track_band_gte: minimum band energy fraction (0-1). off_key_lte: MAXIMUM off-scale duration fraction (0-1)",
+    },
   },
   required: ["kind"],
 };
@@ -3062,12 +3071,18 @@ function handleSetPlan(context: Ctx, input: Record<string, unknown>): unknown {
 }
 
 /** Compact baseline summary for the set_goal tool result — the model reads
- * these numbers when picking thresholds. */
+ * these numbers when picking thresholds. With Scale Mode on, Live's declared
+ * scale is stronger evidence than the detected key and rides as liveScale;
+ * offKeyPct gives in_key/off_key_lte goals their measured starting point. */
 function summarizeView(v: GoalView): Record<string, unknown> {
   const r2 = (x: number) => Math.round(x * 100) / 100;
   return {
     tempo: v.tempo,
     key: v.keyBest ?? null,
+    liveScale: v.liveScale.mode
+      ? { root: pcName(v.liveScale.root), name: v.liveScale.name, intervals: v.liveScale.intervals }
+      : null,
+    offKeyPct: v.offKeyRatio !== undefined ? r2(v.offKeyRatio * 100) : null,
     trackCount: v.trackCount,
     sections: v.sections.map((s) => ({ name: s.name, bars: s.bars, density: r2(s.density), tracks: s.tracks })),
   };

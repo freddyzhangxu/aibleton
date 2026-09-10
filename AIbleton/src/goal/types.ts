@@ -52,6 +52,14 @@ export interface GoalTarget {
  * sample does. Declaring them triggers source-file analysis at baseline and
  * gate time (goalNeedsAudio); declaring them for a task the model should
  * solve with processing is a route to a doomed retry loop.
+ *
+ * The key kinds judge the AFTER view only: key_unchanged compares Live's
+ * declared scale (root + intervals) when Scale Mode is on in both views —
+ * user-set ground truth that doesn't wobble like the detected key — and
+ * falls back to the detected keyBest otherwise. in_key / off_key_lte read
+ * the duration-weighted off-scale ratio (analysis.offKey); when no scale is
+ * usable or material is too thin the check FAILS as "unknowable" — the model
+ * is told why and can turn Scale Mode on or explain the blocker.
  */
 export type Criterion =
   | { kind: "section_energy_gt"; a: string; b: string }
@@ -59,6 +67,8 @@ export type Criterion =
   | { kind: "role_present"; role: string; section?: string }
   | { kind: "tempo_unchanged" }
   | { kind: "key_unchanged" }
+  | { kind: "in_key" }
+  | { kind: "off_key_lte"; pct: number }
   | { kind: "track_count_gte"; n: number | "baseline" }
   | { kind: "no_new_tracks" }
   | { kind: "tracks_untouched"; names: string[] }
@@ -71,6 +81,8 @@ export const CRITERION_KINDS = [
   "role_present",
   "tempo_unchanged",
   "key_unchanged",
+  "in_key",
+  "off_key_lte",
   "track_count_gte",
   "no_new_tracks",
   "tracks_untouched",
@@ -157,8 +169,17 @@ function normCriterion(raw: unknown, warnings: string[]): Criterion | null {
     }
     case "tempo_unchanged":
     case "key_unchanged":
+    case "in_key":
     case "no_new_tracks":
       return { kind };
+    case "off_key_lte": {
+      const pct = typeof r.pct === "number" && Number.isFinite(r.pct) ? r.pct : null;
+      if (pct === null || pct < 0 || pct >= 1) {
+        warnings.push(`off_key_lte 需要 pct（0-1 之间的小数，调外音占比上限），已忽略`);
+        return null;
+      }
+      return { kind, pct };
+    }
     case "track_count_gte": {
       const n = normN(r.n);
       if (n === null) {
