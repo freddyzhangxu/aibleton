@@ -1,10 +1,11 @@
 /**
  * music/intelligence/types.ts — public structures of the Music Intelligence
- * layer: the three-layer chain as one object, plus its goal projection.
+ * layer: the chained layers as one object, plus its goal projection.
  *
  * Layer position:
  *
  *   MusicState → MusicalFeatures → MusicalRelationships → MusicalReasoning
+ *              → CreativeActions
  *              → MusicIntelligence (the chain, one import site)
  *              → GoalMusicContext (the slice a declared goal needs)
  *              → Agent (set_goal's tool result — the planner's input)
@@ -31,16 +32,20 @@ import type {
   SectionSimilarity,
 } from "../relationships/types.js";
 import type { MusicalObservation, MusicalReasoning } from "../reasoning/types.js";
+import type { CreativeAction, CreativeActionSet } from "../actions/types.js";
 
 // ---------------------------------------------------------------------------
 // The chain container
 // ---------------------------------------------------------------------------
 
-/** The three layers chained — the full intelligence surface of one state. */
+/** The four layers chained — the full intelligence surface of one state. */
 export interface MusicIntelligence {
   features: MusicalFeatures;
   relationships: MusicalRelationships;
   reasoning: MusicalReasoning;
+  /** Candidate musical interventions derived from the reasoning (PR14) —
+   * semantic hints for the planner, never commands. */
+  actions: CreativeActionSet;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +92,11 @@ export interface GoalMusicContext {
    * global top-N. */
   observations: MusicalObservation[];
   coverage: MusicalReasoning["coverage"];
+
+  /** Creative actions touching the scope (song-scope actions ride every
+   * projection), in the action layer's own ranked order; capped like
+   * observations. Candidate directions, not instructions. */
+  actions: CreativeAction[];
 
   /** Focus terms that resolved to nothing (the select.ts echo pattern). */
   unmatched: string[];

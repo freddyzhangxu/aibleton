@@ -11,21 +11,24 @@ import { buildMusicState } from "../../../musicstate/builder.js";
 import { buildMusicalFeatures } from "../../features/index.js";
 import { buildMusicalRelationships } from "../../relationships/index.js";
 import { buildMusicalReasoning } from "../../reasoning/index.js";
+import { deriveCreativeActions } from "../../actions/index.js";
 import { buildMusicIntelligence } from "../index.js";
 import { buildDropSnapshot, rolesOf } from "./fixtures.js";
 
-test("chain: output equals the three builders called by hand", () => {
+test("chain: output equals the builders called by hand", () => {
   const state = buildMusicState(buildDropSnapshot());
   const analysis = rolesOf([0, "kick"], [1, "bass"]);
 
   const features = buildMusicalFeatures(state, analysis);
   const relationships = buildMusicalRelationships(features);
   const reasoning = buildMusicalReasoning(features, relationships);
+  const actions = deriveCreativeActions(reasoning);
 
   const intel = buildMusicIntelligence(state, analysis);
   assert.deepEqual(intel.features, features);
   assert.deepEqual(intel.relationships, relationships);
   assert.deepEqual(intel.reasoning, reasoning);
+  assert.deepEqual(intel.actions, actions);
 });
 
 test("chain: deterministic — same state, byte-identical output", () => {

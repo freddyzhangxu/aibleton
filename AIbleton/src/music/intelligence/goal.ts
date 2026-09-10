@@ -213,6 +213,25 @@ export function projectGoalContext(intel: MusicIntelligence, goal: MusicGoal): G
       )
     : rankObservations(reasoning.observations, MAX_SONG_OBSERVATIONS);
 
+  // Creative actions: already ranked and capped by the action layer — the
+  // projection only SELECTS, mirroring the observation filter. A song-scope
+  // action (no ids — e.g. increase_section_contrast from a flat arc) touches
+  // every goal and rides both scopes.
+  const actionTouches = (a: (typeof intel.actions.actions)[number]): boolean => {
+    const t = a.target;
+    const ids = [t.sectionId, t.relatedSectionId, t.trackId, t.relatedTrackId];
+    if (ids.every((id) => id === undefined)) return true;
+    return (
+      (t.sectionId !== undefined && sectionSet.has(t.sectionId)) ||
+      (t.relatedSectionId !== undefined && sectionSet.has(t.relatedSectionId)) ||
+      (t.trackId !== undefined && trackSet.has(t.trackId)) ||
+      (t.relatedTrackId !== undefined && trackSet.has(t.relatedTrackId))
+    );
+  };
+  const actions = focused
+    ? intel.actions.actions.filter(actionTouches).slice(0, MAX_CONTEXT_OBSERVATIONS)
+    : intel.actions.actions.slice(0, MAX_SONG_OBSERVATIONS);
+
   return {
     scope: focused ? "focused" : "song",
     target: { ...(goal.target?.track ? { track: goal.target.track } : {}),
@@ -225,6 +244,7 @@ export function projectGoalContext(intel: MusicIntelligence, goal: MusicGoal): G
     song: features.song,
     observations,
     coverage: reasoning.coverage,
+    actions,
     unmatched,
   };
 }

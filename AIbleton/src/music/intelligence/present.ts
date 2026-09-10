@@ -21,6 +21,7 @@
 import type { FeatureValue, SectionFeatures, SongFeatures, TrackFeatures } from "../features/types.js";
 import type { ArrangementArc, SectionContrast, SectionSimilarity } from "../relationships/types.js";
 import type { MusicalObservation } from "../reasoning/types.js";
+import type { CreativeAction } from "../actions/types.js";
 import type { GoalMusicContext } from "./types.js";
 
 /** Char budget for the whole music block (JSON length). */
@@ -149,6 +150,23 @@ function observationOut(o: MusicalObservation): Record<string, unknown> {
   return out;
 }
 
+/** Creative actions render like observations minus evidence (the chain
+ * stays in sourceObservations, one layer down) — plus a src count so the
+ * planner sees how much evidence backs the candidate. Candidate directions,
+ * not commands; the prompt text around the block says so. */
+function actionOut(a: CreativeAction): Record<string, unknown> {
+  const out: Record<string, unknown> = { kind: a.kind, str: r2(a.strength) };
+  const t = a.target;
+  if (t.scope !== undefined) out.scope = t.scope;
+  if (t.sectionId !== undefined) out.sec = t.sectionId;
+  if (t.relatedSectionId !== undefined) out.rel = t.relatedSectionId;
+  if (t.trackId !== undefined) out.trk = t.trackId;
+  if (t.relatedTrackId !== undefined) out.rtrk = t.relatedTrackId;
+  if (a.confidence !== undefined) out.conf = r2(a.confidence);
+  out.src = a.sourceObservations.length;
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Budgeted render — staged cuts, each still a complete structure
 // ---------------------------------------------------------------------------
@@ -178,6 +196,9 @@ function render(ctx: GoalMusicContext, st: CutStage): Record<string, unknown> {
     coverage: ctx.coverage,
     observations: ctx.observations.slice(0, st.obs).map(observationOut),
   };
+  if (ctx.actions.length) {
+    out.actions = ctx.actions.slice(0, st.obs).map(actionOut);
+  }
   if (ctx.target.track || ctx.target.section) out.target = ctx.target;
   if (ctx.sections.length) {
     out.sections = ctx.sections.map((s) => sectionRow(s, st.collSections));
