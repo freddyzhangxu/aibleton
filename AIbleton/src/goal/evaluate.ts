@@ -18,8 +18,9 @@ import { findSection, type GoalSectionMeasure, type GoalView } from "./view.js";
 const fmt = (v: number): string => String(Math.round(v * 100) / 100);
 const EPS = 1e-6;
 
-/** kick|bass — the "low-end present" shorthand. */
-const ROLE_GROUPS: Record<string, string[]> = {
+/** kick|bass — the "low-end present" shorthand. Exported for the music
+ * intelligence layer, which resolves goal roles against the same groups. */
+export const ROLE_GROUPS: Record<string, string[]> = {
   low_end: ["kick", "bass"],
 };
 
