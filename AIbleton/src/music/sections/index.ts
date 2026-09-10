@@ -32,6 +32,7 @@ export {
 
 export {
   SECTION_DELTA_THRESHOLDS,
+  presentSectionVerification,
   projectSectionVerificationCriteria,
   verifySectionChange,
 } from "./verify.js";
