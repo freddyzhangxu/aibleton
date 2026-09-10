@@ -27,6 +27,7 @@ import {
   listAudioFilesViaFind,
   mkdirOutsideSandbox,
   pathExists,
+  readHomeBinary,
   readHomeFile,
   sampleRoots,
   storeFallbackPath,
@@ -87,6 +88,18 @@ import {
   type SectionPlanningContext,
   type SectionVerification,
 } from "./music/sections/index.js";
+import {
+  analyzeReferenceBuffer,
+  buildReferenceIntelligence,
+  buildReferencePlanningContext,
+  presentReferencePlanningContext,
+  presentReferenceVerification,
+  verifyReferenceProgress,
+  REFERENCE_ANALYZER_VERSION,
+  type ReferenceAnalysis,
+  type ReferenceError,
+  type ReferenceSource,
+} from "./music/reference/index.js";
 import {
   AGENT_MAX_RETRIES,
   AGENT_MAX_ROUNDS,
@@ -615,6 +628,24 @@ const TOOLS = [
           type: "array",
           description: "End-state conditions defining 'done' — 1–4, each must be checkable against the Set's structure",
           items: CRITERION_INPUT_SCHEMA,
+        },
+        reference: {
+          type: "object",
+          description:
+            "Optional REFERENCE TRACK (local WAV/AIFF file) the goal's target section should be compared against. " +
+            "The server analyzes it LOCALLY (never uploaded) and returns a reference block: the aligned reference section, " +
+            "measured gaps (energy/density/rhythm/impact…, delta = reference − current), and conservative action hints. " +
+            "Reference is EVIDENCE, not the goal: still write your own successCriteria — the gate judges your criteria, " +
+            "reference progress is supporting evidence only. Never try to copy or clone the reference.",
+          properties: {
+            path: { type: "string", description: "Absolute path to the reference audio file (WAV/AIFF)" },
+            section: {
+              type: "string",
+              description: "Optional: pin the reference section to compare against (id from a previous reference block, e.g. \"reference:section:3\")",
+            },
+            tempo_bpm: { type: "number", description: "Optional tempo hint when the reference's BPM is known — sharpens the beat axis" },
+          },
+          required: ["path"],
         },
       },
       required: ["type", "objective", "successCriteria"],
@@ -1199,6 +1230,7 @@ Goals (tasks that change the Set):
 - set_goal's result includes a music block: measured features and observations relevant to your declared goal (target section/track energy, density, rhythmic activity, contrasts like Build→Drop, repetition like Drop 1↔Drop 2, each observation with its evidence chain). Base your criteria thresholds and set_plan steps on THESE numbers — cite them, never guess them. A missing key means "no data" (e.g. audio not analyzed), not zero.
 - The music block may also include actions: evidence-backed CANDIDATE musical interventions derived from the current Set (e.g. introduce_variation on Drop 2 when it repeats Drop 1 with no evolution). Treat them as planning hints, never as mandatory instructions — pick only the ones that serve the user's goal, translate each chosen action into concrete set_plan steps with the available tools, and never invent musical problems the block does not evidence. Not every action needs a plan step, and no action executes anything by itself.
 - set_goal's result may include a section block: the resolved TARGET section (id, name, beat range, match confidence), up to 3 comparison REFERENCES (previous/next/same-role/reprise/contrast partners with their similarity/contrast numbers), and only the features/observations/actions relevant to that target. Rules when it is present: (1) the target is your primary edit scope — keep set_plan steps inside its beat range whenever possible; (2) references are for COMPARISON, not automatic edit targets — modify a neighbor/reference only when the goal is relative (contrast/transition, e.g. "make the drop hit harder" may justify thinning the Build) and say why in the step description; (3) prefer the supplied actions as intervention directions and never edit unrelated sections unless the goal demands it. If the goal check retries with a 段落校验 line naming a section metric that missed (before→after), fix THAT metric in THAT section — do not switch to a different section.
+- set_goal's result may include a reference block (the user gave a REFERENCE TRACK): the aligned reference section and the measured gaps between it and your target section (delta = reference − current) plus conservative action hints. Rules when it is present: (1) reference differences are GUIDANCE, not absolute correctness — use them only where they serve the user's stated goal, and the user goal always wins on conflict; (2) never try to reproduce the reference literally — no copying, no cloning, no "make it identical"; (3) prefer the supplied actions when they explain a gap; (4) do not modify unrelated sections merely to match the reference; (5) a small gap (dir "similar") is NOT a problem — do not "fix" it; (6) if the goal check retries with a 参考校验 line, keep narrowing the NAMED gaps inside the SAME target section.
 - The audio criteria (track_crest_gte, track_band_gte) judge the track's clip SOURCE FILES — mixer/EQ/compressor/warp edits never move them; only replacing the sample does. Declare them only for sound-design tasks where swapping the sample is a valid route ("kick 没冲击力" → track_crest_gte Kick ≈ 6 dB via search_samples/generate_audio replacement), never for processing-only tasks.
 
 Plans (multi-step tasks):
@@ -2904,11 +2936,67 @@ let pendingGoal: {
    * Absent when the goal names no resolvable section — the loop then runs
    * exactly as before (song-level behavior is the fallback, never a crash). */
   section?: SectionPlanningContext;
+  /** PR16: the analyzed reference track (cached across retries — the gate
+   * re-derives gaps against the after-state without re-decoding audio, §60).
+   * referenceError records WHY no reference rides the goal; neither field
+   * ever blocks the plain goal flow (reference is an enhancement, §62). */
+  referenceAnalysis?: ReferenceAnalysis;
+  referenceError?: ReferenceError;
+  /** User-pinned reference section id (set_goal reference.section). */
+  referencePinnedSectionId?: string;
   retries: number;
   /** Declared after mutations already happened this turn — relative
    * ("baseline") criteria then compare against a mid-task state. */
   lateBaseline: boolean;
 } | null = null;
+
+// ---------- Reference Track Intelligence (music/reference) ----------
+//
+// A declared reference is analyzed ONCE per file identity and cached for the
+// process lifetime (the audiofiles.ts idiom: path+mtime+size keying — best
+// effort, §47). The analysis is pure dsp over the decoded bytes; the file
+// itself never leaves the machine (§72: local analysis only).
+
+interface ReferenceCacheEntry {
+  mtimeMs: number;
+  size: number;
+  outcome: { analysis: ReferenceAnalysis } | { error: ReferenceError; message?: string };
+}
+
+const referenceCache = new Map<string, ReferenceCacheEntry>();
+
+function loadReferenceAnalysis(
+  path: string,
+  tempoBpm?: number,
+): ReferenceCacheEntry["outcome"] {
+  let mtimeMs = 0;
+  let size: number | null = null;
+  try {
+    const st = fs.statSync(path);
+    mtimeMs = st.mtimeMs;
+    size = st.size;
+  } catch {
+    // stat denied (sandbox) or missing — read decides; keying degrades to
+    // path-only, same documented trade-off as audiofiles.ts.
+  }
+  const hit = referenceCache.get(path);
+  if (hit && hit.mtimeMs === mtimeMs && (size === null || hit.size === size) && tempoBpm === undefined) {
+    return hit.outcome;
+  }
+  const buf = readHomeBinary(path);
+  if (!buf) {
+    const outcome = { error: "reference_unavailable" as const, message: "unreadable (missing or denied)" };
+    referenceCache.set(path, { mtimeMs, size: size ?? 0, outcome });
+    return outcome;
+  }
+  const source: ReferenceSource = { type: "audio_file", path };
+  const outcome = analyzeReferenceBuffer(source, buf, { ...(tempoBpm !== undefined ? { tempoBpm } : {}) });
+  if (tempoBpm === undefined) {
+    referenceCache.set(path, { mtimeMs, size: buf.length, outcome });
+  }
+  return outcome;
+}
+
 
 /** Mutating calls that actually executed this turn (drives lateBaseline). */
 let mutationsThisTurn = 0;
@@ -2995,6 +3083,16 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
   }
   const late = mutationsThisTurn > 0;
   const warnings = [...norm.warnings];
+  // PR16: an optional reference track rides the goal as comparison evidence.
+  // Parsed BEFORE the baseline block so audio enrichment covers a reference
+  // comparison too (gaps on audio metrics need the current side decoded).
+  const refInput = input.reference as { path?: unknown; section?: unknown; tempo_bpm?: unknown } | undefined;
+  const referencePath =
+    typeof refInput?.path === "string" && refInput.path.trim() ? refInput.path.trim() : undefined;
+  const referencePinned =
+    typeof refInput?.section === "string" && refInput.section.trim() ? refInput.section.trim() : undefined;
+  const referenceTempo =
+    typeof refInput?.tempo_bpm === "number" && refInput.tempo_bpm > 0 ? refInput.tempo_bpm : undefined;
   if (late && !pendingGoal) {
     warnings.push(
       `注意：本回合已有 ${mutationsThisTurn} 次改动先于 set_goal 执行，基线捕获的是改动后的状态 — set_goal 应在任何修改类工具之前调用。`,
@@ -3011,7 +3109,7 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
   let held = pendingGoal ? { baseline: pendingGoal.baseline, intel: pendingGoal.intel } : null;
   if (!held) {
     const state = buildMusicState(buildSongSnapshot(context.application.song));
-    if (goalNeedsAudio(norm.goal)) await enrichMusicStateWithAudio(state);
+    if (goalNeedsAudio(norm.goal) || referencePath) await enrichMusicStateWithAudio(state);
     // Chain the music/ stack over the SAME state the baseline view measures.
     // Roles come from the interpretation layer so a role-named goal resolves
     // against the very labels role_present will judge. Audio features stay
@@ -3022,6 +3120,7 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
       intel: buildMusicIntelligence(state, analyzeMusicState(state)),
     };
   }
+  const prevGoal = pendingGoal;
   pendingGoal = {
     goal: norm.goal,
     // Re-declaring within one turn refines the criteria but keeps the
@@ -3029,9 +3128,41 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
     // the first declaration.
     baseline: held.baseline,
     intel: held.intel,
-    retries: pendingGoal?.retries ?? 0,
-    lateBaseline: pendingGoal?.lateBaseline ?? late,
+    // A re-declare without a reference field keeps the previous reference;
+    // an explicit new path replaces it below.
+    ...(prevGoal?.referenceAnalysis !== undefined ? { referenceAnalysis: prevGoal.referenceAnalysis } : {}),
+    ...(prevGoal?.referenceError !== undefined ? { referenceError: prevGoal.referenceError } : {}),
+    ...(prevGoal?.referencePinnedSectionId !== undefined
+      ? { referencePinnedSectionId: prevGoal.referencePinnedSectionId }
+      : {}),
+    retries: prevGoal?.retries ?? 0,
+    lateBaseline: prevGoal?.lateBaseline ?? late,
   };
+  // Reference: load/analyze once (process cache), store on the goal — the
+  // gate re-derives gaps against the after-state WITHOUT re-decoding (§60).
+  // A failure degrades to a warning; the plain goal flow is untouched (§62).
+  if (referencePath) {
+    const outcome = loadReferenceAnalysis(referencePath, referenceTempo);
+    if ("analysis" in outcome) {
+      pendingGoal.referenceAnalysis = outcome.analysis;
+      pendingGoal.referenceError = undefined;
+      pendingGoal.referencePinnedSectionId = referencePinned;
+      debugLog(
+        context,
+        `REFERENCE analyzed (v${REFERENCE_ANALYZER_VERSION}): ${referencePath}` +
+          ` · sections=${outcome.analysis.sections.length} tempo=${outcome.analysis.tempo?.value ?? "?"}` +
+          (outcome.analysis.partial ? " · PARTIAL" : ""),
+      );
+    } else {
+      pendingGoal.referenceAnalysis = undefined;
+      pendingGoal.referenceError = outcome.error;
+      pendingGoal.referencePinnedSectionId = undefined;
+      warnings.push(
+        `参考音频不可用（${outcome.error}${outcome.message ? `: ${outcome.message}` : ""}）— 目标校验将不使用参考对比，其余流程不受影响。`,
+      );
+      debugLog(context, `REFERENCE ${outcome.error}: ${referencePath}${outcome.message ? ` · ${outcome.message}` : ""}`);
+    }
+  }
   // The planner's evidence: the goal's projected slice of the music/ stack,
   // riding the tool result so set_plan is written against measured numbers.
   // Re-declares re-project the STORED intelligence against the NEW goal —
@@ -3048,8 +3179,43 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
   // observations/actions). Unresolved targets stay absent — the song-level
   // music block above is the fallback, never a fabricated section.
   let section: Record<string, unknown> | undefined;
+  let reference: Record<string, unknown> | undefined;
   try {
-    const sctx = buildSectionPlanningContext(norm.goal, pendingGoal.intel);
+    let sctx = buildSectionPlanningContext(norm.goal, pendingGoal.intel);
+    // PR16: with a reference on the goal, derive the comparison against the
+    // RESOLVED target (alignment → gaps → conservative actions) and rebuild
+    // the context so the reference block rides it. No alignment → no block.
+    if (sctx && pendingGoal.referenceAnalysis) {
+      const refIntel = buildReferenceIntelligence(
+        pendingGoal.referenceAnalysis,
+        pendingGoal.intel.features.sections,
+        {
+          targetSectionId: sctx.target.sectionId,
+          ...(pendingGoal.referencePinnedSectionId
+            ? { referenceSectionId: pendingGoal.referencePinnedSectionId }
+            : {}),
+        },
+      );
+      sctx = buildSectionPlanningContext(norm.goal, { ...pendingGoal.intel, reference: refIntel }) ?? sctx;
+      if (sctx.reference) {
+        reference = presentReferencePlanningContext(sctx.reference);
+        const meaningful = sctx.reference.gaps.filter(
+          (g) => g.direction === "higher_in_reference" || g.direction === "lower_in_reference",
+        );
+        debugLog(
+          context,
+          `REFERENCE aligned: ${sctx.target.name} → ${sctx.reference.referenceSectionId}` +
+            (meaningful.length
+              ? ` · gaps=${meaningful.map((g) => `${g.metric}${g.delta !== undefined ? (g.delta >= 0 ? "+" : "") + g.delta : ""}`).join(",")}`
+              : " · no meaningful gaps") +
+            (sctx.reference.actions.length
+              ? ` · actions=${sctx.reference.actions.map((a) => a.kind).join(",")}`
+              : ""),
+        );
+      } else {
+        debugLog(context, `REFERENCE no alignment: ${sctx.target.name} — reference block omitted`);
+      }
+    }
     if (sctx) {
       pendingGoal.section = sctx;
       section = presentSectionPlanningContext(sctx);
@@ -3083,6 +3249,7 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
     baseline: summarizeView(pendingGoal.baseline),
     ...(music ? { music } : {}),
     ...(section ? { section } : {}),
+    ...(reference ? { reference } : {}),
     ...(warnings.length ? { warnings } : {}),
   };
 }
@@ -3123,6 +3290,7 @@ function goalRetryMessage(
   replanned?: boolean,
   sectionVer?: SectionVerification,
   sectionName?: string,
+  referenceLines?: string[],
 ): string {
   const lines: string[] = [
     `【目标校验 / Goal check】第 ${retries}/${AGENT_MAX_RETRIES} 次校验，目标「${goal.objective}」尚未达成：`,
@@ -3131,6 +3299,7 @@ function goalRetryMessage(
   if (ev.criteriaIssues.length) lines.push(`未达成标准：${ev.criteriaIssues.join("；")}`);
   if (plan) lines.push(...planDiagnosisLines(plan));
   if (sectionVer && sectionName) lines.push(...presentSectionVerification(sectionVer, sectionName));
+  if (referenceLines?.length) lines.push(...referenceLines);
   if (replanned) {
     // The loop's single retry IS the replan: the old route already missed, so
     // it is cleared rather than re-run. A fresh focused plan is invited, not
@@ -3155,11 +3324,13 @@ function goalUnmetNote(
   plan?: PlanReport,
   sectionVer?: SectionVerification,
   sectionName?: string,
+  referenceLines?: string[],
 ): string {
   const head = GOAL_UNMET_NOTE[language ?? ""] ?? GOAL_UNMET_NOTE.zh;
   const issues = [...ev.constraintIssues, ...ev.criteriaIssues].join("；");
   const planLines = plan ? planDiagnosisLines(plan) : [];
   if (sectionVer && sectionName) planLines.push(...presentSectionVerification(sectionVer, sectionName));
+  if (referenceLines?.length) planLines.push(...referenceLines);
   const tail =
     (language ?? "").startsWith("zh") || !language
       ? "。以上为系统对 Live Set 的实际检测结果，与上文表述如有出入以检测结果为准。"
@@ -3178,7 +3349,7 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
     // plan built on it) judges source-file audio, decode first — the feature
     // cache makes this nearly free after the set_goal baseline run.
     const afterState = buildMusicState(buildSongSnapshot(context.application.song));
-    if (goalNeedsAudio(held.goal) || (pendingPlan && planNeedsAudio(pendingPlan))) {
+    if (goalNeedsAudio(held.goal) || (pendingPlan && planNeedsAudio(pendingPlan)) || held.referenceAnalysis) {
       await enrichMusicStateWithAudio(afterState);
     }
     const after = buildGoalView(afterState);
@@ -3196,10 +3367,38 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
     // is EVIDENCE for the retry message, not a second gate. A section-layer
     // bug must never sink the gate.
     let sectionVer: SectionVerification | undefined;
+    let referenceLines: string[] = [];
     if (held.section) {
       try {
         const afterIntel = buildMusicIntelligence(afterState, analyzeMusicState(afterState));
         sectionVer = verifySectionChange(held.section, held.intel, afterIntel, held.goal);
+        // PR16: re-derive the reference gaps against the after-state — the
+        // CACHED analysis is reused (never re-decoded, §60) and gap
+        // REDUCTION is judged as evidence. The goal gate stays the
+        // authority: reference lines inform the retry, they never gate it.
+        if (held.section.reference && held.referenceAnalysis && sectionVer.target.afterSectionId) {
+          const afterTargetId = sectionVer.target.afterSectionId;
+          const refIntelAfter = buildReferenceIntelligence(
+            held.referenceAnalysis,
+            afterIntel.features.sections,
+            {
+              targetSectionId: afterTargetId,
+              ...(held.referencePinnedSectionId
+                ? { referenceSectionId: held.referencePinnedSectionId }
+                : {}),
+            },
+          );
+          const afterRefCtx = buildReferencePlanningContext(
+            { ...held.section.target, sectionId: afterTargetId },
+            afterIntel.features.sections,
+            refIntelAfter,
+          );
+          if (afterRefCtx) {
+            referenceLines = presentReferenceVerification(
+              verifyReferenceProgress(held.section.reference, afterRefCtx),
+            );
+          }
+        }
       } catch (err) {
         debugLog(context, `SECTION verify failed: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -3233,7 +3432,9 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
     if (action === "stop") {
       pendingGoal = null;
       pendingPlan = null;
-      return { appendNote: goalUnmetNote(ev, language, plan ?? undefined, sectionVer, held.section?.target.name) };
+      return {
+        appendNote: goalUnmetNote(ev, language, plan ?? undefined, sectionVer, held.section?.target.name, referenceLines),
+      };
     }
     held.retries++;
     // The single retry IS the replan: the old route already missed, so clear
@@ -3245,7 +3446,17 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
     const replanned = pendingPlan !== null;
     pendingPlan = null;
     return {
-      inject: goalRetryMessage(held.goal, ev, held.retries, language, plan ?? undefined, replanned, sectionVer, held.section?.target.name),
+      inject: goalRetryMessage(
+        held.goal,
+        ev,
+        held.retries,
+        language,
+        plan ?? undefined,
+        replanned,
+        sectionVer,
+        held.section?.target.name,
+        referenceLines,
+      ),
     };
   } catch (err) {
     pendingGoal = null;

@@ -61,13 +61,18 @@ export interface MonoPcm {
   samples: Float32Array; // mono mix, −1..1
 }
 
-export type DecodeOutcome = { pcm: MonoPcm; truncated: boolean } | { error: string };
+export type DecodeOutcome =
+  /** totalFrames = declared length BEFORE maxSeconds truncation (coverage). */
+  | { pcm: MonoPcm; truncated: boolean; totalFrames?: number }
+  | { error: string };
 
 const DB_FLOOR = 1e-5; // −100 dBFS
 const toDb = (x: number): number => 20 * Math.log10(Math.max(x, DB_FLOOR));
 
-const FFT_N = 2048;
-const FFT_HOP = 1024;
+/** Exported for music/reference (frame-curve analysis over the same grid) —
+ * decode scope and feature semantics above are unchanged. */
+export const FFT_N = 2048;
+export const FFT_HOP = 1024;
 
 /** [lo, hi) edges in Hz; `high` runs to Nyquist. */
 const BAND_EDGES: [number, number][] = [
@@ -161,7 +166,8 @@ export function decodeWav(buf: Buffer, opts?: { maxSeconds?: number }): DecodeOu
   }
   if (format === 3 && bitsPerSample !== 32) return { error: "unsupported float WAV depth" };
 
-  let frames = Math.floor(dataLen / frameBytes);
+  const declaredFrames = Math.floor(dataLen / frameBytes);
+  let frames = declaredFrames;
   let truncated = false;
   const maxFrames = opts?.maxSeconds !== undefined ? Math.floor(opts.maxSeconds * sampleRate) : frames;
   if (frames > maxFrames) {
@@ -193,7 +199,7 @@ export function decodeWav(buf: Buffer, opts?: { maxSeconds?: number }): DecodeOu
     }
     samples[f] = acc / channels; // hard-panned sources read ~3 dB low — acceptable
   }
-  return { pcm: { sampleRate, channels, samples }, truncated };
+  return { pcm: { sampleRate, channels, samples }, truncated, totalFrames: declaredFrames };
 }
 
 /** 80-bit IEEE-754 extended float (AIFF sample rate). */
@@ -250,7 +256,8 @@ export function decodeAiff(buf: Buffer, opts?: { maxSeconds?: number }): DecodeO
 
   const bytesPerSample = bitDepth / 8;
   const frameBytes = channels * bytesPerSample;
-  let frames = Math.min(numFrames, Math.floor(dataLen / frameBytes));
+  const declaredFrames = Math.min(numFrames, Math.floor(dataLen / frameBytes));
+  let frames = declaredFrames;
   let truncated = false;
   const maxFrames = opts?.maxSeconds !== undefined ? Math.floor(opts.maxSeconds * sampleRate) : frames;
   if (frames > maxFrames) {
@@ -277,13 +284,13 @@ export function decodeAiff(buf: Buffer, opts?: { maxSeconds?: number }): DecodeO
     }
     samples[f] = acc / channels;
   }
-  return { pcm: { sampleRate, channels, samples }, truncated };
+  return { pcm: { sampleRate, channels, samples }, truncated, totalFrames: declaredFrames };
 }
 
 // ---------------------------------------------------------------- FFT ------
 
 const hannCache = new Map<number, Float64Array>();
-function hannWindow(n: number): Float64Array {
+export function hannWindow(n: number): Float64Array {
   let w = hannCache.get(n);
   if (!w) {
     w = new Float64Array(n);
@@ -294,7 +301,7 @@ function hannWindow(n: number): Float64Array {
 }
 
 /** In-place iterative radix-2 Cooley-Tukey. Length must be a power of two. */
-function fftInPlace(re: Float64Array, im: Float64Array): void {
+export function fftInPlace(re: Float64Array, im: Float64Array): void {
   const n = re.length;
   for (let i = 1, j = 0; i < n; i++) {
     let bit = n >> 1;

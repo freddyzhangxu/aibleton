@@ -93,11 +93,18 @@ export const TRACK_OBSERVATION_KINDS = [
   "low_frequency_co_activity",
 ] as const;
 
+/** Reference-track observations (PR16). NEVER emitted by this layer — the
+ * reference module (music/reference) synthesizes them so reference-derived
+ * CreativeActions keep the action → observation → evidence provenance chain
+ * instead of fabricating source-less actions. */
+export const REFERENCE_OBSERVATION_KINDS = ["reference_gap"] as const;
+
 export const OBSERVATION_KINDS = [
   ...SECTION_OBSERVATION_KINDS,
   ...ARRANGEMENT_OBSERVATION_KINDS,
   ...REPETITION_OBSERVATION_KINDS,
   ...TRACK_OBSERVATION_KINDS,
+  ...REFERENCE_OBSERVATION_KINDS,
 ] as const;
 
 export type ObservationKind = (typeof OBSERVATION_KINDS)[number];
