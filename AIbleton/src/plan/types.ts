@@ -66,6 +66,15 @@ export interface PlanStep {
   description: string; // human-readable intent — displayed, never evaluated
   tool?: string; // the tool expected to carry this step out
   args?: unknown; // opaque echo of the intended call — display-only, never judged
+  /** PR15: the musical region this step primarily edits — metadata for the
+   * planner/diagnosis, NOT a sandbox: no tool call is intercepted by it.
+   * Optional; old plans without scope behave exactly as before. */
+  scope?: {
+    /** Section name or id (same coordinates ExpectedEffect.section uses). */
+    section?: string;
+    startBeat?: number;
+    endBeat?: number;
+  };
   expectedEffects: ExpectedEffect[];
 }
 
@@ -177,6 +186,42 @@ function normEffect(raw: unknown, warnings: string[]): ExpectedEffect | null {
   }
 }
 
+const MAX_SCOPE_SECTION = 64;
+
+/** PR15 step scope: section label + beat range. Malformed pieces are DROPPED
+ * (NaN/Infinity/negative beats, end <= start, oversized names) — never a
+ * crash, and a bad range never takes the section name down with it. */
+function normScope(raw: unknown, warnings: string[]): PlanStep["scope"] | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== "object") {
+    warnings.push(`scope 必须是对象，已忽略`);
+    return undefined;
+  }
+  const r = raw as Record<string, unknown>;
+  const out: NonNullable<PlanStep["scope"]> = {};
+  const section = str(r.section ?? r.sectionId); // accept both spellings
+  if (section) {
+    if (section.length > MAX_SCOPE_SECTION) {
+      warnings.push(`scope.section 超过 ${MAX_SCOPE_SECTION} 字符已忽略`);
+    } else {
+      out.section = section;
+    }
+  }
+  const beat = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+  const start = beat(r.startBeat);
+  const end = beat(r.endBeat);
+  if (r.startBeat !== undefined || r.endBeat !== undefined) {
+    if (start !== null && end !== null && end > start) {
+      out.startBeat = start;
+      out.endBeat = end;
+    } else {
+      warnings.push(`scope 的 beat 范围非法（需要 0 ≤ startBeat < endBeat 的有限数值），已忽略`);
+    }
+  }
+  return out.section || out.startBeat !== undefined ? out : undefined;
+}
+
 function normArgs(raw: unknown, warnings: string[]): unknown {
   if (raw === undefined) return undefined;
   try {
@@ -240,11 +285,13 @@ export function normalizePlan(input: Record<string, unknown>, validTools: Readon
       }
     }
     const args = normArgs(e.args, warnings);
+    const scope = normScope(e.scope, warnings);
     steps.push({
       id,
       description,
       ...(tool ? { tool } : {}),
       ...(args !== undefined ? { args } : {}),
+      ...(scope ? { scope } : {}),
       expectedEffects,
     });
   }
