@@ -103,12 +103,24 @@ export interface MusicRecommendation {
   reason?: string;
 }
 
+/** Duration-weighted share of audible note material outside the governing
+ * scale — Live's declared scale when Scale Mode is on, else the detected key.
+ * Drums and muted content are excluded. Absent when no scale is usable or
+ * material is too thin to judge: an UNKNOWABLE, never a zero. */
+export interface OffKeyMeasure {
+  ratio: number; // out-of-scale duration / total duration (0-1)
+  scaleLabel: string; // scale judged against, for messages
+  scaleSource: "live" | "detected";
+}
+
 export interface MusicAnalysis {
   key: KeyAnalysis;
   sections: SectionAnalysis[];
   trackRoles: TrackRoleAnalysis[];
   issues: MusicIssue[];
   recommendations?: MusicRecommendation[];
+  /** Present only when a governing scale exists and material suffices. */
+  offKey?: OffKeyMeasure;
   /** Parallel to trackRoles, indexed by state.tracks position; null per
    * track without analyzed audio. undefined when no clip anywhere has
    * features (audio enrichment never ran). */

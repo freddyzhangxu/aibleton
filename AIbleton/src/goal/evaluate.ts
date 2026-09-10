@@ -12,6 +12,7 @@
  * phrases the retry injection.
  */
 
+import { OFF_KEY_THRESHOLD, pcName } from "../analysis/interpret.js";
 import type { Criterion, GoalCheck, GoalEvaluation, MusicGoal } from "./types.js";
 import { findSection, type GoalSectionMeasure, type GoalView } from "./view.js";
 
@@ -138,6 +139,28 @@ const trackMissing = (name: string, view: GoalView): string =>
 
 const NO_AUDIO = "无音频特征（目标声明/校验时未启用音频分析）";
 
+/** in_key / off_key_lte share one judge — in_key is off_key_lte at the
+ * OFF_KEY issue threshold, so a set that doesn't trigger the issue passes
+ * in_key by construction. An unmeasurable ratio FAILS (unknown ≠ clean),
+ * with the reason spelled out so the model can act on it. */
+function judgeOffKeyLte(pct: number, after: GoalView): GoalCheck {
+  const id = "offKey";
+  if (after.offKeyRatio === undefined) {
+    return {
+      id,
+      passed: false,
+      expected: `调外音占比可测量（Live Scale Mode 已开启，或可检测调性 + 足够音符材料）`,
+      actual: "无法测量 — 无可用调式或音符材料不足",
+    };
+  }
+  return {
+    id,
+    passed: after.offKeyRatio <= pct + EPS,
+    expected: `调外音时长占比 ≤ ${fmt(pct * 100)}%（按 ${after.offKeyScale}）`,
+    actual: `${fmt(after.offKeyRatio * 100)}%`,
+  };
+}
+
 function judgeTrackCrestGte(track: string, db: number, after: GoalView): GoalCheck {
   const id = `track[${track}].crest`;
   const t = findTrack(after, track);
@@ -180,13 +203,35 @@ function judge(c: Criterion, before: GoalView, after: GoalView): GoalCheck {
         expected: `速度保持 ${fmt(before.tempo)} BPM`,
         actual: `${fmt(after.tempo)} BPM`,
       };
-    case "key_unchanged":
+    case "key_unchanged": {
+      // Scale Mode on in BOTH views: Live's declared scale is user-set ground
+      // truth — the detected keyBest wobbles on sparse material, this doesn't.
+      // Compare root + interval structure; the NAME is a localized display
+      // string and is never compared. Mixed on/off falls back to keyBest:
+      // toggling Scale Mode doesn't change the music's key.
+      if (before.liveScale.mode && after.liveScale.mode) {
+        const sameRoot =
+          (((after.liveScale.root - before.liveScale.root) % 12) + 12) % 12 === 0;
+        const sameIntervals =
+          after.liveScale.intervals.join(",") === before.liveScale.intervals.join(",");
+        return {
+          id: "key",
+          passed: sameRoot && sameIntervals,
+          expected: `调式保持 ${pcName(before.liveScale.root)} ${before.liveScale.name}`,
+          actual: `${pcName(after.liveScale.root)} ${after.liveScale.name}`,
+        };
+      }
       return {
         id: "key",
         passed: after.keyBest === before.keyBest,
         expected: `调性保持 ${before.keyBest ?? "(无法检测)"}`,
         actual: after.keyBest ?? "(无法检测)",
       };
+    }
+    case "in_key":
+      return judgeOffKeyLte(OFF_KEY_THRESHOLD, after);
+    case "off_key_lte":
+      return judgeOffKeyLte(c.pct, after);
     case "track_count_gte": {
       const want = c.n === "baseline" ? before.trackCount : c.n;
       return {
