@@ -80,6 +80,13 @@ import {
   type MusicIntelligence,
 } from "./music/intelligence/index.js";
 import {
+  buildSectionPlanningContext,
+  presentSectionPlanningContext,
+  verifySectionChange,
+  type SectionPlanningContext,
+  type SectionVerification,
+} from "./music/sections/index.js";
+import {
   AGENT_MAX_RETRIES,
   AGENT_MAX_ROUNDS,
   AGENT_MAX_STEPS,
@@ -1190,11 +1197,13 @@ Goals (tasks that change the Set):
 - Write 1–4 criteria that genuinely define the outcome ("make the drop harder" → section_energy_gt Drop vs baseline:Drop + role_present low_end in Drop). The objective sentence is for humans; only criteria are judged.
 - set_goal's result includes a music block: measured features and observations relevant to your declared goal (target section/track energy, density, rhythmic activity, contrasts like Build→Drop, repetition like Drop 1↔Drop 2, each observation with its evidence chain). Base your criteria thresholds and set_plan steps on THESE numbers — cite them, never guess them. A missing key means "no data" (e.g. audio not analyzed), not zero.
 - The music block may also include actions: evidence-backed CANDIDATE musical interventions derived from the current Set (e.g. introduce_variation on Drop 2 when it repeats Drop 1 with no evolution). Treat them as planning hints, never as mandatory instructions — pick only the ones that serve the user's goal, translate each chosen action into concrete set_plan steps with the available tools, and never invent musical problems the block does not evidence. Not every action needs a plan step, and no action executes anything by itself.
+- set_goal's result may include a section block: the resolved TARGET section (id, name, beat range, match confidence), up to 3 comparison REFERENCES (previous/next/same-role/reprise/contrast partners with their similarity/contrast numbers), and only the features/observations/actions relevant to that target. Rules when it is present: (1) the target is your primary edit scope — keep set_plan steps inside its beat range whenever possible; (2) references are for COMPARISON, not automatic edit targets — modify a neighbor/reference only when the goal is relative (contrast/transition, e.g. "make the drop hit harder" may justify thinning the Build) and say why in the step description; (3) prefer the supplied actions as intervention directions and never edit unrelated sections unless the goal demands it. If the goal check retries with a 段落校验 line naming a section metric that missed (before→after), fix THAT metric in THAT section — do not switch to a different section.
 - The audio criteria (track_crest_gte, track_band_gte) judge the track's clip SOURCE FILES — mixer/EQ/compressor/warp edits never move them; only replacing the sample does. Declare them only for sound-design tasks where swapping the sample is a valid route ("kick 没冲击力" → track_crest_gte Kick ≈ 6 dB via search_samples/generate_audio replacement), never for processing-only tasks.
 
 Plans (multi-step tasks):
 - After set_goal, when the task needs 2+ tool calls or multiple stages, call set_plan with your ordered steps BEFORE touching the Set. Each step: a short description, the tool you expect to call, and expectedEffects — what the step should measurably change (closed vocabulary, see the set_plan schema).
 - expectedEffects are your own predictions ("add hats" → section_energy increase in Drop). The server checks them against the measured Set at the end. If the goal check fails, the 目标校验 message includes a 计划诊断: which steps never executed (matched from your actual tool calls, not your claims) and which predicted effects were not observed — fix THAT step instead of re-running calls that already landed.
+- A step may declare scope {section, startBeat, endBeat} marking the musical region it edits (use the target section from set_goal's section block) — metadata that keeps multi-section tasks honest, not a sandbox. Omit it for song-wide steps.
 - Skip set_plan for single-call tweaks. Declaring a plan never modifies the Set.
 
 Loop bounds (hard, server-enforced):
@@ -2890,6 +2899,10 @@ let pendingGoal: {
    * built from — the goal's projected reasoning slice rides the set_goal
    * result so the plan is written against measured evidence (PR13.5). */
   intel: MusicIntelligence;
+  /** PR15: the goal's resolved section target + bounded planning context.
+   * Absent when the goal names no resolvable section — the loop then runs
+   * exactly as before (song-level behavior is the fallback, never a crash). */
+  section?: SectionPlanningContext;
   retries: number;
   /** Declared after mutations already happened this turn — relative
    * ("baseline") criteria then compare against a mid-task state. */
@@ -3029,6 +3042,33 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
   } catch (err) {
     debugLog(context, `INTEL failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+  // PR15: resolve the goal's target SECTION and hand the planner a bounded
+  // context (target + comparison references + only the relevant features/
+  // observations/actions). Unresolved targets stay absent — the song-level
+  // music block above is the fallback, never a fabricated section.
+  let section: Record<string, unknown> | undefined;
+  try {
+    const sctx = buildSectionPlanningContext(norm.goal, pendingGoal.intel);
+    if (sctx) {
+      pendingGoal.section = sctx;
+      section = presentSectionPlanningContext(sctx);
+      debugLog(
+        context,
+        `SECTION target: ${sctx.target.name} (id=${sctx.target.sectionId}, match=${sctx.target.match}, conf=${sctx.target.confidence})` +
+          (sctx.references.length
+            ? ` · refs=${sctx.references.map((r) => `${r.name}(${r.reason})`).join(",")}`
+            : ""),
+      );
+    } else {
+      pendingGoal.section = undefined;
+      if (norm.goal.target?.section) {
+        debugLog(context, `SECTION unresolved: 「${norm.goal.target.section}」 — falling back to song-level context`);
+      }
+    }
+  } catch (err) {
+    pendingGoal.section = undefined;
+    debugLog(context, `SECTION failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
   debugLog(
     context,
     `GOAL set (${norm.goal.type}): ${norm.goal.objective} · criteria=${norm.goal.successCriteria.length} constraints=${norm.goal.constraints.length}`,
@@ -3041,6 +3081,7 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
     constraints: norm.goal.constraints.length,
     baseline: summarizeView(pendingGoal.baseline),
     ...(music ? { music } : {}),
+    ...(section ? { section } : {}),
     ...(warnings.length ? { warnings } : {}),
   };
 }
@@ -3069,6 +3110,33 @@ function planDiagnosisLines(report: PlanReport): string[] {
   return lines;
 }
 
+/** PR15 section verdict as retry-message lines: only the criteria that did
+ * NOT pass (with before→after numbers), so the retry targets the metric that
+ * missed, in the section that missed it. Empty when the verdict passed or
+ * had nothing to say. */
+function sectionVerificationLines(ver: SectionVerification, sectionName: string): string[] {
+  const r2 = (x: number) => Math.round(x * 100) / 100;
+  const fmt = (v?: number) => (v === undefined ? "?" : String(r2(v)));
+  const lines: string[] = [];
+  if (!ver.matchedAfter) {
+    lines.push(
+      `段落校验 / Section「${sectionName}」: 修改后无法重新定位目标段落（可能已被删除或编曲结构大变），按整曲标准判断。`,
+    );
+    return lines;
+  }
+  const missed = ver.criteria.filter((c) => c.status !== "passed");
+  if (!missed.length) return lines;
+  const parts = missed.map(
+    (c) =>
+      `${c.metric} 期望 ${c.direction}: ${fmt(c.before)}→${fmt(c.after)}` +
+      (c.delta !== undefined ? ` (Δ${c.delta >= 0 ? "+" : ""}${r2(c.delta)})` : "") +
+      (c.status === "unknown" ? " — 数据不足" : "") +
+      (c.referenceSectionId !== undefined ? ` [vs ${c.referenceSectionId}]` : ""),
+  );
+  lines.push(`段落校验 / Section「${sectionName}」${ver.status === "failed" ? "未达标" : "无法确认"}：${parts.join("；")}`);
+  return lines;
+}
+
 function goalRetryMessage(
   goal: MusicGoal,
   ev: GoalEvaluation,
@@ -3076,6 +3144,8 @@ function goalRetryMessage(
   language?: string,
   plan?: PlanReport,
   replanned?: boolean,
+  sectionVer?: SectionVerification,
+  sectionName?: string,
 ): string {
   const lines: string[] = [
     `【目标校验 / Goal check】第 ${retries}/${AGENT_MAX_RETRIES} 次校验，目标「${goal.objective}」尚未达成：`,
@@ -3083,6 +3153,7 @@ function goalRetryMessage(
   if (ev.constraintIssues.length) lines.push(`约束违反：${ev.constraintIssues.join("；")}`);
   if (ev.criteriaIssues.length) lines.push(`未达成标准：${ev.criteriaIssues.join("；")}`);
   if (plan) lines.push(...planDiagnosisLines(plan));
+  if (sectionVer && sectionName) lines.push(...sectionVerificationLines(sectionVer, sectionName));
   if (replanned) {
     // The loop's single retry IS the replan: the old route already missed, so
     // it is cleared rather than re-run. A fresh focused plan is invited, not
@@ -3101,10 +3172,17 @@ const GOAL_UNMET_NOTE: Record<string, string> = {
   en: `\n\n⚠️ Goal check failed (retried ${AGENT_MAX_RETRIES}× by the server): `,
 };
 
-function goalUnmetNote(ev: GoalEvaluation, language?: string, plan?: PlanReport): string {
+function goalUnmetNote(
+  ev: GoalEvaluation,
+  language?: string,
+  plan?: PlanReport,
+  sectionVer?: SectionVerification,
+  sectionName?: string,
+): string {
   const head = GOAL_UNMET_NOTE[language ?? ""] ?? GOAL_UNMET_NOTE.zh;
   const issues = [...ev.constraintIssues, ...ev.criteriaIssues].join("；");
   const planLines = plan ? planDiagnosisLines(plan) : [];
+  if (sectionVer && sectionName) planLines.push(...sectionVerificationLines(sectionVer, sectionName));
   const tail =
     (language ?? "").startsWith("zh") || !language
       ? "。以上为系统对 Live Set 的实际检测结果，与上文表述如有出入以检测结果为准。"
@@ -3134,6 +3212,21 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
     const plan = pendingPlan
       ? buildPlanReport(pendingPlan, executedToolsThisTurn, held.baseline, after)
       : null;
+    // PR15: when the goal resolved a target section, re-analyze THAT section
+    // and judge the before/after change against goal-aware criteria. One
+    // extra intelligence chain per gate (§77: before once, after once — never
+    // per tool call). The goal gate stays the final authority; this verdict
+    // is EVIDENCE for the retry message, not a second gate. A section-layer
+    // bug must never sink the gate.
+    let sectionVer: SectionVerification | undefined;
+    if (held.section) {
+      try {
+        const afterIntel = buildMusicIntelligence(afterState, analyzeMusicState(afterState));
+        sectionVer = verifySectionChange(held.section, held.intel, afterIntel, held.goal);
+      } catch (err) {
+        debugLog(context, `SECTION verify failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     // The loop's exit decision is one pure function (agent/loop.ts) — pass,
     // retry once, or stop. A retry with no mutation budget left is a stop:
     // it could only re-analyze and apologize.
@@ -3144,7 +3237,9 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
       pendingPlan = null;
       debugLog(
         context,
-        `GOAL MET: ${held.goal.objective}` + (plan ? ` · plan ${plan.executedCount}/${plan.total} steps` : ""),
+        `GOAL MET: ${held.goal.objective}` +
+          (plan ? ` · plan ${plan.executedCount}/${plan.total} steps` : "") +
+          (sectionVer ? ` · section ${sectionVer.status}` : ""),
       );
       return null;
     }
@@ -3161,15 +3256,20 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
     if (action === "stop") {
       pendingGoal = null;
       pendingPlan = null;
-      return { appendNote: goalUnmetNote(ev, language, plan ?? undefined) };
+      return { appendNote: goalUnmetNote(ev, language, plan ?? undefined, sectionVer, held.section?.target.name) };
     }
     held.retries++;
     // The single retry IS the replan: the old route already missed, so clear
     // it — the model re-declares a focused plan from the diagnosis (or fixes
-    // directly). The report was computed above, before the clear.
+    // directly). The report was computed above, before the clear. The section
+    // verdict rides along so the retry sees which target-section metric
+    // missed and by how much — the target itself is NOT re-resolved (target
+    // stability across retry).
     const replanned = pendingPlan !== null;
     pendingPlan = null;
-    return { inject: goalRetryMessage(held.goal, ev, held.retries, language, plan ?? undefined, replanned) };
+    return {
+      inject: goalRetryMessage(held.goal, ev, held.retries, language, plan ?? undefined, replanned, sectionVer, held.section?.target.name),
+    };
   } catch (err) {
     pendingGoal = null;
     pendingPlan = null;
