@@ -34,7 +34,7 @@ import {
   writeHomeBinary,
   writeHomeFile,
 } from "./paths.js";
-import { recordGeneration } from "./genlog/index.js";
+import { latestGeneration, recordGeneration } from "./genlog/index.js";
 import {
   MoveError,
   downloadSet,
@@ -71,7 +71,7 @@ import type { SnapshotClip, SongSnapshot } from "./musicstate/types.js";
 import { postconditionsFor } from "./verify/rules.js";
 import { runVerification } from "./verify/verifier.js";
 import type { ProbeSong } from "./verify/types.js";
-import { CRITERION_KINDS, GOAL_TYPES, goalNeedsAudio, normalizeGoal, type GoalEvaluation, type MusicGoal } from "./goal/types.js";
+import { CRITERION_KINDS, GOAL_TYPES, goalNeedsAudio, goalNeedsGenlog, normalizeGoal, type GoalEvaluation, type MusicGoal } from "./goal/types.js";
 import { buildGoalView, type GoalView } from "./goal/view.js";
 import { evaluateGoal } from "./goal/evaluate.js";
 import { EFFECT_METRICS, normalizePlan, planNeedsAudio, type MusicPlan } from "./plan/types.js";
@@ -501,6 +501,20 @@ function saveManualConfigs(): void {
 
 type Ctx = ExtensionContext<"1.0.0">;
 
+/** Stamp the latest genlog record onto a GoalView for the gen_* judges
+ * (goalNeedsGenlog gates the call). Registry reads stay out of
+ * buildGoalView itself, which measures only the Set. */
+function attachLatestGeneration(view: GoalView): void {
+  const rec = latestGeneration();
+  if (!rec) return;
+  view.latestGeneration = {
+    id: rec.id,
+    provider: rec.provider,
+    ...(rec.features ? { features: rec.features } : {}),
+    ...(rec.featuresError ? { featuresError: rec.featuresError } : {}),
+  };
+}
+
 // ---------- Audio-generation providers (see audiogen.ts) ----------
 
 /**
@@ -548,7 +562,13 @@ const CRITERION_INPUT_SCHEMA = {
         "track_band_gte: the track's clip SOURCE FILES must have >= pct (0-1) of spectral energy in `band` " +
         "(sub|bass|lowMid|mid|highMid|high). WARNING: the audio kinds judge the source file, pre-warp/pre-gain/" +
         "pre-device — mixer/EQ/compressor/warp edits NEVER move them; only replacing the sample does. Declare " +
-        "them only when sample replacement is an acceptable route.",
+        "them only when sample replacement is an acceptable route. " +
+        "gen_metric_gte: the LATEST generate_audio artifact's `metric` (rmsDb|peakDb|crestDb|loudnessDb|" +
+        "dynamicRangeDb|spectralCentroidHz|transientDensity, or \"band\" with `band`) must be >= value — " +
+        "judges the generated file from the generation registry, not the Set. " +
+        "gen_improved_vs_prev: the latest generation must improve on the generation that was latest when the " +
+        "goal was declared — metric moving `direction` (up|down) by at least min_delta. Fails when no new " +
+        "generation happened this turn or either side is unanalyzable (unknown is never \"improved by 0\").",
     },
     a: { type: "string", description: "section_energy_gt: section that must win" },
     b: { type: "string", description: "section_energy_gt: section to beat, or \"baseline:<name>\"" },
@@ -568,6 +588,21 @@ const CRITERION_INPUT_SCHEMA = {
     pct: {
       type: "number",
       description: "track_band_gte: minimum band energy fraction (0-1). off_key_lte: MAXIMUM off-scale duration fraction (0-1)",
+    },
+    metric: {
+      type: "string",
+      description:
+        "gen_*: rmsDb | peakDb | crestDb | loudnessDb | dynamicRangeDb | spectralCentroidHz | transientDensity | band",
+    },
+    value: { type: "number", description: "gen_metric_gte: threshold the metric must reach" },
+    direction: {
+      type: "string",
+      enum: ["up", "down"],
+      description: "gen_improved_vs_prev: which way counts as improvement",
+    },
+    min_delta: {
+      type: "number",
+      description: "gen_improved_vs_prev: minimum improvement over the previous generation",
     },
   },
   required: ["kind"],
@@ -1074,7 +1109,7 @@ const TOOLS = [
   {
     name: "generate_audio",
     description:
-      "Generate NEW audio with an AI music model (Stable Audio / ElevenLabs / MiniMax — whichever is configured in Settings) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Returns the saved file path — then call import_audio_clip (loops onto an audio track's arrangement) or load_sample (one-shots into a Simpler).",
+      "Generate NEW audio with an AI music model (Stable Audio / ElevenLabs / MiniMax — whichever is configured in Settings) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Pass importTo to place the result onto an audio track's arrangement in the same atomic call (preferred for loops/stems); without it, follow up with import_audio_clip (arrangement) or load_sample (one-shots into a Simpler). Every generation is recorded in the generation registry (generation_id in the result) so gen_* goal criteria can judge the artifact.",
     input_schema: {
       type: "object",
       properties: {
@@ -1091,6 +1126,18 @@ const TOOLS = [
         lyrics: {
           type: "string",
           description: "Vocal lyrics — MiniMax only; omit for instrumentals",
+        },
+        importTo: {
+          type: "object",
+          description:
+            "Optional: import the generated file straight onto an audio track's arrangement in the same call (one atomic generate→import, no separate import_audio_clip needed). Omit to only save the file.",
+          properties: {
+            track_index: { type: "number", description: "0-based audio track index" },
+            track_name: TRACK_NAME_DESC,
+            start_beat: { type: "number", description: "Arrangement position (default 0)" },
+            duration_beats: { type: "number", description: "Clip length in beats (default: file's natural length)" },
+            warped: { type: "boolean", description: "Warp the clip to the Set tempo (default: Live's default)" },
+          },
         },
       },
       required: ["prompt"],
@@ -1242,6 +1289,7 @@ Goals (tasks that change the Set):
 - set_goal's result may include a section block: the resolved TARGET section (id, name, beat range, match confidence), up to 3 comparison REFERENCES (previous/next/same-role/reprise/contrast partners with their similarity/contrast numbers), and only the features/observations/actions relevant to that target. Rules when it is present: (1) the target is your primary edit scope — keep set_plan steps inside its beat range whenever possible; (2) references are for COMPARISON, not automatic edit targets — modify a neighbor/reference only when the goal is relative (contrast/transition, e.g. "make the drop hit harder" may justify thinning the Build) and say why in the step description; (3) prefer the supplied actions as intervention directions and never edit unrelated sections unless the goal demands it. If the goal check retries with a 段落校验 line naming a section metric that missed (before→after), fix THAT metric in THAT section — do not switch to a different section.
 - set_goal's result may include a reference block (the user gave a REFERENCE TRACK): the aligned reference section and the measured gaps between it and your target section (delta = reference − current) plus conservative action hints. Rules when it is present: (1) reference differences are GUIDANCE, not absolute correctness — use them only where they serve the user's stated goal, and the user goal always wins on conflict; (2) never try to reproduce the reference literally — no copying, no cloning, no "make it identical"; (3) prefer the supplied actions when they explain a gap; (4) do not modify unrelated sections merely to match the reference; (5) a small gap (dir "similar") is NOT a problem — do not "fix" it; (6) if the goal check retries with a 参考校验 line, keep narrowing the NAMED gaps inside the SAME target section.
 - The audio criteria (track_crest_gte, track_band_gte) judge the track's clip SOURCE FILES — mixer/EQ/compressor/warp edits never move them; only replacing the sample does. Declare them only for sound-design tasks where swapping the sample is a valid route ("kick 没冲击力" → track_crest_gte Kick ≈ 6 dB via search_samples/generate_audio replacement), never for processing-only tasks.
+- The gen criteria (gen_metric_gte, gen_improved_vs_prev) judge generate_audio's artifact from the generation registry, not the Set. Use them for generation-quality goals: gen_metric_gte as an absolute bar ("the generated kick needs crest ≥ 6 dB"), gen_improved_vs_prev for iteration ("brighter than the last take by ≥ 500 Hz centroid"). gen_improved_vs_prev requires a prior generation as baseline — if the registry is empty, declare gen_metric_gte instead or generate once before setting the goal.
 
 Plans (multi-step tasks):
 - After set_goal, when the task needs 2+ tool calls or multiple stages, call set_plan with your ordered steps BEFORE touching the Set. Each step: a short description, the tool you expect to call, and expectedEffects — what the step should measurably change (closed vocabulary, see the set_plan schema).
@@ -2376,12 +2424,47 @@ async function runTool(
       } catch {
         generationId = undefined;
       }
+      // Atomic generate→import (PR18): same internal path as import_audio_clip.
+      // A failed import never fails the generation — the file is already saved
+      // and recorded, the error rides the result as import_error.
+      let imported: Record<string, unknown> | undefined;
+      let importError: string | undefined;
+      if (input.importTo && typeof input.importTo === "object") {
+        const spec = input.importTo as Record<string, unknown>;
+        try {
+          const ref = resolveTrack(context, spec, "track_index");
+          const track = ref.track;
+          if (!(track instanceof AudioTrack)) {
+            throw new Error(`轨道 ${ref.index}（${track.name}）不是音频轨道，先用 create_audio_track 建一条`);
+          }
+          const managed = await context.resources.importIntoProject(file);
+          const clip = await context.withinTransaction(() =>
+            track.createAudioClip({
+              filePath: managed,
+              startTime: Number(spec.start_beat ?? 0),
+              ...(typeof spec.duration_beats === "number" ? { duration: spec.duration_beats } : {}),
+              ...(typeof spec.warped === "boolean" ? { isWarped: spec.warped } : {}),
+            }),
+          );
+          imported = { track: track.name, track_index: ref.index, clip: clip.name };
+        } catch (e) {
+          importError = e instanceof Error ? e.message : String(e);
+        }
+      }
       return {
         file,
         provider: AUDIO_PROVIDER_NAMES[cfg.provider],
         duration_seconds: duration,
         ...(generationId ? { generation_id: generationId } : {}),
-        next: "用 import_audio_clip 放上编排(loop/stem)或 load_sample 装进 Simpler(one-shot)",
+        ...(imported ? { imported } : {}),
+        ...(importError ? { import_error: importError } : {}),
+        ...(imported
+          ? {}
+          : {
+              next: importError
+                ? `导入失败(${importError}) — 文件已保存,可改用 import_audio_clip 重试或检查轨道类型`
+                : "用 import_audio_clip 放上编排(loop/stem)或 load_sample 装进 Simpler(one-shot),或下次直接传 importTo",
+            }),
       };
     }
     case "write_midi_clip": {
@@ -3149,8 +3232,13 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
     // against the very labels role_present will judge. Audio features stay
     // undefined unless the goal already needed decoding — the honesty rules
     // carry that through to the projection.
+    const baseline = buildGoalView(state);
+    // gen_* criteria judge the registry, not the Set: the latest record at
+    // declaration time is the "previous iteration" gen_improved_vs_prev
+    // compares against. Anchored here so a re-declared goal keeps it.
+    if (goalNeedsGenlog(norm.goal)) attachLatestGeneration(baseline);
     held = {
-      baseline: buildGoalView(state),
+      baseline,
       intel: buildMusicIntelligence(state, analyzeMusicState(state)),
     };
   }
@@ -3387,6 +3475,7 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
       await enrichMusicStateWithAudio(afterState);
     }
     const after = buildGoalView(afterState);
+    if (goalNeedsGenlog(held.goal)) attachLatestGeneration(after);
     const ev = evaluateGoal(held.goal, held.baseline, after);
     // Plan diagnosis rides the SAME before/after views, so a plan effect and
     // a goal criterion can never disagree about the numbers. The plan never

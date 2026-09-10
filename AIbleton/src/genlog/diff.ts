@@ -12,7 +12,9 @@
 import type { GenerationRecord } from "./types.js";
 import { AUDIO_BAND_NAMES, type AudioFeatures } from "../dsp.js";
 
-export const GENERATION_DIFF_METRICS = [
+/** Scalar (non-band) feature metrics — also the gen_* goal criteria's
+ * metric vocabulary (goal/types.ts adds "band" for band-energy shares). */
+export const GEN_SCALAR_METRICS = [
   "rmsDb",
   "peakDb",
   "crestDb",
@@ -20,6 +22,12 @@ export const GENERATION_DIFF_METRICS = [
   "dynamicRangeDb",
   "spectralCentroidHz",
   "transientDensity",
+] as const;
+
+export type GenScalarMetric = (typeof GEN_SCALAR_METRICS)[number];
+
+export const GENERATION_DIFF_METRICS = [
+  ...GEN_SCALAR_METRICS,
   ...AUDIO_BAND_NAMES.map((b) => `band_${b}` as const),
 ] as const;
 
@@ -43,6 +51,21 @@ export interface GenerationDiff {
 function read(f: AudioFeatures, m: GenerationDiffMetric): number | undefined {
   if (m.startsWith("band_")) return f.bands[m.slice(5) as (typeof AUDIO_BAND_NAMES)[number]];
   return f[m as Exclude<GenerationDiffMetric, `band_${string}`>];
+}
+
+/**
+ * Shared metric reader for the gen_* goal judges (goal/evaluate.ts): one
+ * scalar metric, or one band's energy share when metric === "band" and
+ * `band` names it. Undefined means the feature is absent — callers treat
+ * that as UNKNOWN, never zero.
+ */
+export function genMetricValue(
+  f: AudioFeatures,
+  metric: GenScalarMetric | "band",
+  band?: (typeof AUDIO_BAND_NAMES)[number],
+): number | undefined {
+  if (metric === "band") return band ? f.bands[band] : undefined;
+  return f[metric];
 }
 
 export function diffGenerations(from: GenerationRecord, to: GenerationRecord): GenerationDiff {

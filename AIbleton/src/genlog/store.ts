@@ -39,6 +39,11 @@ export function loadGenLog(dir: string = generatedAudioDir()): GenerationRecord[
   }
 }
 
+/** Newest record, or undefined when the log is empty. */
+export function latestGeneration(dir: string = generatedAudioDir()): GenerationRecord | undefined {
+  return loadGenLog(dir).at(-1);
+}
+
 /** Append one record and prune to the FIFO cap. Returns the full log. */
 export function appendGeneration(
   record: GenerationRecord,
