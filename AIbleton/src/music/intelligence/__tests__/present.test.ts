@@ -10,7 +10,7 @@ import type { MusicalObservation } from "../../reasoning/types.js";
 import type { GoalMusicContext } from "../types.js";
 import { CONTEXT_BUDGET, presentGoalContext } from "../present.js";
 import { projectGoalContext } from "../goal.js";
-import { buildDropIntel, goalOf } from "./fixtures.js";
+import { buildDropIntel, goalOf, repeatIntel } from "./fixtures.js";
 
 test("renders the focused slice: target, sections, contrast, observations, song+arc", () => {
   const ctx = projectGoalContext(buildDropIntel(), goalOf({ target: { section: "Drop" } }));
@@ -120,6 +120,7 @@ function bloatedContext(): GoalMusicContext {
     },
     observations,
     coverage: { sections: 12, analyzedSections: 12 },
+    actions: [], // empty → the actions key is omitted, sizes stay comparable
     unmatched: [],
   };
 }
@@ -145,6 +146,48 @@ test("budget: similarities drop before section rows collapse", () => {
   const sections = out.sections as Record<string, unknown>[];
   assert.ok("bars" in sections[0], "rows collapsed before similarities dropped");
   assert.ok(JSON.stringify(out).length <= 3100);
+});
+
+// ---------------------------------------------------------------------------
+// Creative actions (PR14) — the planner-facing serialization. This is the
+// deterministic half of "the planner sees creative actions": the relay
+// model's choice is NOT tested (provider behavior is not deterministic).
+// ---------------------------------------------------------------------------
+
+test("planner context: the goal's creative action serializes with its target", () => {
+  // The spec's canonical case: "Make Drop 2 feel more developed than Drop 1."
+  const ctx = projectGoalContext(
+    repeatIntel(),
+    goalOf({
+      target: { section: "Drop 2" },
+      objective: "Make Drop 2 feel more developed than Drop 1",
+    }),
+  );
+  const out = presentGoalContext(ctx);
+  const actions = out.actions as Record<string, unknown>[];
+  assert.ok(Array.isArray(actions), "no actions block in the planner context");
+  const variation = actions.find((a) => a.kind === "introduce_variation");
+  assert.ok(variation, "introduce_variation missing from the serialized context");
+  // Target IDs ride along — Drop 2 vs Drop 1, exactly the source
+  // observation's ids (the observation itself may rank out of the
+  // observation cap; the action's provenance is unaffected).
+  const projected = ctx.actions.find((a) => a.kind === "introduce_variation")!;
+  const source = projected.sourceObservations[0];
+  assert.equal(source.kind, "repeated_section_low_variation");
+  assert.equal(variation.sec, source.sectionId);
+  assert.equal(variation.rel, source.relatedSectionId);
+  assert.equal(variation.str, Math.round(projected.strength * 100) / 100);
+  assert.equal(typeof variation.str, "number");
+  assert.equal(variation.src, 1); // one source observation backs it
+  assert.ok(JSON.stringify(out).length <= CONTEXT_BUDGET);
+});
+
+test("planner context: empty action set omits the key (no [] noise)", () => {
+  const ctx = projectGoalContext(buildDropIntel(), goalOf({ target: { section: "Drop" } }));
+  const out = presentGoalContext(ctx);
+  if (ctx.actions.length === 0) {
+    assert.ok(!("actions" in out), "empty actions serialized as noise");
+  }
 });
 
 test("song scope: compact answer with top observations and the unmatched echo", () => {

@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import type { MusicalObservation } from "../../reasoning/types.js";
+import { deriveCreativeActions } from "../../actions/index.js";
 import type { MusicIntelligence } from "../types.js";
 import {
   MAX_CONTEXT_OBSERVATIONS,
@@ -191,6 +192,9 @@ function syntheticIntel(obs: MusicalObservation[]): MusicIntelligence {
       arc: { energyCurve: [undefined], energyCoverage: 0 },
     },
     reasoning: { observations: obs, coverage: { sections: 1, analyzedSections: 0 } },
+    // The real chain: synthetic observations derive their own actions, so
+    // the projection's action filter is exercised, not stubbed.
+    actions: deriveCreativeActions({ observations: obs, coverage: { sections: 1, analyzedSections: 0 } }),
   };
 }
 
@@ -281,6 +285,7 @@ function growthIntel(
       arc: { energyCurve: [0.9, 0.9, 0.9], energyCoverage: 1 },
     },
     reasoning: { observations: [], coverage: { sections: 3, analyzedSections: 3 } },
+    actions: { actions: [], coverage: { sourceObservations: 0, actionableObservations: 0 } },
   };
 }
 
@@ -325,4 +330,42 @@ test("determinism: same inputs → deep-equal projections, twice", () => {
   const intel = buildDropIntel();
   const goal = goalOf({ target: { section: "Drop" } });
   assert.deepEqual(projectGoalContext(intel, goal), projectGoalContext(intel, goal));
+});
+
+// ---------------------------------------------------------------------------
+// Creative actions (PR14): the projection selects from the action layer's
+// own ranked set — song-scope actions ride every scope, id-targeted ones
+// follow the focus.
+// ---------------------------------------------------------------------------
+
+test("actions: a Drop 2 goal sees introduce_variation for the repeat pair", () => {
+  const intel = repeatIntel();
+  // Precondition: the chained reasoning flags the Drop 1↔Drop 2 repeat.
+  const pair = intel.reasoning.observations.find(
+    (o) => o.kind === "repeated_section_low_variation",
+  );
+  assert.ok(pair, "fixture no longer produces the repeat observation");
+
+  const ctx = projectGoalContext(intel, goalOf({ target: { section: "Drop 2" } }));
+  const action = ctx.actions.find((a) => a.kind === "introduce_variation");
+  assert.ok(action, "introduce_variation not projected into the goal context");
+  assert.equal(action.target.sectionId, pair.sectionId);
+  assert.equal(action.target.relatedSectionId, pair.relatedSectionId);
+  // The why-chain survives projection untouched.
+  assert.equal(action.sourceObservations[0], pair);
+});
+
+test("actions: an out-of-scope target filters the pair action away", () => {
+  const ctx = projectGoalContext(repeatIntel(), goalOf({ target: { section: "Verse" } }));
+  assert.deepEqual(
+    ctx.actions.filter((a) => a.kind === "introduce_variation"),
+    [],
+  );
+});
+
+test("actions: song-scope fallback still carries candidates (capped)", () => {
+  const ctx = projectGoalContext(repeatIntel(), goalOf({ target: { section: "Chorus" } }));
+  assert.equal(ctx.scope, "song");
+  assert.ok(ctx.actions.length <= MAX_SONG_OBSERVATIONS);
+  assert.ok(ctx.actions.some((a) => a.kind === "introduce_variation"));
 });
