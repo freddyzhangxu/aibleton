@@ -14,8 +14,22 @@
  */
 
 import { analyzeMusicState } from "../analysis/index.js";
-import type { AudioBands } from "../dsp.js";
+import type { AudioBands, AudioFeatures } from "../dsp.js";
 import type { MusicState } from "../musicstate/types.js";
+
+/**
+ * The latest generation-registry record, attached by the server (not built
+ * here — buildGoalView stays Set-pure). On the baseline view it is the
+ * "previous iteration" gen_improved_vs_prev compares against; on the after
+ * view it is the new artifact. Absent = genlog empty or goal doesn't judge
+ * generations.
+ */
+export interface GoalGenMeasure {
+  id: string;
+  provider: string;
+  features?: AudioFeatures;
+  featuresError?: string;
+}
 
 export interface GoalTrackMeasure {
   name: string;
@@ -57,6 +71,9 @@ export interface GoalView {
   tracks: GoalTrackMeasure[];
   sections: GoalSectionMeasure[];
   songRoles: Set<string>; // roles audible anywhere (muted tracks excluded)
+  /** Latest genlog record — attached by the server when the goal declares
+   * gen_* criteria (goalNeedsGenlog); undefined otherwise. */
+  latestGeneration?: GoalGenMeasure;
 }
 
 export function buildGoalView(state: MusicState): GoalView {

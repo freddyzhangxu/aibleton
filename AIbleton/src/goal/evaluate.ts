@@ -13,8 +13,15 @@
  */
 
 import { OFF_KEY_THRESHOLD, pcName } from "../analysis/interpret.js";
-import type { Criterion, GoalCheck, GoalEvaluation, MusicGoal } from "./types.js";
-import { findSection, type GoalSectionMeasure, type GoalView } from "./view.js";
+import { genMetricValue } from "../genlog/diff.js";
+import type { Criterion, GenCriterionMetric, GoalCheck, GoalEvaluation, MusicGoal } from "./types.js";
+import {
+  findSection,
+  type GoalGenMeasure,
+  type GoalSectionMeasure,
+  type GoalView,
+} from "./view.js";
+import type { AudioBandName } from "../dsp.js";
 
 const fmt = (v: number): string => String(Math.round(v * 100) / 100);
 const EPS = 1e-6;
@@ -188,6 +195,109 @@ function judgeTrackBandGte(track: string, band: string, pct: number, after: Goal
   };
 }
 
+// ---------------------------------------------------------------------------
+// gen_* judges — the generation registry (genlog/) as the measurement surface.
+// Both fail closed: no record, no features, or no NEW generation this turn is
+// a failed check with the reason spelled out, never a silent pass.
+// ---------------------------------------------------------------------------
+
+const NO_GENLOG = "genlog 为空 — 本回合尚未生成音频（generate_audio 成功后才会记录）";
+
+function genValue(
+  g: GoalGenMeasure,
+  metric: GenCriterionMetric,
+  band?: AudioBandName,
+): number | undefined {
+  return g.features ? genMetricValue(g.features, metric, band) : undefined;
+}
+
+function metricLabel(metric: GenCriterionMetric, band?: AudioBandName): string {
+  return metric === "band" ? `${band} 频段能量占比` : metric;
+}
+
+function judgeGenMetricGte(
+  metric: GenCriterionMetric,
+  band: AudioBandName | undefined,
+  value: number,
+  after: GoalView,
+): GoalCheck {
+  const id = metric === "band" ? `gen.band[${band}]` : `gen.${metric}`;
+  const gen = after.latestGeneration;
+  if (!gen) return { id, passed: false, expected: `存在生成记录`, actual: NO_GENLOG };
+  const v = genValue(gen, metric, band);
+  if (v === undefined) {
+    return {
+      id,
+      passed: false,
+      expected: `最新生成（${gen.id}）可分析`,
+      actual: gen.featuresError ? `无法分析: ${gen.featuresError}` : "无音频特征",
+    };
+  }
+  return {
+    id,
+    passed: v >= value,
+    expected: `最新生成（${gen.id}）${metricLabel(metric, band)} ≥ ${fmt(value)}`,
+    actual: fmt(v),
+  };
+}
+
+function judgeGenImprovedVsPrev(
+  metric: GenCriterionMetric,
+  band: AudioBandName | undefined,
+  direction: "up" | "down",
+  minDelta: number,
+  before: GoalView,
+  after: GoalView,
+): GoalCheck {
+  const id = metric === "band" ? `gen.band[${band}].improved` : `gen.${metric}.improved`;
+  const cur = after.latestGeneration;
+  if (!cur) return { id, passed: false, expected: `存在生成记录`, actual: NO_GENLOG };
+  const prev = before.latestGeneration;
+  if (!prev) {
+    return {
+      id,
+      passed: false,
+      expected: `set_goal 时已有上一轮生成记录作基线`,
+      actual: "声明目标时 genlog 为空 — 无可比较的上一迭代",
+    };
+  }
+  if (cur.id === prev.id) {
+    return {
+      id,
+      passed: false,
+      expected: `本回合产生新的生成（区别于基线 ${prev.id}）`,
+      actual: "没有新生成 — 最新记录仍是基线那一条",
+    };
+  }
+  const curV = genValue(cur, metric, band);
+  if (curV === undefined) {
+    return {
+      id,
+      passed: false,
+      expected: `新生成（${cur.id}）可分析`,
+      actual: cur.featuresError ? `无法分析: ${cur.featuresError}` : "无音频特征",
+    };
+  }
+  const prevV = genValue(prev, metric, band);
+  if (prevV === undefined) {
+    return {
+      id,
+      passed: false,
+      expected: `基线生成（${prev.id}）可分析`,
+      actual: prev.featuresError ? `无法分析: ${prev.featuresError}` : "无音频特征",
+    };
+  }
+  const delta = curV - prevV;
+  const improved = direction === "up" ? delta >= minDelta : -delta >= minDelta;
+  const dirLabel = direction === "up" ? "提升" : "降低";
+  return {
+    id,
+    passed: improved,
+    expected: `${metricLabel(metric, band)}较上一轮（${prev.id}）${dirLabel} ≥ ${fmt(minDelta)}`,
+    actual: `${fmt(prevV)} → ${fmt(curV)}（Δ ${fmt(delta)}）`,
+  };
+}
+
 function judge(c: Criterion, before: GoalView, after: GoalView): GoalCheck {
   switch (c.kind) {
     case "section_energy_gt":
@@ -254,6 +364,10 @@ function judge(c: Criterion, before: GoalView, after: GoalView): GoalCheck {
       return judgeTrackCrestGte(c.track, c.db, after);
     case "track_band_gte":
       return judgeTrackBandGte(c.track, c.band, c.pct, after);
+    case "gen_metric_gte":
+      return judgeGenMetricGte(c.metric, c.band, c.value, after);
+    case "gen_improved_vs_prev":
+      return judgeGenImprovedVsPrev(c.metric, c.band, c.direction, c.min_delta, before, after);
   }
 }
 
