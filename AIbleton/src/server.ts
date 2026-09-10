@@ -34,7 +34,15 @@ import {
   writeHomeBinary,
   writeHomeFile,
 } from "./paths.js";
-import { latestGeneration, recordGeneration } from "./genlog/index.js";
+import {
+  diffGenerations,
+  latestGeneration,
+  loadGenLog,
+  recordGeneration,
+  REFINE_DISCIPLINE,
+  suggestForGenGap,
+  type GenGap,
+} from "./genlog/index.js";
 import {
   MoveError,
   downloadSet,
@@ -103,6 +111,7 @@ import {
   type ReferenceSource,
 } from "./music/reference/index.js";
 import {
+  AGENT_MAX_REFINEMENTS,
   AGENT_MAX_RETRIES,
   AGENT_MAX_ROUNDS,
   AGENT_MAX_STEPS,
@@ -324,6 +333,10 @@ type PersistedAudio = {
   selected?: AudioProvider;
   fields: Partial<Record<AudioProvider, { apiKey?: string; baseUrl?: string }>>;
   custom: CustomAudioTemplate;
+  /** PR19: when ON, generate_audio calls inside an active refine loop skip
+   * the per-call confirmation (the user pre-authorized bounded iteration).
+   * Default OFF — every generation is confirmed one by one. */
+  autoRefine?: boolean;
 };
 let audioSettings: PersistedAudio = { fields: {}, custom: {} };
 
@@ -471,6 +484,7 @@ function loadManualConfigs(context: Ctx): void {
           : undefined,
         fields: (a.fields ?? {}) as PersistedAudio["fields"],
         custom: (a.custom ?? {}) as CustomAudioTemplate,
+        ...(a.autoRefine === true ? { autoRefine: true } : {}),
       };
     }
     webSettings.enabled = data.web?.enabled === true;
@@ -3056,6 +3070,9 @@ let pendingGoal: {
   /** User-pinned reference section id (set_goal reference.section). */
   referencePinnedSectionId?: string;
   retries: number;
+  /** Generation refinements spent this turn (PR19) — an independent counter
+   * from retries: a refine regenerates the artifact, it never replans. */
+  refinements: number;
   /** Declared after mutations already happened this turn — relative
    * ("baseline") criteria then compare against a mid-task state. */
   lateBaseline: boolean;
@@ -3258,6 +3275,7 @@ async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Prom
       ? { referencePinnedSectionId: prevGoal.referencePinnedSectionId }
       : {}),
     retries: prevGoal?.retries ?? 0,
+    refinements: prevGoal?.refinements ?? 0,
     lateBaseline: prevGoal?.lateBaseline ?? late,
   };
   // Reference: load/analyze once (process cache), store on the goal — the
@@ -3435,6 +3453,50 @@ function goalRetryMessage(
   return lines.join("\n");
 }
 
+/** Compact diff of the last two registry records — "what the previous
+ * refinement actually changed", so the next prompt edit is attributable. */
+function lastIterationDiffLines(): string[] {
+  const records = loadGenLog();
+  if (records.length < 2) return [];
+  const diff = diffGenerations(records[records.length - 2], records[records.length - 1]);
+  const entries = Object.entries(diff.metrics)
+    .filter(([, e]) => e !== undefined && Math.abs(e.delta) > 1e-9)
+    .sort((a, b) => Math.abs(b[1]!.delta) - Math.abs(a[1]!.delta))
+    .slice(0, 6);
+  if (!entries.length) return [];
+  const fmt = (v: number) => String(Math.round(v * 100) / 100);
+  return [
+    `上一轮迭代变化（${diff.from} → ${diff.to}）：` +
+      entries.map(([m, e]) => `${m} ${fmt(e!.before)}→${fmt(e!.after)}（Δ ${e!.delta > 0 ? "+" : ""}${fmt(e!.delta)}）`).join("，"),
+  ];
+}
+
+/** PR19 refine injection: the failed gen_* checks, deterministic parameter
+ * hints, and the last iteration's diff. The plan is intentionally NOT
+ * cleared — the route was fine, the artifact wasn't. */
+function goalRefineMessage(
+  goal: MusicGoal,
+  ev: GoalEvaluation,
+  genGaps: GenGap[],
+  refinements: number,
+): string {
+  const lines: string[] = [
+    `【生成迭代 / Generation refine】第 ${refinements}/${AGENT_MAX_REFINEMENTS} 次迭代 — 目标「${goal.objective}」的生成产物尚未达标：`,
+  ];
+  const genIssues = [...ev.constraintIssues, ...ev.criteriaIssues].filter((i) => i.startsWith("gen."));
+  if (genIssues.length) lines.push(`未达成：${genIssues.join("；")}`);
+  if (refinements > 1) lines.push(...lastIterationDiffLines());
+  lines.push(`调整建议：${genGaps.map((g) => suggestForGenGap(g)).join("；")}`);
+  lines.push(REFINE_DISCIPLINE);
+  lines.push(
+    `请用调整后的 prompt 再次调用 generate_audio（建议带 importTo 直接上轨）。剩余迭代预算：${AGENT_MAX_REFINEMENTS - refinements} 次。` +
+      (audioSettings.autoRefine === true
+        ? ""
+        : `（autoRefine 未开启，每次生成仍需你确认 — 可在 设置 → 音频生成 里打开自动迭代）`),
+  );
+  return lines.join("\n");
+}
+
 const GOAL_UNMET_NOTE: Record<string, string> = {
   zh: `\n\n⚠️ 目标校验未通过（系统已重试 ${AGENT_MAX_RETRIES} 次）：`,
   en: `\n\n⚠️ Goal check failed (retried ${AGENT_MAX_RETRIES}× by the server): `,
@@ -3527,10 +3589,27 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
       }
     }
     // The loop's exit decision is one pure function (agent/loop.ts) — pass,
-    // retry once, or stop. A retry with no mutation budget left is a stop:
-    // it could only re-analyze and apologize.
+    // refine, retry once, or stop. A retry/refine with no mutation budget
+    // left is a stop: it could only re-analyze and apologize.
     const left = mutationsLeft(executedToolsThisTurn, READ_ONLY_TOOLS);
-    const action = gateAction(ev.met, held.retries, left);
+    // PR19 refine eligibility: a gen_* criterion failed AND there is an
+    // analyzable artifact to improve on. ev.checks aligns index-for-index
+    // with constraints-then-criteria (evaluateGoal's construction), so the
+    // gap direction comes straight from the failed criterion.
+    const genGaps: GenGap[] = [];
+    [...held.goal.constraints, ...held.goal.successCriteria].forEach((c, i) => {
+      if (ev.checks[i]?.passed !== false) return;
+      if (c.kind === "gen_metric_gte") {
+        genGaps.push({ metric: c.metric, ...(c.band ? { band: c.band } : {}), direction: "up" });
+      } else if (c.kind === "gen_improved_vs_prev") {
+        genGaps.push({ metric: c.metric, ...(c.band ? { band: c.band } : {}), direction: c.direction });
+      }
+    });
+    const refine = {
+      available: genGaps.length > 0 && after.latestGeneration?.features !== undefined,
+      used: held.refinements,
+    };
+    const action = gateAction(ev.met, held.retries, left, refine);
     if (action === "pass") {
       pendingGoal = null;
       pendingPlan = null;
@@ -3558,6 +3637,18 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
       return {
         appendNote: goalUnmetNote(ev, language, plan ?? undefined, sectionVer, held.section?.target.name, referenceLines),
       };
+    }
+    if (action === "refine") {
+      // A refine is NOT a retry: the plan executed, the artifact missed — so
+      // the plan and the retry counter stay untouched, and the injection is
+      // the iteration diff + deterministic parameter hints, not a replan
+      // diagnosis.
+      held.refinements++;
+      debugLog(
+        context,
+        `GOAL REFINE (${held.refinements}/${AGENT_MAX_REFINEMENTS}): ${genGaps.map((g) => g.metric).join(", ")}`,
+      );
+      return { inject: goalRefineMessage(held.goal, ev, genGaps, held.refinements) };
     }
     held.retries++;
     // The single retry IS the replan: the old route already missed, so clear
@@ -3610,7 +3701,18 @@ async function callTool(
     debugLog(context, `TOOL ${name} REFUSED: mutation budget ${AGENT_MAX_STEPS} exhausted`);
     return JSON.stringify(refused);
   }
-  if (!READ_ONLY_TOOLS.has(name) && (!yolo || COSTLY_TOOLS.has(name))) {
+  // Costly tools confirm even under YOLO — EXCEPT generate_audio inside an
+  // active refine loop when the user turned autoRefine on: the refinement
+  // budget (AGENT_MAX_REFINEMENTS) is the pre-authorized spend limit, and a
+  // per-call dialog would defeat unattended iteration. Outside a refine —
+  // or with autoRefine off — every generation still asks.
+  const refinePreAuthorized =
+    COSTLY_TOOLS.has(name) &&
+    audioSettings.autoRefine === true &&
+    (pendingGoal?.refinements ?? 0) > 0;
+  const needsConfirm =
+    !READ_ONLY_TOOLS.has(name) && !refinePreAuthorized && (!yolo || COSTLY_TOOLS.has(name));
+  if (needsConfirm) {
     const allowed = await askConfirmation(name, input);
     if (!allowed) {
       const denied = { error: "用户拒绝了该操作 / user denied this action" };
@@ -4547,11 +4649,17 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     }
     if (req.method === "POST" && req.url === "/api/audio-config") {
       readBody((parsed) => {
-        // Three merge-style variants (the UI sends whichever changed):
+        // Four merge-style variants (the UI sends whichever changed):
         //   { selected }                    — last picked audio provider
         //   { provider, config }            — that provider's key/baseUrl ("" deletes)
         //   { custom }                      — custom-template fields ("" deletes)
+        //   { autoRefine }                  — unattended refine-loop generation
         let changed = false;
+        if (typeof parsed.autoRefine === "boolean") {
+          if (parsed.autoRefine) audioSettings.autoRefine = true;
+          else delete audioSettings.autoRefine;
+          changed = true;
+        }
         if (AUDIO_PROVIDERS_ALL.includes(parsed.selected as AudioProvider)) {
           if (audioSettings.selected !== parsed.selected) {
             audioSettings.selected = parsed.selected as AudioProvider;

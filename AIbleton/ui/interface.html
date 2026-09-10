@@ -529,6 +529,15 @@
       <div class="set-view hidden" id="viewAudio">
         <div class="menu-row back" data-goto="viewMain"><span class="chev">‹</span><span data-i18n="audioConfig">音频生成</span></div>
         <div id="audioProviderList"></div>
+        <div class="menu-row">
+          <span data-i18n="audioAutoRefine">自动迭代</span>
+          <span class="val">
+            <label class="yolo">
+              <input type="checkbox" id="autoRefineToggle">
+              <span class="sw"></span>
+            </label>
+          </span>
+        </div>
         <div class="cfg-fields">
           <label><span data-i18n="apiKey">API Key</span><input id="audioCfgKey" type="password" autocomplete="off"></label>
           <label><span id="audioBaseLabel" data-i18n="baseUrl">API 地址</span><input id="audioCfgBase" autocomplete="off" spellcheck="false"></label>
@@ -667,6 +676,7 @@
         apiKey: 'API Key', baseUrl: 'API 地址', model: '模型',
         apiKeyPh: '可选，留空跟随本机 CLI 配置',
         audioCfgHint: '在 {site} 申请 key；生成按次计费',
+        audioAutoRefine: '自动迭代（目标未达标时自动重新生成，最多 3 次）',
         customRequestUrl: 'Request URL',
         customHint: 'POST 该地址；body 模板用 {{prompt}} {{duration}} 占位。响应：bytes=音频流；url/base64/hex=JSON，填字段路径。异步任务填轮询 URL，{taskId} 占位',
         cfgHint: '留空将自动使用本机 CLI 配置与默认值',
@@ -699,6 +709,7 @@
         apiKey: 'API Key', baseUrl: 'Base URL', model: 'Model',
         apiKeyPh: 'Optional — empty uses local CLI config',
         audioCfgHint: 'Get a key at {site} — billed per generation',
+        audioAutoRefine: 'Auto-refine (regenerate up to 3× when the goal misses)',
         customRequestUrl: 'Request URL',
         customHint: 'POSTs the request URL; {{prompt}} {{duration}} in the body template. Response: bytes = raw audio; url/base64/hex = JSON field path. Async: poll URL with {taskId}',
         cfgHint: 'Leave empty to use local CLI config and defaults',
@@ -731,6 +742,7 @@
         apiKey: 'API-Schlüssel', baseUrl: 'API-Adresse', model: 'Modell',
         apiKeyPh: 'Optional – leer = lokale CLI-Konfiguration',
         audioCfgHint: 'Schlüssel auf {site} — Abrechnung pro Generierung',
+        audioAutoRefine: 'Auto-Refine (bis zu 3× neu generieren, wenn das Ziel verfehlt wird)',
         customRequestUrl: 'Request-URL',
         customHint: 'POST an die Request-URL; {{prompt}} {{duration}} im Body-Template. Antwort: bytes = rohes Audio; url/base64/hex = JSON-Feldpfad. Asynchron: Poll-URL mit {taskId}',
         cfgHint: 'Leer lassen = lokale CLI-Konfiguration und Standardwerte',
@@ -763,6 +775,7 @@
         apiKey: 'Clé API', baseUrl: 'Adresse API', model: 'Modèle',
         apiKeyPh: 'Optionnel — vide = config CLI locale',
         audioCfgHint: 'Clé sur {site} — facturation par génération',
+        audioAutoRefine: 'Auto-affinage (régénère jusqu’à 3× si l’objectif est manqué)',
         customRequestUrl: 'URL de requête',
         customHint: "POST vers l'URL ; {{prompt}} {{duration}} dans le template. Réponse : bytes = audio brut ; url/base64/hex = chemin du champ JSON. Asynchrone : URL de polling avec {taskId}",
         cfgHint: 'Laisser vide = config CLI locale et valeurs par défaut',
@@ -795,6 +808,7 @@
         apiKey: 'API キー', baseUrl: 'API アドレス', model: 'モデル',
         apiKeyPh: '省略可 — 空欄ならローカル CLI 設定を使用',
         audioCfgHint: '{site} でキー取得 — 生成ごとに課金',
+        audioAutoRefine: '自動リファイン（目標未達なら最大3回まで再生成）',
         customRequestUrl: 'リクエスト URL',
         customHint: 'リクエスト URL に POST;ボディテンプレートで {{prompt}} {{duration}} を使用。応答: bytes=生音声、url/base64/hex=JSON フィールドパス。非同期: {taskId} 入りポーリング URL',
         cfgHint: '空欄ならローカル CLI 設定とデフォルト値を使用します',
@@ -827,6 +841,7 @@
         apiKey: 'API Key', baseUrl: 'Dirección API', model: 'Modelo',
         apiKeyPh: 'Opcional — vacío = config CLI local',
         audioCfgHint: 'Consigue una clave en {site} — cobro por generación',
+        audioAutoRefine: 'Auto-refinado (regenera hasta 3× si falla el objetivo)',
         customRequestUrl: 'URL de solicitud',
         customHint: 'POST a la URL; {{prompt}} {{duration}} en la plantilla. Respuesta: bytes = audio crudo; url/base64/hex = ruta del campo JSON. Asíncrono: URL de sondeo con {taskId}',
         cfgHint: 'Vacío = config CLI local y valores por defecto',
@@ -859,6 +874,7 @@
         apiKey: 'API Key', baseUrl: 'Indirizzo API', model: 'Modello',
         apiKeyPh: 'Opzionale — vuoto = config CLI locale',
         audioCfgHint: 'Chiave su {site} — addebito per generazione',
+        audioAutoRefine: 'Auto-perfezionamento (rigenera fino a 3× se l’obiettivo fallisce)',
         customRequestUrl: 'URL richiesta',
         customHint: "POST all'URL; {{prompt}} {{duration}} nel template. Risposta: bytes = audio grezzo; url/base64/hex = percorso del campo JSON. Asincrono: URL di polling con {taskId}",
         cfgHint: 'Vuoto = config CLI locale e valori predefiniti',
@@ -1210,6 +1226,31 @@
         audioProviderList.appendChild(row);
       }
     }
+
+    // ---------- Auto-refine toggle (Settings → 音频生成) ----------
+    // 与 webToggle 同一规则：状态以服务端 providers.json 为准（/api/audio-config
+    // 的 autoRefine 字段），localStorage 只作缓存。默认关闭 = 每次生成都确认。
+    const autoRefineToggle = document.getElementById('autoRefineToggle');
+    autoRefineToggle.checked = localStorage.getItem('ai.audio.autoRefine') === '1';
+    autoRefineToggle.addEventListener('change', () => {
+      localStorage.setItem('ai.audio.autoRefine', autoRefineToggle.checked ? '1' : '0');
+      fetch('/api/audio-config', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ autoRefine: autoRefineToggle.checked }),
+      }).catch(() => {});
+    });
+    function loadAutoRefine() {
+      fetch('/api/audio-config').then(r => r.json()).then(s => {
+        if (!s) return;
+        const v = s.autoRefine === true;
+        if (autoRefineToggle.checked !== v) {
+          autoRefineToggle.checked = v;
+          localStorage.setItem('ai.audio.autoRefine', v ? '1' : '0');
+        }
+      }).catch(() => {});
+    }
+    loadAutoRefine();
 
     // ---------- Web search toggle (Settings → 联网搜索) ----------
     // 与音频设置同一规则：开关状态以服务端 providers.json 为准（/api/web-config），
