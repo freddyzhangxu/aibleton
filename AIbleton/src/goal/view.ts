@@ -44,6 +44,15 @@ export interface GoalSectionMeasure {
 export interface GoalView {
   tempo: number;
   keyBest: string | undefined; // analysis.key.best, undefined when undetectable
+  /** Live's declared scale, straight from the snapshot. mode=false means
+   * Scale Mode is OFF: root/name/intervals are then Live's last selection,
+   * not a declared key — every consumer must gate on mode. */
+  liveScale: { mode: boolean; root: number; name: string; intervals: number[] };
+  /** Duration-weighted share of audible material outside the governing scale
+   * (Live scale when mode on, else detected key), from analysis.offKey.
+   * undefined = no usable scale or too little material — UNKNOWABLE, not 0. */
+  offKeyRatio?: number;
+  offKeyScale?: string; // label of the scale judged against (display only)
   trackCount: number;
   tracks: GoalTrackMeasure[];
   sections: GoalSectionMeasure[];
@@ -114,6 +123,8 @@ export function buildGoalView(state: MusicState): GoalView {
   return {
     tempo: state.snapshot.tempo ?? 120,
     keyBest: ma.key.best,
+    liveScale: state.snapshot.liveScale,
+    ...(ma.offKey ? { offKeyRatio: ma.offKey.ratio, offKeyScale: ma.offKey.scaleLabel } : {}),
     trackCount: tracks.length,
     tracks,
     sections,

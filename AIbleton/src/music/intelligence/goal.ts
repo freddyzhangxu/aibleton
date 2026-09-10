@@ -85,8 +85,8 @@ export function collectGoalFocus(goal: MusicGoal): GoalFocus {
       case "track_band_gte":
         push(tracks, c.track);
         break;
-      // Global kinds (tempo_unchanged, key_unchanged, track_count_gte,
-      // no_new_tracks) name nothing — they contribute no focus.
+      // Global kinds (tempo_unchanged, key_unchanged, in_key, off_key_lte,
+      // track_count_gte, no_new_tracks) name nothing — they contribute no focus.
     }
   };
   goal.constraints.forEach(read);
