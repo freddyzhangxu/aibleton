@@ -31,6 +31,7 @@ import type {
   KeyAnalysis,
   MusicAnalysis,
   MusicIssue,
+  OffKeyMeasure,
   SectionAnalysis,
   TrackAudioAnalysis,
   TrackRole,
@@ -48,6 +49,13 @@ const KK_MINOR = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.3
 
 const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
 const MINOR_STEPS = [0, 2, 3, 5, 7, 8, 10];
+
+/** Off-scale duration share above which the OFF_KEY issue fires. Exported:
+ * the goal layer's in_key criterion judges against the same threshold. */
+export const OFF_KEY_THRESHOLD = 0.15;
+
+/** Minimum weighted note duration before an off-key ratio is meaningful. */
+const OFF_KEY_MIN_MATERIAL = 16;
 
 /** Ordered by specificity — first match wins. Exported for select.ts, which
  * reuses the same vocabulary to resolve focus strings to roles. */
@@ -83,7 +91,9 @@ function pitchName(p: number): string {
   return NOTE_NAMES[c % 12] + (Math.floor(c / 12) - 1);
 }
 
-function pcName(pc: number): string {
+/** Exported for the goal layer (evaluate.ts) — Live's scale root displays
+ * through the same table everywhere. */
+export function pcName(pc: number): string {
   return NOTE_NAMES[((pc % 12) + 12) % 12];
 }
 
@@ -200,6 +210,51 @@ function detectKey(hist: number[]): KeyResult {
 
 function scalePitchSet(root: number, intervals: number[]): Set<number> {
   return new Set(intervals.map((i) => (((root + i) % 12) + 12) % 12));
+}
+
+/**
+ * The off-key measurement, extracted so the OFF_KEY issue and the goal
+ * layer's in_key/off_key_lte criteria can never disagree about the number.
+ * Governing scale: Live's declared scale when Scale Mode is on (user-set
+ * ground truth), else the detected major/minor key. Drums and muted content
+ * are excluded. Returns null when no scale is usable or weighted material is
+ * below OFF_KEY_MIN_MATERIAL — the caller treats null as UNKNOWABLE.
+ */
+export function measureOffKey(
+  snap: SongSnapshot,
+  key: KeyResult,
+  perTrack: { track: SnapshotTrack; clipMats: ClipMaterial[] }[],
+): OffKeyMeasure | null {
+  let scaleSet: Set<number> | null = null;
+  let scaleLabel = "";
+  let scaleSource: OffKeyMeasure["scaleSource"] = "detected";
+  if (snap.liveScale.mode && snap.liveScale.intervals.length > 0) {
+    scaleSet = scalePitchSet(snap.liveScale.root, snap.liveScale.intervals);
+    scaleLabel = `Live scale ${pcName(snap.liveScale.root)} ${snap.liveScale.name}`;
+    scaleSource = "live";
+  } else if (key.status === "ok" && key.root !== undefined && key.mode) {
+    scaleSet = scalePitchSet(key.root, key.mode === "major" ? MAJOR_STEPS : MINOR_STEPS);
+    scaleLabel = `detected key ${key.best}`;
+  }
+  if (!scaleSet) return null;
+
+  let inW = 0;
+  let outW = 0;
+  for (const pt of perTrack) {
+    if (pt.track.mute || pt.track.mutedViaSolo) continue;
+    if (classifyDrums(pt.track)) continue;
+    for (const cm of pt.clipMats) {
+      if (cm.clip.muted) continue;
+      for (const n of cm.material) {
+        const w = n.duration * cm.win.repeats;
+        if (scaleSet.has(n.pitch % 12)) inW += w;
+        else outW += w;
+      }
+    }
+  }
+  const total = inW + outW;
+  if (total < OFF_KEY_MIN_MATERIAL) return null;
+  return { ratio: outW / total, scaleLabel, scaleSource };
 }
 
 // ---------------------------------------------------------------------------
@@ -511,6 +566,8 @@ const AUDIO_CAVEAT = "(from clip source files — warp/gain/devices not reflecte
 function detectIssues(ctx: {
   snap: SongSnapshot;
   key: KeyResult;
+  /** Measured once in analyzeMusicState — null = unknowable, never zero. */
+  offKey: OffKeyMeasure | null;
   perTrack: {
     track: SnapshotTrack;
     feats: TrackMeasurements | null;
@@ -591,42 +648,13 @@ function detectIssues(ctx: {
       });
     }
   }
-  // OFF_KEY
-  let scaleSet: Set<number> | null = null;
-  let scaleLabel = "";
-  if (snap.liveScale.mode && snap.liveScale.intervals.length > 0) {
-    scaleSet = scalePitchSet(snap.liveScale.root, snap.liveScale.intervals);
-    scaleLabel = `Live scale ${pcName(snap.liveScale.root)} ${snap.liveScale.name}`;
-  } else if (key.status === "ok" && key.root !== undefined && key.mode) {
-    scaleSet = scalePitchSet(key.root, key.mode === "major" ? MAJOR_STEPS : MINOR_STEPS);
-    scaleLabel = `detected key ${key.best}`;
-  }
-  if (scaleSet) {
-    let inW = 0;
-    let outW = 0;
-    for (const pt of ctx.perTrack) {
-      if (pt.track.mute || pt.track.mutedViaSolo) continue;
-      const drums = classifyDrums(pt.track);
-      if (drums) continue;
-      for (const cm of pt.clipMats) {
-        if (cm.clip.muted) continue;
-        for (const n of cm.material) {
-          const w = n.duration * cm.win.repeats;
-          if (scaleSet.has(n.pitch % 12)) inW += w;
-          else outW += w;
-        }
-      }
-    }
-    const total = inW + outW;
-    if (total >= 16) {
-      const pct = outW / total;
-      if (pct > 0.15) {
-        issues.push({
-          code: "OFF_KEY",
-          message: `${Math.round(pct * 100)}% of note duration is outside ${scaleLabel} — check for wrong notes (or intentional chromaticism)`,
-        });
-      }
-    }
+  // OFF_KEY — the ratio itself is measured once in analyzeMusicState and
+  // rides ctx; the goal layer's in_key criterion reads the same number.
+  if (ctx.offKey && ctx.offKey.ratio > OFF_KEY_THRESHOLD) {
+    issues.push({
+      code: "OFF_KEY",
+      message: `${Math.round(ctx.offKey.ratio * 100)}% of note duration is outside ${ctx.offKey.scaleLabel} — check for wrong notes (or intentional chromaticism)`,
+    });
   }
   if (ctx.totalAudible >= MIN_NOTES_FOR_ISSUES) {
     if (ctx.globalPitchMin >= 48) {
@@ -756,6 +784,10 @@ export function analyzeMusicState(state: MusicState): MusicAnalysis {
   const { hist } = pitchClassHistogram(perTrack);
   const key = detectKey(hist);
 
+  // One measurement, two consumers: the OFF_KEY issue and MusicAnalysis.offKey
+  // (which the goal layer's in_key / off_key_lte criteria judge against).
+  const offKey = measureOffKey(snap, key, perTrack);
+
   const roles = perTrack.map((pt) => inferRole(pt.track, pt.feats, pt.isDrums, barBeats));
 
   // Per-track audio aggregates, straight from state.tracks (NOT perTrack —
@@ -837,6 +869,7 @@ export function analyzeMusicState(state: MusicState): MusicAnalysis {
   const issues = detectIssues({
     snap,
     key,
+    offKey,
     perTrack: perTrack.map((pt, i) => ({
       track: pt.track,
       feats: pt.feats,
@@ -877,6 +910,7 @@ export function analyzeMusicState(state: MusicState): MusicAnalysis {
       isDrums: pt.isDrums,
     })),
     issues,
+    ...(offKey ? { offKey } : {}),
     ...(trackAudio.some((a) => a !== null) ? { trackAudio } : {}),
   };
 }
