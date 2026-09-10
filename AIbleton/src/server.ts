@@ -34,6 +34,7 @@ import {
   writeHomeBinary,
   writeHomeFile,
 } from "./paths.js";
+import { recordGeneration } from "./genlog/index.js";
 import {
   MoveError,
   downloadSet,
@@ -2358,10 +2359,28 @@ async function runTool(
       );
       // Let search_samples find the new file without a restart.
       sampleIndex = null;
+      // Registry bookkeeping (PR17): decodes features for later refine diffs.
+      // Never let it fail the generation itself.
+      let generationId: string | undefined;
+      try {
+        generationId = recordGeneration({
+          file,
+          provider: cfg.provider,
+          prompt,
+          params: {
+            seconds: duration,
+            ...(typeof input.instrumental === "boolean" ? { instrumental: input.instrumental } : {}),
+            ...(typeof input.lyrics === "string" ? { lyrics: input.lyrics } : {}),
+          },
+        }).id;
+      } catch {
+        generationId = undefined;
+      }
       return {
         file,
         provider: AUDIO_PROVIDER_NAMES[cfg.provider],
         duration_seconds: duration,
+        ...(generationId ? { generation_id: generationId } : {}),
         next: "用 import_audio_clip 放上编排(loop/stem)或 load_sample 装进 Simpler(one-shot)",
       };
     }
