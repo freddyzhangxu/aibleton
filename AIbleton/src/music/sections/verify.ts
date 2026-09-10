@@ -335,6 +335,7 @@ export function verifySectionChange(
         metric: c.metric,
         direction: c.direction,
         required: c.required,
+        weight: c.weight,
         status: "unknown",
         ...(c.referenceSectionId !== undefined ? { referenceSectionId: c.referenceSectionId } : {}),
       })),
@@ -387,6 +388,7 @@ export function verifySectionChange(
       metric: c.metric,
       direction: c.direction,
       required: c.required,
+      weight: c.weight,
       ...(b.value !== undefined ? { before: b.value } : {}),
       ...(a.value !== undefined ? { after: a.value } : {}),
       ...(delta !== undefined ? { delta } : {}),
@@ -453,4 +455,52 @@ export function verifySectionChange(
     relationshipChanges,
     ...(confidences.length ? { confidence: Math.min(...confidences) } : {}),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Presentation — the verdict as retry-message lines (the goal gate's
+// self-correction surface). The headline names exactly the JUDGED criteria
+// that did not pass (the verdict's own rule: required criteria when the goal
+// declared any, else the strongest supporting claims) — the retry must know
+// WHICH metric gated, in WHICH section, by HOW MUCH. Non-judged supporting
+// misses ride a second, explicitly subordinate line: evidence, never the
+// complaint. Empty when the judged criteria all passed.
+// ---------------------------------------------------------------------------
+
+export function presentSectionVerification(ver: SectionVerification, sectionName: string): string[] {
+  const r2 = (x: number): number => Math.round(x * 100) / 100;
+  const fmt = (v?: number): string => (v === undefined ? "?" : String(r2(v)));
+  const fmtCrit = (c: SectionCriterionResult): string =>
+    `${c.metric} 期望 ${c.direction}: ${fmt(c.before)}→${fmt(c.after)}` +
+    (c.delta !== undefined ? ` (Δ${c.delta >= 0 ? "+" : ""}${r2(c.delta)})` : "") +
+    (c.status === "unknown" ? " — 数据不足" : "") +
+    (c.referenceSectionId !== undefined ? ` [vs ${c.referenceSectionId}]` : "");
+  const lines: string[] = [];
+  if (!ver.matchedAfter) {
+    lines.push(
+      `段落校验 / Section「${sectionName}」: 修改后无法重新定位目标段落（可能已被删除或编曲结构大变），按整曲标准判断。`,
+    );
+    return lines;
+  }
+  // The verdict's judged set: required criteria when any exist, else the
+  // top-weight supporting claims (mirrors the status rule above).
+  const required = ver.criteria.filter((c) => c.required);
+  const judged = required.length
+    ? required
+    : ver.criteria.filter((c) => c.weight === Math.max(...ver.criteria.map((x) => x.weight), 0));
+  const judgedMissed = judged.filter((c) => c.status !== "passed");
+  if (!judgedMissed.length) return lines;
+  lines.push(
+    `段落校验 / Section「${sectionName}」${ver.status === "failed" ? "未达标" : "无法确认"}：${judgedMissed.map(fmtCrit).join("；")}`,
+  );
+  const judgedKeys = new Set(
+    judged.map((c) => `${c.metric}:${c.direction}:${c.referenceSectionId ?? ""}`),
+  );
+  const supportingMissed = ver.criteria.filter(
+    (c) => c.status !== "passed" && !judgedKeys.has(`${c.metric}:${c.direction}:${c.referenceSectionId ?? ""}`),
+  );
+  if (supportingMissed.length) {
+    lines.push(`支持性指标 / supporting: ${supportingMissed.map(fmtCrit).join("；")}`);
+  }
+  return lines;
 }

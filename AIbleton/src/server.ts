@@ -82,6 +82,7 @@ import {
 import {
   buildSectionPlanningContext,
   presentSectionPlanningContext,
+  presentSectionVerification,
   verifySectionChange,
   type SectionPlanningContext,
   type SectionVerification,
@@ -3110,33 +3111,9 @@ function planDiagnosisLines(report: PlanReport): string[] {
   return lines;
 }
 
-/** PR15 section verdict as retry-message lines: only the criteria that did
- * NOT pass (with before→after numbers), so the retry targets the metric that
- * missed, in the section that missed it. Empty when the verdict passed or
- * had nothing to say. */
-function sectionVerificationLines(ver: SectionVerification, sectionName: string): string[] {
-  const r2 = (x: number) => Math.round(x * 100) / 100;
-  const fmt = (v?: number) => (v === undefined ? "?" : String(r2(v)));
-  const lines: string[] = [];
-  if (!ver.matchedAfter) {
-    lines.push(
-      `段落校验 / Section「${sectionName}」: 修改后无法重新定位目标段落（可能已被删除或编曲结构大变），按整曲标准判断。`,
-    );
-    return lines;
-  }
-  const missed = ver.criteria.filter((c) => c.status !== "passed");
-  if (!missed.length) return lines;
-  const parts = missed.map(
-    (c) =>
-      `${c.metric} 期望 ${c.direction}: ${fmt(c.before)}→${fmt(c.after)}` +
-      (c.delta !== undefined ? ` (Δ${c.delta >= 0 ? "+" : ""}${r2(c.delta)})` : "") +
-      (c.status === "unknown" ? " — 数据不足" : "") +
-      (c.referenceSectionId !== undefined ? ` [vs ${c.referenceSectionId}]` : ""),
-  );
-  lines.push(`段落校验 / Section「${sectionName}」${ver.status === "failed" ? "未达标" : "无法确认"}：${parts.join("；")}`);
-  return lines;
-}
-
+/** PR15 section verdict as retry-message lines lives in the sections layer
+ * (presentSectionVerification) — the retry's self-correction surface is the
+ * layer's own presentation, tested with the layer. */
 function goalRetryMessage(
   goal: MusicGoal,
   ev: GoalEvaluation,
@@ -3153,7 +3130,7 @@ function goalRetryMessage(
   if (ev.constraintIssues.length) lines.push(`约束违反：${ev.constraintIssues.join("；")}`);
   if (ev.criteriaIssues.length) lines.push(`未达成标准：${ev.criteriaIssues.join("；")}`);
   if (plan) lines.push(...planDiagnosisLines(plan));
-  if (sectionVer && sectionName) lines.push(...sectionVerificationLines(sectionVer, sectionName));
+  if (sectionVer && sectionName) lines.push(...presentSectionVerification(sectionVer, sectionName));
   if (replanned) {
     // The loop's single retry IS the replan: the old route already missed, so
     // it is cleared rather than re-run. A fresh focused plan is invited, not
@@ -3182,7 +3159,7 @@ function goalUnmetNote(
   const head = GOAL_UNMET_NOTE[language ?? ""] ?? GOAL_UNMET_NOTE.zh;
   const issues = [...ev.constraintIssues, ...ev.criteriaIssues].join("；");
   const planLines = plan ? planDiagnosisLines(plan) : [];
-  if (sectionVer && sectionName) planLines.push(...sectionVerificationLines(sectionVer, sectionName));
+  if (sectionVer && sectionName) planLines.push(...presentSectionVerification(sectionVer, sectionName));
   const tail =
     (language ?? "").startsWith("zh") || !language
       ? "。以上为系统对 Live Set 的实际检测结果，与上文表述如有出入以检测结果为准。"

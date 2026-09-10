@@ -193,6 +193,10 @@ export interface SectionCriterionResult {
   metric: SectionVerificationMetric;
   direction: SectionVerificationDirection;
   required: boolean;
+  /** The criterion's own weight (goal criteria 1, action-derived = action
+   * strength) — echoed so presentation/retry surfaces can rank without
+   * recomputing the projection. */
+  weight: number;
   before?: number;
   after?: number;
   delta?: number;
