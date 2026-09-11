@@ -86,7 +86,7 @@ import {
 } from "./agent/loop.js";
 import { toSampleEntry, type SampleEntry } from "./samplemeta.js";
 import { activeTools, TOOLS } from "./tools/definitions.js";
-import { toolHooks, toolState, type ArtistMemory } from "./tools/env.js";
+import { toolHooks, toolState, type ArtistMemory } from "./state.js";
 import { runTool } from "./tools/dispatcher.js";
 import { buildSongSnapshot, toBpm, toStrArr } from "./tools/helpers.js";
 

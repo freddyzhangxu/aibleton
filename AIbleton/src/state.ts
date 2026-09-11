@@ -1,6 +1,6 @@
 import type { ExtensionContext } from "@ableton-extensions/sdk";
-import type { AudioGenConfig } from "../audiogen.js";
-import type { SampleEntry } from "../samplemeta.js";
+import type { AudioGenConfig } from "./audiogen.js";
+import type { SampleEntry } from "./samplemeta.js";
 
 export type Ctx = ExtensionContext<"1.0.0">;
 

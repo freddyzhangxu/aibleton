@@ -42,7 +42,7 @@ import {
 } from "../analysis/index.js";
 import { enrichMusicStateWithAudio } from "../audiofiles.js";
 import { buildMusicState } from "../musicstate/builder.js";
-import { toolHooks, toolState, type Ctx } from "./env.js";
+import { toolHooks, toolState, type Ctx } from "../state.js";
 import {
   applySwing,
   buildSongSnapshot,

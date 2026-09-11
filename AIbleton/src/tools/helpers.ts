@@ -12,7 +12,7 @@ import {
   type Track,
 } from "@ableton-extensions/sdk";
 import type { SnapshotClip, SongSnapshot } from "../musicstate/types.js";
-import type { Ctx } from "./env.js";
+import type { Ctx } from "../state.js";
 
 
 // ---------- Tool execution against the Live Set ----------
