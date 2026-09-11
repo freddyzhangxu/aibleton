@@ -3502,6 +3502,22 @@ function goalRefineMessage(
   return lines.join("\n");
 }
 
+/** PR20 finding: the relay can HALLUCINATE a failure narrative (it imitated
+ * the unmet note's exact format with fabricated numbers). On a real pass the
+ * gate previously appended nothing, leaving the model's text as the only
+ * verdict the user saw. The measured pass now always lands as a system line
+ * with the actual numbers, so a fabricated failure is visibly contradicted. */
+function goalMetNote(ev: GoalEvaluation, language?: string): string {
+  const zh = (language ?? "").startsWith("zh") || !language;
+  const head = zh ? "\n\n✅ 目标校验通过（系统实测）：" : "\n\n✅ Goal check passed (server-measured): ";
+  const passed = ev.checks
+    .filter((c) => c.passed)
+    .map((c) => `${c.id}${c.actual ? ` = ${c.actual}` : ""}`)
+    .join("；");
+  const tail = zh ? "。以系统实测为准。" : ". Trust this over any text above.";
+  return `${head}${passed || "—"}${tail}`;
+}
+
 const GOAL_UNMET_NOTE: Record<string, string> = {
   zh: `\n\n⚠️ 目标校验未通过（系统已重试 ${AGENT_MAX_RETRIES} 次）：`,
   en: `\n\n⚠️ Goal check failed (retried ${AGENT_MAX_RETRIES}× by the server): `,
@@ -3627,7 +3643,7 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
           (plan ? ` · plan ${plan.executedCount}/${plan.total} steps` : "") +
           (sectionVer ? ` · section ${sectionVer.status}` : ""),
       );
-      return null;
+      return { appendNote: goalMetNote(ev, language) };
     }
     debugLog(
       context,
