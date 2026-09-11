@@ -1,5 +1,6 @@
 import { CRITERION_KINDS, GOAL_TYPES } from "../goal/types.js";
 import { EFFECT_METRICS } from "../plan/types.js";
+import { toolState } from "./env.js";
 
 // ---------- Claude tool definitions ----------
 
@@ -736,3 +737,10 @@ export const TOOLS = [
     },
   },
 ];
+
+/** Web tools leave the tools list entirely when the toggle is off, so the
+ * model can't call them (and weak relay models can't imitate them). */
+export function activeTools(): typeof TOOLS {
+  if (toolState.webSettings.enabled) return TOOLS;
+  return TOOLS.filter((t) => t.name !== "web_search" && t.name !== "web_fetch");
+}
