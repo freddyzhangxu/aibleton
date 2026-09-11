@@ -23,7 +23,6 @@ import {
   readHomeBinary,
   readHomeFile,
   sampleRoots,
-  storeFallbackPath,
   writeHomeFile,
 } from "./paths.js";
 import {
@@ -86,6 +85,20 @@ import {
 } from "./agent/loop.js";
 import { toSampleEntry, type SampleEntry } from "./samplemeta.js";
 import { loadLocalConfig, PROVIDER_NAMES, updateCodexTokenCache, type LocalConfig, type Provider } from "./config/local.js";
+import {
+  chatStoreDir,
+  createSession,
+  currentSession,
+  deleteSession,
+  finishChat,
+  listSessions,
+  loadStore,
+  saveStore,
+  storeFilePath,
+  switchSession,
+  truncateResult,
+  type ChatSession,
+} from "./chat/session.js";
 import { activeTools, TOOLS } from "./tools/definitions.js";
 import { toolHooks, toolState, type ArtistMemory } from "./state.js";
 import { runTool } from "./tools/dispatcher.js";
@@ -180,9 +193,7 @@ let memoryPath: string | null = null;
 
 function loadArtistMemory(context: Ctx): void {
   // Same directory resolution as loadManualConfigs (storage dir or fallback).
-  const dir = storeFileOverride
-    ? path.dirname(storeFileOverride)
-    : context.environment.storageDirectory || path.dirname(storeFallbackPath());
+  const dir = chatStoreDir(context);
   memoryPath = path.join(dir, "memory.json");
   toolState.artistMemory = {};
   try {
@@ -249,9 +260,7 @@ function mergeAudioRequest(audio: AudioRequestConfig | undefined): AudioRequestC
 
 function loadManualConfigs(context: Ctx): void {
   // Same directory as chats.json (storage dir, or the fallback it picked).
-  const dir = storeFileOverride
-    ? path.dirname(storeFileOverride)
-    : context.environment.storageDirectory || path.dirname(storeFallbackPath());
+  const dir = chatStoreDir(context);
   manualConfigPath = path.join(dir, "providers.json");
   try {
     const raw = readHomeFile(manualConfigPath);
@@ -391,11 +400,6 @@ interface ResolvedConfig {
 
 // ---------- Chat sessions (server-side, persisted) ----------
 
-interface HistoryMessage {
-  role: "user" | "assistant";
-  content: string;
-  actions?: { tool: string; input: unknown; result: unknown }[];
-}
 
 /** Whether a chat task is currently running in the background. */
 let busy = false;
@@ -429,113 +433,6 @@ function debugLog(context: Ctx, line: string) {
   }
 }
 
-interface ChatSession {
-  id: string;
-  title: string;
-  createdAt: number;
-  updatedAt: number;
-  messages: HistoryMessage[];
-}
-
-let sessions: ChatSession[] = [];
-let currentId: string | null = null;
-
-/** Set when the SDK storage dir turns out to be missing/unwritable. */
-let storeFileOverride: string | null = null;
-
-function storeFilePath(context: Ctx): string {
-  if (storeFileOverride) return storeFileOverride;
-  const dir = context.environment.storageDirectory;
-  // The beta may return undefined for storageDirectory — fall back to a
-  // stable per-user location so sessions actually persist.
-  return dir ? path.join(dir, "chats.json") : storeFallbackPath();
-}
-
-function createSession(): ChatSession {
-  const session: ChatSession = {
-    id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-    title: "新对话",
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    messages: [],
-  };
-  sessions.unshift(session);
-  currentId = session.id;
-  return session;
-}
-
-function currentSession(): ChatSession {
-  return sessions.find((s) => s.id === currentId) ?? createSession();
-}
-
-function loadStore(context: Ctx) {
-  const candidates = [...new Set([storeFilePath(context), storeFallbackPath()])];
-  let loadedFrom: string | null = null;
-  for (const file of candidates) {
-    try {
-      const raw = readHomeFile(file);
-      if (!raw) continue;
-      const data = JSON.parse(raw) as {
-        sessions?: ChatSession[];
-        currentId?: string;
-      };
-      if (Array.isArray(data.sessions)) {
-        sessions = data.sessions.filter(
-          (s) => s && typeof s.id === "string" && Array.isArray(s.messages),
-        );
-        currentId = typeof data.currentId === "string" ? data.currentId : (sessions[0]?.id ?? null);
-        loadedFrom = file;
-        break;
-      }
-    } catch {
-      // Try the next candidate.
-    }
-  }
-  // Migrate the previous single-file history, if any.
-  if (sessions.length === 0) {
-    for (const file of candidates) {
-      try {
-        const legacyRaw = readHomeFile(path.join(path.dirname(file), "chat-history.json"));
-        if (!legacyRaw) continue;
-        const legacy = JSON.parse(legacyRaw) as unknown;
-        if (Array.isArray(legacy) && legacy.length) {
-          const session = createSession();
-          session.messages = legacy.filter(
-            (m): m is HistoryMessage =>
-              !!m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string",
-          );
-          const first = session.messages.find((m) => m.role === "user");
-          session.title = first ? first.content.slice(0, 24) : "导入的对话";
-          break;
-        }
-      } catch {
-        // Nothing to migrate here.
-      }
-    }
-  }
-  console.log(`[ai-assistant] 会话存储: ${loadedFrom ?? storeFilePath(context)}`);
-}
-
-function saveStore(context: Ctx) {
-  const file = storeFilePath(context);
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ sessions, currentId }));
-    return;
-  } catch {
-    // Primary location unwritable — fall through to the home fallback, reached
-    // via the same child-process escape as readHomeFile/writeHomeFile.
-  }
-  const fallback = storeFallbackPath();
-  if (file !== fallback) storeFileOverride = fallback;
-  try {
-    mkdirOutsideSandbox(path.dirname(fallback));
-    writeHomeFile(fallback, JSON.stringify({ sessions, currentId }));
-    if (file !== fallback) console.log(`[ai-assistant] 会话存储回退到: ${fallback}`);
-  } catch {
-    // In-memory sessions still work for this run.
-  }
-}
 
 function resolveConfig(req: ChatRequest): ResolvedConfig {
   const provider: Provider =
@@ -601,26 +498,7 @@ function resolveConfig(req: ChatRequest): ResolvedConfig {
 }
 
 /** Shared tail of a completed chat: persist the assistant reply + tool actions. */
-function finishChat(
-  context: Ctx,
-  actions: { tool: string; input: unknown; result: unknown }[],
-  reply: string,
-) {
-  const session = currentSession();
-  session.messages.push({ role: "assistant", content: reply, actions });
-  session.updatedAt = Date.now();
-  saveStore(context);
-  return { reply, actions };
-}
 
-/** Cap a tool-result payload the same way for live calls and history replay. */
-function truncateResult(resultJson: string): string {
-  if (resultJson.length <= 6000) return resultJson;
-  return (
-    resultJson.slice(0, 6000) +
-    `…（结果过大已截断，共 ${resultJson.length} 字符。请用 filter 缩小查询范围）`
-  );
-}
 
 /** Tools that never touch the Set — always allowed, even with YOLO off.
  * web_search/web_fetch are read-only: free, keyless, and they touch nothing
@@ -2464,7 +2342,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     if (req.method === "GET" && req.url === "/api/sessions") {
       send(200, JSON.stringify({
         currentId: currentSession().id,
-        sessions: sessions.map((s) => ({
+        sessions: listSessions().map((s) => ({
           id: s.id,
           title: s.title,
           updatedAt: s.updatedAt,
@@ -2481,12 +2359,11 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     }
     if (req.method === "POST" && req.url === "/api/switch") {
       readBody((parsed) => {
-        const target = sessions.find((s) => s.id === parsed.id);
+        const target = switchSession(String(parsed.id));
         if (!target) {
           send(404, JSON.stringify({ error: "会话不存在" }));
           return;
         }
-        currentId = target.id;
         saveStore(context);
         send(200, JSON.stringify({ messages: target.messages }));
       });
@@ -2494,8 +2371,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     }
     if (req.method === "POST" && req.url === "/api/delete") {
       readBody((parsed) => {
-        sessions = sessions.filter((s) => s.id !== parsed.id);
-        if (currentId === parsed.id) currentId = sessions[0]?.id ?? null;
+        deleteSession(String(parsed.id));
         saveStore(context);
         send(200, JSON.stringify({ messages: currentSession().messages }));
       });
