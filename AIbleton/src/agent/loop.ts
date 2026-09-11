@@ -81,6 +81,21 @@ export interface RefineState {
 }
 
 /**
+ * One refinement = one PAID regeneration. The budget must only burn when a
+ * NEW artifact exists to evaluate: if the model answered a refine injection
+ * with text instead of regenerating, the gate sees the same artifact again —
+ * refining again would spend the counter on nothing. The server records the
+ * generation id each refine was fired against; the next refine is eligible
+ * only for a different (newer) id.
+ */
+export function refineHasNewArtifact(
+  latestGenId: string | undefined,
+  seenGenId: string | undefined,
+): boolean {
+  return latestGenId !== undefined && latestGenId !== seenGenId;
+}
+
+/**
  * What the loop should do at a text-exit, given the goal verdict, how many
  * retries already happened, and how much mutation budget remains.
  *

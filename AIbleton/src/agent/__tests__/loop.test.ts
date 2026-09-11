@@ -12,6 +12,7 @@ import {
   AGENT_MAX_REFINEMENTS,
   AGENT_MAX_RETRIES,
   gateAction,
+  refineHasNewArtifact,
   type RefineState,
 } from "../loop.js";
 
@@ -42,6 +43,19 @@ test("unavailable refine falls back to the single retry, then stop", () => {
   assert.equal(gateAction(false, 0, 5, { available: false, used: 0 }), "retry");
   assert.equal(gateAction(false, 0, 5), "retry"); // no refine state at all
   assert.equal(gateAction(false, AGENT_MAX_RETRIES, 5, refinable(AGENT_MAX_REFINEMENTS)), "stop");
+});
+
+test("refineHasNewArtifact: a refine only burns budget on a NEWER artifact", () => {
+  // First gate of the turn: artifact exists, no refine seen yet → eligible.
+  assert.equal(refineHasNewArtifact("gen-a", undefined), true);
+  // After firing refine against gen-a, a text-only answer shows gen-a again
+  // → NOT eligible (the counter must not burn on nothing).
+  assert.equal(refineHasNewArtifact("gen-a", "gen-a"), false);
+  // The model regenerated → a newer id is eligible again.
+  assert.equal(refineHasNewArtifact("gen-b", "gen-a"), true);
+  // No artifact at all → nothing to refine against.
+  assert.equal(refineHasNewArtifact(undefined, undefined), false);
+  assert.equal(refineHasNewArtifact(undefined, "gen-a"), false);
 });
 
 test("deterministic across the full state space", () => {
