@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@ableton-extensions/sdk";
 import type { AudioGenConfig } from "./audiogen.js";
+import type { LocalConfig, Provider } from "./config/local.js";
 import type { SampleEntry } from "./samplemeta.js";
 
 export type Ctx = ExtensionContext<"1.0.0">;
@@ -67,6 +68,10 @@ export const toolHooks = {
   /** Append a line to ai-debug.log next to chats.json. */
   debugLog: (_context: Ctx, _line: string): void => {
     throw new Error("toolHooks.debugLog not initialized");
+  },
+  /** Settings-UI provider config (providers.json), read by resolveConfig. */
+  getManualConfig: (_provider: Provider): LocalConfig | undefined => {
+    throw new Error("toolHooks.getManualConfig not initialized");
   },
   handleSetGoal: (_context: Ctx, _input: Record<string, unknown>): unknown => {
     throw new Error("toolHooks.handleSetGoal not initialized");
