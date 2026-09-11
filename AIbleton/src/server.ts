@@ -10,7 +10,6 @@ import { Buffer } from "node:buffer";
 import { describeBinaryAttachment } from "./fileparsers.js";
 import { detectProxy, rawPost, readAll } from "./http.js";
 import {
-  AUDIO_PROVIDER_NAMES,
   resolveAudioConfig,
   type AudioProvider,
   type AudioRequestConfig,
@@ -38,9 +37,6 @@ import { analyzeMusicState } from "./analysis/index.js";
 import { pcName } from "./analysis/interpret.js";
 import { enrichMusicStateWithAudio } from "./audiofiles.js";
 import { buildMusicState } from "./musicstate/builder.js";
-import { postconditionsFor } from "./verify/rules.js";
-import { runVerification } from "./verify/verifier.js";
-import type { ProbeSong } from "./verify/types.js";
 import { goalNeedsAudio, goalNeedsGenlog, normalizeGoal, type GoalEvaluation, type MusicGoal } from "./goal/types.js";
 import { buildGoalView, type GoalView } from "./goal/view.js";
 import { evaluateGoal } from "./goal/evaluate.js";
@@ -99,6 +95,14 @@ import {
   truncateResult,
   type ChatSession,
 } from "./chat/session.js";
+import {
+  answerConfirmation,
+  askConfirmation,
+  COSTLY_TOOLS,
+  getPendingConfirm,
+  READ_ONLY_TOOLS,
+  verifyToolResult,
+} from "./chat/gates.js";
 import { activeTools, TOOLS } from "./tools/definitions.js";
 import { toolHooks, toolState, type ArtistMemory } from "./state.js";
 import { runTool } from "./tools/dispatcher.js";
@@ -322,6 +326,7 @@ type Ctx = ExtensionContext<"1.0.0">;
 
 // Wire the late-bound hooks tools/* call back into server-owned state.
 // Function declarations hoist, so this top-level assignment sees them all.
+toolHooks.debugLog = debugLog;
 toolHooks.saveArtistMemory = saveArtistMemory;
 toolHooks.saveManualConfigs = saveManualConfigs;
 toolHooks.invalidateSampleIndex = () => {
@@ -497,119 +502,6 @@ function resolveConfig(req: ChatRequest): ResolvedConfig {
   };
 }
 
-/** Shared tail of a completed chat: persist the assistant reply + tool actions. */
-
-
-/** Tools that never touch the Set — always allowed, even with YOLO off.
- * web_search/web_fetch are read-only: free, keyless, and they touch nothing
- * local. update_memory only rewrites the user's own memory.json — local,
- * free and trivially reversible, so it needs no confirmation either. */
-const READ_ONLY_TOOLS = new Set([
-  "get_song_overview",
-  "analyze_song",
-  "set_goal",
-  "set_plan",
-  "update_memory",
-  "get_device_parameters",
-  "get_clip_notes",
-  "search_samples",
-  "web_search",
-  "web_fetch",
-  "move_status",
-  "move_pair",
-  "move_list_sets",
-  "move_list_files",
-  "move_analyze_set",
-]);
-
-/**
- * Tools that spend real money (API credits). YOLO exempts Set-modifying
- * tools from confirmation, but never these — a billing action always asks.
- */
-const COSTLY_TOOLS = new Set(["generate_audio"]);
-
-/** What a costly tool call will spend, shown in the confirm bar. */
-function costlyDetail(
-  name: string,
-  input: Record<string, unknown>,
-): { provider: string; duration: number } | undefined {
-  if (!COSTLY_TOOLS.has(name)) return undefined;
-  return {
-    provider: toolState.activeAudioConfig ? AUDIO_PROVIDER_NAMES[toolState.activeAudioConfig.provider] : "?",
-    duration: Math.min(190, Math.max(1, Number(input.duration_seconds ?? 8) || 8)),
-  };
-}
-
-/**
- * A tool call waiting for the user's Allow/Deny click in the UI (YOLO off).
- * The UI polls /api/status for it and answers via POST /api/confirm.
- */
-let pendingConfirm: {
-  tool: string;
-  input: unknown;
-  costly?: { provider: string; duration: number };
-  resolve: (allow: boolean) => void;
-} | null = null;
-
-/** Ask the user before a Set-modifying tool call; false = denied or timed out. */
-function askConfirmation(
-  tool: string,
-  input: Record<string, unknown>,
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    // Safety net: a forgotten dialog must not wedge the background task forever.
-    const timer = setTimeout(() => {
-      pendingConfirm = null;
-      resolve(false);
-    }, 300_000);
-    pendingConfirm = {
-      tool,
-      input,
-      costly: costlyDetail(tool, input),
-      resolve: (allow) => {
-        clearTimeout(timer);
-        pendingConfirm = null;
-        resolve(allow);
-      },
-    };
-  });
-}
-
-/** Run one tool call and normalize the result for the provider + UI log. */
-/**
- * Deterministic postcondition verification (verify/). After a mutating tool
- * succeeds, checks derived from the call itself are probed against the live
- * Set. Failure keeps the result fields (what actually happened) but adds an
- * `error` key — weak models react to structural errors far more reliably than
- * to advisory text. Never throws: a verifier bug must not fail a working call.
- */
-async function verifyToolResult(
-  context: Ctx,
-  name: string,
-  input: Record<string, unknown>,
-  result: unknown,
-): Promise<unknown> {
-  if (typeof result !== "object" || result === null || "error" in result) return result;
-  try {
-    const specs = postconditionsFor(name, input, result as Record<string, unknown>);
-    if (!specs.length) return result;
-    // SDK classes carry protected members — the structural ProbeSong view
-    // requires one explicit cast here at the boundary.
-    const v = await runVerification(context.application.song as unknown as ProbeSong, specs);
-    if (v.success) return { ...(result as Record<string, unknown>), verified: true };
-    debugLog(context, `VERIFY FAILED ${name}: ${v.remainingIssues.join("；")}`);
-    return {
-      ...(result as Record<string, unknown>),
-      verified: false,
-      error:
-        `验证失败（操作已执行，未达预期）: ${v.remainingIssues.join("；")}。` +
-        `请勿直接重复该操作（避免重复创建内容），按实际状态修正。`,
-    };
-  } catch (err) {
-    debugLog(context, `VERIFY skipped ${name}: ${err instanceof Error ? err.message : String(err)}`);
-    return result;
-  }
-}
 
 // ---------- Goal/Intent layer (goal/) ----------
 //
@@ -2381,17 +2273,14 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       send(200, JSON.stringify({
         busy,
         error: lastError,
-        pending: pendingConfirm
-          ? { tool: pendingConfirm.tool, input: pendingConfirm.input, costly: pendingConfirm.costly }
-          : null,
+        pending: getPendingConfirm(),
       }));
       return;
     }
     if (req.method === "POST" && req.url === "/api/confirm") {
       readBody((parsed) => {
-        const waiting = pendingConfirm;
-        if (waiting) waiting.resolve(parsed.allow === true);
-        send(waiting ? 200 : 409, JSON.stringify({ ok: Boolean(waiting) }));
+        const answered = answerConfirmation(parsed.allow === true);
+        send(answered ? 200 : 409, JSON.stringify({ ok: answered }));
       });
       return;
     }
@@ -2401,7 +2290,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       if (busy) {
         stopRequested = true;
         toolState.abortCtl?.abort();
-        if (pendingConfirm) pendingConfirm.resolve(false);
+        answerConfirmation(false);
         debugLog(context, "STOP requested");
         send(200, JSON.stringify({ ok: true }));
       } else {
@@ -2492,7 +2381,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             toolState.abortCtl = null;
             toolState.activeLanguage = undefined;
             // Never leave a confirmation dangling past its task's lifetime.
-            if (pendingConfirm) pendingConfirm.resolve(false);
+            answerConfirmation(false);
           }
         })();
       });

@@ -64,6 +64,10 @@ export const toolHooks = {
   buildSampleIndex: (): SampleEntry[] => {
     throw new Error("toolHooks.buildSampleIndex not initialized");
   },
+  /** Append a line to ai-debug.log next to chats.json. */
+  debugLog: (_context: Ctx, _line: string): void => {
+    throw new Error("toolHooks.debugLog not initialized");
+  },
   handleSetGoal: (_context: Ctx, _input: Record<string, unknown>): unknown => {
     throw new Error("toolHooks.handleSetGoal not initialized");
   },

@@ -150,6 +150,7 @@ export function deleteSession(id: string): void {
   if (currentId === id) currentId = sessions[0]?.id ?? null;
 }
 
+/** Shared tail of a completed chat: persist the assistant reply + tool actions. */
 export function finishChat(
   context: Ctx,
   actions: { tool: string; input: unknown; result: unknown }[],
