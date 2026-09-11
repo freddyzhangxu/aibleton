@@ -1147,7 +1147,7 @@ const TOOLS = [
             "Optional: import the generated file straight onto an audio track's arrangement in the same call (one atomic generate→import, no separate import_audio_clip needed). Omit to only save the file.",
           properties: {
             track_index: { type: "number", description: "0-based audio track index" },
-            track_name: TRACK_NAME_DESC,
+            track_name: { type: "string", description: TRACK_NAME_DESC },
             start_beat: { type: "number", description: "Arrangement position (default 0)" },
             duration_beats: { type: "number", description: "Clip length in beats (default: file's natural length)" },
             warped: { type: "boolean", description: "Warp the clip to the Set tempo (default: Live's default)" },

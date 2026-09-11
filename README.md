@@ -95,7 +95,7 @@ The agent can **inspect your Live Set, understand musical context, reason about 
 
 - Generate MIDI and drum patterns
 - Create and edit clips
-- Generate audio with supported providers
+- Generate audio with supported providers and refine it against measurable goals (crest, band energy, brightness) in a bounded auto-refine loop
 - Build and modify arrangements
 - Create sections from natural-language instructions
 - Plan and verify section-specific changes
@@ -199,7 +199,6 @@ AIbleton is continuing toward a deeper agentic music-production workflow:
 
 - **State Diff & Snapshots** — understand and track project changes
 - **Deeper Musical Understanding** — richer relationships, roles and arrangement intent
-- **Audio Feedback Loop** — create → analyze → evaluate → refine
 - **Deeper Ableton Integration** — take advantage of evolving Extensions SDK capabilities
 
 ## Status
