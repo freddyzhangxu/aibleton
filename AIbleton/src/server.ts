@@ -118,6 +118,7 @@ import {
   countMutations,
   gateAction,
   mutationsLeft,
+  refineHasNewArtifact,
   stepBudgetError,
 } from "./agent/loop.js";
 import { moveExtras, moveSongToSnapshot, parseMoveBundle } from "./movebundle.js";
@@ -3073,6 +3074,10 @@ let pendingGoal: {
   /** Generation refinements spent this turn (PR19) — an independent counter
    * from retries: a refine regenerates the artifact, it never replans. */
   refinements: number;
+  /** Generation id the last refine was fired against — a refine only burns
+   * budget when a NEWER artifact shows up at the next gate (a text-only
+   * answer to a refine injection must not spend the counter). */
+  refineSeenGenId?: string;
   /** Declared after mutations already happened this turn — relative
    * ("baseline") criteria then compare against a mid-task state. */
   lateBaseline: boolean;
@@ -3606,7 +3611,10 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
       }
     });
     const refine = {
-      available: genGaps.length > 0 && after.latestGeneration?.features !== undefined,
+      available:
+        genGaps.length > 0 &&
+        after.latestGeneration?.features !== undefined &&
+        refineHasNewArtifact(after.latestGeneration?.id, held.refineSeenGenId),
       used: held.refinements,
     };
     const action = gateAction(ev.met, held.retries, left, refine);
@@ -3644,6 +3652,7 @@ async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult
       // the iteration diff + deterministic parameter hints, not a replan
       // diagnosis.
       held.refinements++;
+      held.refineSeenGenId = after.latestGeneration?.id;
       debugLog(
         context,
         `GOAL REFINE (${held.refinements}/${AGENT_MAX_REFINEMENTS}): ${genGaps.map((g) => g.metric).join(", ")}`,
