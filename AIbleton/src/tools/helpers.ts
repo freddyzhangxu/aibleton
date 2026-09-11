@@ -271,3 +271,16 @@ export function applySwing(notes: NoteDescription[], swingPct: number): NoteDesc
     return n;
   });
 }
+
+/** Normalize an unknown value into a non-empty string array, or undefined. */
+export function toStrArr(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v.map((x) => String(x).trim()).filter(Boolean);
+  return out.length ? out : undefined;
+}
+
+/** Normalize an unknown value into a BPM in Live's valid range, or undefined. */
+export function toBpm(v: unknown): number | undefined {
+  const n = Number(v);
+  return n >= 20 && n <= 999 ? n : undefined;
+}
