@@ -8,7 +8,7 @@ import {
   type NoteDescription,
 } from "@ableton-extensions/sdk";
 import { tileClipNotes } from "../musicstate/builder.js";
-import type { Ctx } from "./env.js";
+import type { Ctx } from "../state.js";
 import { resolveTrack, snapshotClip, toNum, type TrackRef } from "./helpers.js";
 
 // ---------- arrange_song ----------

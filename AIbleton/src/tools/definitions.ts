@@ -1,6 +1,6 @@
 import { CRITERION_KINDS, GOAL_TYPES } from "../goal/types.js";
 import { EFFECT_METRICS } from "../plan/types.js";
-import { toolState } from "./env.js";
+import { toolState } from "../state.js";
 
 // ---------- Claude tool definitions ----------
 
