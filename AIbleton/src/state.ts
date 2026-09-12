@@ -69,6 +69,10 @@ export const toolHooks = {
   debugLog: (_context: Ctx, _line: string): void => {
     throw new Error("toolHooks.debugLog not initialized");
   },
+  /** Settings-UI audio autoRefine toggle, read by the tool gate. */
+  getAudioAutoRefine: (): boolean => {
+    throw new Error("toolHooks.getAudioAutoRefine not initialized");
+  },
   /** Settings-UI provider config (providers.json), read by resolveConfig. */
   getManualConfig: (_provider: Provider): LocalConfig | undefined => {
     throw new Error("toolHooks.getManualConfig not initialized");
