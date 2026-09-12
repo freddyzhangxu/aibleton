@@ -6,7 +6,6 @@ import * as path from "node:path";
 // ReferenceError inside request handlers).
 import { URL } from "node:url";
 import { describeBinaryAttachment } from "./fileparsers.js";
-import { detectProxy, rawPost, readAll } from "./http.js";
 import {
   resolveAudioConfig,
   type AudioProvider,
@@ -22,7 +21,6 @@ import {
   writeHomeFile,
 } from "./paths.js";
 import type { ExtensionContext } from "@ableton-extensions/sdk";
-import { AGENT_MAX_ROUNDS } from "./agent/loop.js";
 import { toSampleEntry, type SampleEntry } from "./samplemeta.js";
 import { loadLocalConfig, PROVIDER_NAMES, type LocalConfig, type Provider } from "./config/local.js";
 import {
@@ -30,28 +28,22 @@ import {
   createSession,
   currentSession,
   deleteSession,
-  finishChat,
   listSessions,
   loadStore,
   saveStore,
   storeFilePath,
   switchSession,
-  truncateResult,
 } from "./chat/session.js";
 import { answerConfirmation, getPendingConfirm } from "./chat/gates.js";
-import { resolveConfig, type Attachment, type ChatRequest, type ResolvedConfig } from "./chat/config.js";
-import { attachImages, goalGate, callTool, historyWithTools, resetTurnState } from "./chat/toolgate.js";
+import { resolveConfig, type Attachment, type ChatRequest } from "./chat/config.js";
+import { resetTurnState } from "./chat/toolgate.js";
 import { chatAnthropic } from "./chat/providers/anthropic.js";
 import { chatOpenAI, ensureCodexAuth } from "./chat/providers/openai.js";
-import { activeTools } from "./tools/definitions.js";
+import { chatCustom } from "./chat/providers/custom.js";
+import { chatGemini } from "./chat/providers/gemini.js";
 import { toolHooks, toolState, type ArtistMemory } from "./state.js";
 import { toBpm, toStrArr } from "./tools/helpers.js";
-import {
-  CUSTOM_INCOMPLETE_HINT,
-  NO_AUTH_HINT,
-  stopNote,
-  systemPromptFor,
-} from "./prompts.js";
+import { NO_AUTH_HINT } from "./prompts.js";
 
 // ---------- Local sample library search ----------
 
@@ -353,272 +345,6 @@ async function chat(context: Ctx, req: ChatRequest) {
   }
   if (cfg.provider === "gemini") return chatGemini(context, cfg, req);
   return chatAnthropic(context, cfg, req);
-}
-
-// ---------- OpenAI-compatible chat/completions (custom endpoint) ----------
-
-interface ChatCompletionsData {
-  choices?: {
-    message?: {
-      content?: string | null;
-      tool_calls?: {
-        id?: string;
-        function?: { name?: string; arguments?: string };
-      }[];
-    };
-  }[];
-  error?: { message?: string };
-}
-
-/**
- * Generic OpenAI-compatible endpoint. Speaks plain /chat/completions (the
- * flavor every third-party relay, OpenRouter and local server implements —
- * unlike /responses, which most of them lack) with no instructions field and
- * no effort mapping, so Grok- or DeepSeek-style backends accept the request
- * verbatim. Same 12-round tool loop as chatOpenAI.
- */
-async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
-  if (!cfg.baseUrl || !cfg.model) {
-    throw new Error(
-      CUSTOM_INCOMPLETE_HINT[req.language ?? ""] ?? CUSTOM_INCOMPLETE_HINT.en);
-  }
-  const messages: unknown[] = [
-    { role: "system", content: systemPromptFor(req.language) },
-    ...historyWithTools(currentSession(), {
-      userText: (text) => ({ role: "user", content: text }),
-      assistantText: (text) => ({ role: "assistant", content: text }),
-      toolRound: (acts, p) =>
-        acts.flatMap((a, i) => [
-          {
-            role: "assistant",
-            content: null,
-            tool_calls: [
-              {
-                id: p + i,
-                type: "function",
-                function: { name: a.tool, arguments: JSON.stringify(a.input ?? {}) },
-              },
-            ],
-          },
-          { role: "tool", tool_call_id: p + i, content: truncateResult(JSON.stringify(a.result)) },
-        ]),
-    }),
-  ];
-  const actions: { tool: string; input: unknown; result: unknown }[] = [];
-  attachImages(messages, req, (last, images) => {
-    last.content = [
-      { type: "text", text: typeof last.content === "string" ? last.content : "" },
-      ...images.map((im) => ({
-        type: "image_url",
-        image_url: { url: `data:${im.mime};base64,${im.data}` },
-      })),
-    ];
-  });
-  const tools = activeTools().map((tool) => ({
-    type: "function",
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.input_schema,
-    },
-  }));
-
-  for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
-    if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-    const requestBody = JSON.stringify({ model: cfg.model, messages, tools });
-    let data: ChatCompletionsData;
-    let status: number;
-    try {
-      const res = await rawPost(new URL(`${cfg.baseUrl}/chat/completions`), {
-        headers: {
-          "content-type": "application/json",
-          ...(cfg.authToken ? { authorization: `Bearer ${cfg.authToken}` } : {}),
-        },
-        body: requestBody,
-        proxy: detectProxy(),
-        signal: toolState.abortCtl?.signal,
-      });
-      status = res.status;
-      data = JSON.parse(await readAll(res.stream)) as ChatCompletionsData;
-    } catch (err) {
-      // Aborted mid-request by /api/stop — keep the partial work, no error.
-      if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-      throw err;
-    }
-    if (status < 200 || status >= 300) {
-      console.error(
-        `[ai-assistant] custom API ${status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
-      );
-      throw new Error(data.error?.message || `自定义端点错误 (${status})`);
-    }
-    const msg = data.choices?.[0]?.message ?? {};
-    const calls = (msg.tool_calls ?? []).filter((c) => c.function?.name);
-    debugLog(context,
-      `ROUND ${round}: content=${(msg.content ?? "").length} chars, tool_calls=${calls.length}`);
-    if (!calls.length) {
-      const reply =
-        (typeof msg.content === "string" ? msg.content : "").trim() || "（无文本回复）";
-      const gate = await goalGate(context, req.language);
-      if (gate && "inject" in gate) {
-        messages.push({ role: "assistant", content: msg.content ?? "" });
-        messages.push({ role: "user", content: gate.inject });
-        continue;
-      }
-      return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
-    }
-    // Echo the model's message (with its tool_calls verbatim), then append results.
-    messages.push({
-      role: "assistant",
-      content: msg.content ?? null,
-      tool_calls: msg.tool_calls,
-    });
-    for (const call of calls) {
-      if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-      let toolInput: Record<string, unknown> = {};
-      try {
-        toolInput = JSON.parse(call.function!.arguments || "{}") as Record<string, unknown>;
-      } catch {
-        // Malformed arguments — run with empty input, the tool error explains.
-      }
-      const resultJson = await callTool(context, actions, call.function!.name!, toolInput, req.yolo !== false);
-      messages.push({ role: "tool", tool_call_id: call.id ?? "", content: resultJson });
-    }
-  }
-  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
-}
-
-// ---------- Gemini generateContent API ----------
-
-/** Gemini wants OpenAPI-style uppercase types (OBJECT/STRING/…) in schemas. */
-function toGeminiSchema(schema: unknown): unknown {
-  if (Array.isArray(schema)) return schema.map(toGeminiSchema);
-  if (schema && typeof schema === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(schema)) {
-      out[k] = k === "type" && typeof v === "string" ? v.toUpperCase() : toGeminiSchema(v);
-    }
-    return out;
-  }
-  return schema;
-}
-
-interface GeminiPart {
-  text?: string;
-  functionCall?: { name?: string; args?: Record<string, unknown> };
-}
-
-async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
-  const contents: unknown[] = historyWithTools(currentSession(), {
-    userText: (text) => ({ role: "user", parts: [{ text }] }),
-    assistantText: (text) => ({ role: "model", parts: [{ text }] }),
-    toolRound: (acts) => [
-      {
-        role: "model",
-        parts: acts.map((a) => ({ functionCall: { name: a.tool, args: (a.input ?? {}) as Record<string, unknown> } })),
-      },
-      {
-        role: "user",
-        parts: acts.map((a) => ({
-          functionResponse: { name: a.tool, response: { result: truncateResult(JSON.stringify(a.result)) } },
-        })),
-      },
-    ],
-  });
-  const actions: { tool: string; input: unknown; result: unknown }[] = [];
-  attachImages(contents, req, (last, images) => {
-    if (!Array.isArray(last.parts)) return;
-    last.parts.push(
-      ...images.map((im) => ({ inlineData: { mimeType: im.mime, data: im.data } })),
-    );
-  });
-  const tools = [
-    {
-      functionDeclarations: activeTools().map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        parameters: toGeminiSchema(tool.input_schema),
-      })),
-    },
-  ];
-
-  // Effort selector (4 levels) → thinking budget. 2.5 Pro can't disable
-  // thinking, so "low" gets the minimum useful budget; empty = dynamic default.
-  const GEMINI_EFFORT: Record<string, number> = {
-    low: 1024,
-    medium: 8192,
-    high: 16384,
-    max: 32768,
-  };
-  const thinkingBudget = GEMINI_EFFORT[cfg.effort ?? ""];
-
-  for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
-    if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-    const requestBody = JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPromptFor(req.language) }] },
-      contents,
-      tools,
-      ...(thinkingBudget ? { generationConfig: { thinkingConfig: { thinkingBudget } } } : {}),
-    });
-    let data: {
-      candidates?: { content?: { parts?: GeminiPart[] } }[];
-      error?: { message?: string };
-    };
-    try {
-      const res = await rawPost(
-        new URL(`${cfg.baseUrl}/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`),
-        {
-          headers: { "content-type": "application/json", "x-goog-api-key": cfg.authToken },
-          body: requestBody,
-          proxy: detectProxy(),
-          signal: toolState.abortCtl?.signal,
-        },
-      );
-      data = JSON.parse(await readAll(res.stream)) as typeof data;
-      if (res.status < 200 || res.status >= 300) {
-        console.error(
-          `[ai-assistant] Gemini API ${res.status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
-        );
-        throw new Error(data.error?.message || `Gemini API 错误 (${res.status})`);
-      }
-    } catch (err) {
-      // Aborted mid-request by /api/stop — keep the partial work, no error.
-      if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-      throw err;
-    }
-
-    const parts = data.candidates?.[0]?.content?.parts ?? [];
-    debugLog(
-      context,
-      `ROUND ${round}: parts=${parts.map((p) => (p.functionCall ? "functionCall" : "text")).join(",")}`,
-    );
-    const fnCalls = parts.filter((p) => p.functionCall?.name);
-    if (!fnCalls.length) {
-      const reply =
-        parts
-          .filter((p) => typeof p.text === "string")
-          .map((p) => p.text!)
-          .join("\n")
-          .trim() || "（无文本回复）";
-      const gate = await goalGate(context, req.language);
-      if (gate && "inject" in gate) {
-        contents.push({ role: "model", parts });
-        contents.push({ role: "user", parts: [{ text: gate.inject }] });
-        continue;
-      }
-      return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
-    }
-
-    contents.push({ role: "model", parts });
-    const responseParts: unknown[] = [];
-    for (const p of fnCalls) {
-      if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-      const name = p.functionCall!.name!;
-      const resultJson = await callTool(context, actions, name, p.functionCall!.args ?? {}, req.yolo !== false);
-      responseParts.push({ functionResponse: { name, response: { result: resultJson } } });
-    }
-    contents.push({ role: "user", parts: responseParts });
-  }
-  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
 }
 
 // ---------- HTTP server ----------
