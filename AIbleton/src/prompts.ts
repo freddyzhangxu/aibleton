@@ -1,4 +1,5 @@
 import { toolState } from "./state.js";
+import { lastUserText, skillPromptFor } from "./skills.js";
 
 export const SYSTEM_PROMPT = `You are an AI music-production assistant living inside Ableton Live 12.
 You can chat about music production and ALSO directly operate the user's Live Set with the provided tools.
@@ -171,6 +172,7 @@ export function systemPromptFor(language?: string): string {
     SYSTEM_PROMPT +
     memoryPrompt() +
     (toolState.webSettings.enabled ? WEB_PROMPT : "") +
+    skillPromptFor(lastUserText()) +
     `\n\nToday's date: ${today}.` +
     `\nThe user's UI language is ${name} — use it as the default reply language unless they write in a different language.`
   );
