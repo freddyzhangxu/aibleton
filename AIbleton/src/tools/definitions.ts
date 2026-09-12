@@ -508,12 +508,17 @@ export const TOOLS = [
   {
     name: "load_drum_kit",
     description:
-      'Load Ableton\'s factory 808 drum kit into a track: builds a Drum Rack with Simpler pads loaded with real 808 samples (from the Drum Essentials pack). Reuses an existing EMPTY Drum Rack on the track if present, otherwise creates one. Pad note map (use these pitches in write_midi_clip): 36=Kick, 37=Rim, 38=Snare, 39=Clap, 41=Tom Low, 42=Hihat Closed, 43=Tom Mid, 45=Tom Hi, 46=Hihat Open, 49=Cymbal, 75=Clave. THIS is the way to make drums audible — prefer it over insert_device for drums.',
+      'Load a factory drum kit into a track: builds a Drum Rack with Simpler pads loaded with real samples (from the Drum Essentials pack). Use it for ANY drum style — pass the style in `kit` ("808", "909", "707", "606", "DMX", …); omit it for the default 808 kit. Reuses an existing EMPTY Drum Rack on the track if present, otherwise creates one. Pad note map (use these pitches in write_midi_clip): 36=Kick, 37=Rim, 38=Snare, 39=Clap, 41=Tom Low, 42=Hihat Closed, 43=Tom Mid, 45=Tom Hi, 46=Hihat Open, 49=Cymbal, 51=Ride; the 808 kit also has 75=Clave. The returned pad list is authoritative — write MIDI only with the notes it contains. THIS is the way to make drums audible — ALWAYS use it for drums, never build drum parts track-by-track with load_sample.',
     input_schema: {
       type: "object",
       properties: {
         track_index: { type: "number" },
         track_name: { type: "string", description: TRACK_NAME_DESC },
+        kit: {
+          type: "string",
+          description:
+            'Drum style keyword, e.g. "808", "909", "707", "606", "DMX". Omit for 808. Unknown keywords are matched against sample file names in the Drum Essentials pack.',
+        },
       },
     },
   },
