@@ -44,6 +44,8 @@ export const toolState = {
    * (same per-request lifetime as activeAudioConfig; busy = one task at a time). */
   activeLanguage: undefined as string | undefined,
   abortCtl: null as AbortController | null,
+  /** Set by /api/stop: the running task aborts its in-flight request and exits. */
+  stopRequested: false,
 };
 
 /**
