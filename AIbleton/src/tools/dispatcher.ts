@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import {
   AudioTrack,
+  Device,
   DrumChain,
   DrumRack,
   MidiClip,
@@ -145,6 +146,35 @@ function resolveKit(root: string, style: string): KitPad[] {
   }
   return pads;
 }
+/** Resolve a fuzzy param ref + raw value (numeric or enum name) and set it. */
+async function applyDeviceParam(
+  device: Device<"1.0.0">,
+  rawParam: string,
+  rawValue: string,
+): Promise<{ parameter: string; value: string | number }> {
+  const param = paramAt(device, /^-?\d+$/.test(rawParam) ? Number(rawParam) : rawParam);
+  let value: number;
+  if (/^-?\d+(\.\d+)?$/.test(rawValue)) {
+    value = Number(rawValue);
+  } else {
+    const q = rawValue.toLowerCase();
+    const items = param.valueItems;
+    let found = items.findIndex((v) => v.name.toLowerCase() === q);
+    if (found < 0) found = items.findIndex((v) => v.name.toLowerCase().includes(q));
+    if (found < 0) {
+      throw new Error(
+        `参数「${param.name}」不接受文本值「${rawValue}」` +
+          (items.length ? `。可选：${items.map((v) => v.name).join(", ")}` : "（该参数为数值型）"),
+      );
+    }
+    value = found;
+  }
+  value = await setParamValue(param, value);
+  const display =
+    param.isQuantized && param.valueItems[value] ? param.valueItems[value].name : value;
+  return { parameter: param.name, value: display };
+}
+
 function requireMovePaired(): void {
   if (!toolState.moveSettings.token) {
     throw new Error("Move 尚未配对 — 先调用 move_pair（不带 code）获取屏幕上的配对码。");
@@ -438,32 +468,37 @@ export async function runTool(
     case "set_device_parameter": {
       const tref = resolveTrack(context, input, "track_index");
       const device = deviceAt(context, tref.index, deviceRefFrom(input));
-      const rawParam = String(input.parameter ?? "").trim();
-      const param = paramAt(device, /^-?\d+$/.test(rawParam) ? Number(rawParam) : rawParam);
-
-      const rawValue = String(input.value ?? "").trim();
-      let value: number;
-      if (/^-?\d+(\.\d+)?$/.test(rawValue)) {
-        value = Number(rawValue);
-      } else {
-        const q = rawValue.toLowerCase();
-        const items = param.valueItems;
-        let found = items.findIndex((v) => v.name.toLowerCase() === q);
-        if (found < 0) found = items.findIndex((v) => v.name.toLowerCase().includes(q));
-        if (found < 0) {
-          throw new Error(
-            `参数「${param.name}」不接受文本值「${rawValue}」` +
-              (items.length ? `。可选：${items.map((v) => v.name).join(", ")}` : "（该参数为数值型）"),
-          );
-        }
-        value = found;
-      }
-      value = await setParamValue(param, value);
-      const display =
-        param.isQuantized && param.valueItems[value]
-          ? param.valueItems[value].name
-          : value;
-      return trackResult(tref, { device: device.name, parameter: param.name, value: display, range: [param.min, param.max] });
+      const applied = await applyDeviceParam(
+        device,
+        String(input.parameter ?? "").trim(),
+        String(input.value ?? "").trim(),
+      );
+      return trackResult(tref, { device: device.name, ...applied });
+    }
+    case "set_device_parameters": {
+      const tref = resolveTrack(context, input, "track_index");
+      const device = deviceAt(context, tref.index, deviceRefFrom(input));
+      const items = (Array.isArray(input.params) ? input.params : []).slice(0, 24);
+      if (!items.length) throw new Error("params 不能为空（[{parameter, value}, …]）");
+      // Independent sets — run them in parallel; per-item failures don't abort the rest.
+      const results = await Promise.all(
+        items.map(async (it) => {
+          const rawParam = String((it as Record<string, unknown>)?.parameter ?? "").trim();
+          const rawValue = String((it as Record<string, unknown>)?.value ?? "").trim();
+          try {
+            return { ok: true as const, ...(await applyDeviceParam(device, rawParam, rawValue)) };
+          } catch (e) {
+            return { ok: false as const, parameter: rawParam || "?", error: (e as Error).message };
+          }
+        }),
+      );
+      const applied = results.filter((r) => r.ok).map(({ ok: _, ...rest }) => rest);
+      const failed = results.filter((r) => !r.ok).map(({ ok: _, ...rest }) => rest);
+      return trackResult(tref, {
+        device: device.name,
+        applied,
+        ...(failed.length ? { failed } : {}),
+      });
     }
     case "set_track_mixer": {
       const ref = resolveTrack(context, input, "track_index");
@@ -492,22 +527,30 @@ export async function runTool(
         throw new Error("缺少采样文件: " + missing.map((m) => m.file).join(", "));
       }
 
-      const build = async () => {
-        let rack = track.devices.find(
-          (d): d is DrumRack<"1.0.0"> => d instanceof DrumRack && d.chains.length === 0,
+      const build = () => {
+        const rackReady = (async () => {
+          let rack = track.devices.find(
+            (d): d is DrumRack<"1.0.0"> => d instanceof DrumRack && d.chains.length === 0,
+          );
+          if (!rack) {
+            rack = (await track.insertDevice("Drum Rack", 0)) as DrumRack<"1.0.0">;
+          }
+          return rack;
+        })();
+        // Pads are independent — build them in parallel (one round of RPCs per
+        // stage instead of 33 sequential awaits). Each chain inserts at index 0;
+        // pad order in the rack is not meaningful (receivingNote decides routing).
+        return rackReady.then((rack) =>
+          Promise.all(
+            kit.map(async (pad) => {
+              const chain = (await rack.insertChain(0)) as DrumChain<"1.0.0">;
+              chain.receivingNote = pad.note;
+              const simpler = (await chain.insertDevice("Simpler", 0)) as Simpler<"1.0.0">;
+              await simpler.replaceSample(path.join(root, pad.file));
+              return `${pad.note}=${pad.name}`;
+            }),
+          ),
         );
-        if (!rack) {
-          rack = (await track.insertDevice("Drum Rack", 0)) as DrumRack<"1.0.0">;
-        }
-        const pads: string[] = [];
-        for (const pad of kit) {
-          const chain = (await rack.insertChain(rack.chains.length)) as DrumChain<"1.0.0">;
-          chain.receivingNote = pad.note;
-          const simpler = (await chain.insertDevice("Simpler", 0)) as Simpler<"1.0.0">;
-          await simpler.replaceSample(path.join(root, pad.file));
-          pads.push(`${pad.note}=${pad.name}`);
-        }
-        return pads;
       };
       const pads = await context.withinTransaction(build);
       return trackResult(ref, { track: track.name, kit: style || "808", pads });
