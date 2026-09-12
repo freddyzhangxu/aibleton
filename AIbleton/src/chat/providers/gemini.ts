@@ -1,3 +1,7 @@
+// The Live extension sandbox does NOT expose Node's usual globals — URL and
+// Buffer must be imported explicitly per module (a bare `new URL()` crashes
+// the process with ReferenceError inside request handlers).
+import { URL } from "node:url";
 import { toolHooks, toolState, type Ctx } from "../../state.js";
 import { AGENT_MAX_ROUNDS } from "../../agent/loop.js";
 import { detectProxy, rawPost, readAll } from "../../http.js";
