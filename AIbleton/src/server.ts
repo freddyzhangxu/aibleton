@@ -36,7 +36,7 @@ import {
 } from "./chat/session.js";
 import { answerConfirmation, getPendingConfirm } from "./chat/gates.js";
 import { resolveConfig, type Attachment, type ChatRequest } from "./chat/config.js";
-import { resetTurnState } from "./chat/toolgate.js";
+import { resetTurnState } from "./agent/runtime.js";
 import { chatAnthropic } from "./chat/providers/anthropic.js";
 import { chatOpenAI, ensureCodexAuth } from "./chat/providers/openai.js";
 import { chatCustom } from "./chat/providers/custom.js";

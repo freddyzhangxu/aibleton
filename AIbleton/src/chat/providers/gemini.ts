@@ -12,7 +12,8 @@ import {
   finishChat,
   truncateResult,
 } from "../session.js";
-import { attachImages, callTool, goalGate, historyWithTools } from "../toolgate.js";
+import { callTool, goalGate } from "../../agent/runtime.js";
+import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 
 // ---------- Gemini generateContent API ----------
