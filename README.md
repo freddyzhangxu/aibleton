@@ -31,14 +31,14 @@
 
 ## Download
 
-**Current version: v0.9.8** (pre-release) — get it from the
+**Current version: v0.9.9** (pre-release) — get it from the
 [**Releases page**](https://github.com/freddyzhangxu/aibleton/releases):
 
 | File | What it is |
 |---|---|
-| [AIbleton-0.9.8.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.8/AIbleton-0.9.8.ablx) | The Live extension — **required**. Drop it onto Live's **Settings → Extensions** page. |
-| [AIbletonBar-0.9.8-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.8/AIbletonBar-0.9.8-macOS.zip) | Optional macOS floating sidebar app. |
-| [AIbletonBar-0.9.8-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.8/AIbletonBar-0.9.8-Windows.zip) | Optional Windows floating sidebar app. |
+| [AIbleton-0.9.9.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.9/AIbleton-0.9.9.ablx) | The Live extension — **required**. Drop it onto Live's **Settings → Extensions** page. |
+| [AIbletonBar-0.9.9-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.9/AIbletonBar-0.9.9-macOS.zip) | Optional macOS floating sidebar app. |
+| [AIbletonBar-0.9.9-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.9/AIbletonBar-0.9.9-Windows.zip) | Optional Windows floating sidebar app. |
 
 No Node.js needed for end users — the extension runs inside Live's own Extension Host.
 
