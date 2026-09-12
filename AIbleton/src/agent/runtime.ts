@@ -12,9 +12,12 @@ function attachLatestGeneration(view: GoalView): void {
   };
 }
 
-// Goal/plan gate + the per-call tool wrapper shared by every provider loop.
-// Owns the per-turn mutation bookkeeping and the declared-goal lifecycle;
-// providers call callTool() per tool_use and goalGate() when the model stops.
+// Agent runtime: the stateful per-turn orchestration shared by every provider
+// loop. Owns the turn bookkeeping (declared goal/plan lifecycle, mutation
+// counters, refinement budget, reference-analysis cache); providers call
+// callTool() per tool_use and goalGate() when the model stops. The pure
+// policy (budgets, gate decisions) lives in ./loop.ts — this file is the
+// mechanism that holds the state those decisions act on.
 import {
   AGENT_MAX_REFINEMENTS,
   AGENT_MAX_RETRIES,
@@ -24,7 +27,7 @@ import {
   refineHasNewArtifact,
   stepBudgetError,
   AGENT_MAX_STEPS,
-} from "../agent/loop.js";
+} from "./loop.js";
 import {
   goalNeedsAudio,
   goalNeedsGenlog,
@@ -83,12 +86,10 @@ import {
   COSTLY_TOOLS,
   READ_ONLY_TOOLS,
   verifyToolResult,
-} from "./gates.js";
+} from "../chat/gates.js";
 import * as fs from "node:fs";
 import { toolHooks, type Ctx } from "../state.js";
-import { truncateResult } from "./session.js";
-import type { Attachment, ChatRequest } from "./config.js";
-import type { ChatSession } from "./session.js";
+import { truncateResult } from "../chat/session.js";
 
 // ---------- Goal/Intent layer (goal/) ----------
 //
@@ -819,54 +820,6 @@ export async function callTool(
   toolHooks.debugLog(context, `TOOL ${name} ${JSON.stringify(input)} -> ${resultJson.slice(0, 400)}`);
   return truncateResult(resultJson);
 }
-
-/**
- * Replay stored messages WITH their tool rounds reconstructed.
- * Weaker models imitate history: if past assistant turns claim "done" with no
- * visible tool calls, the model learns to pretend instead of calling tools.
- * Re-inserting the tool-call/tool-result structure keeps it honest.
- */
-export function historyWithTools(
-  session: ChatSession,
-  format: {
-    userText: (text: string) => unknown;
-    assistantText: (text: string) => unknown;
-    /** Message items replaying one assistant turn's tool calls (id prefix given). */
-    toolRound: (acts: { tool: string; input: unknown; result: unknown }[], idPrefix: string) => unknown[];
-  },
-): unknown[] {
-  const out: unknown[] = [];
-  session.messages.forEach((m, mi) => {
-    if (m.role === "user") {
-      out.push(format.userText(m.content));
-      return;
-    }
-    const acts = m.actions ?? [];
-    if (acts.length) out.push(...format.toolRound(acts, `hist_${mi}_`));
-    out.push(format.assistantText(m.content));
-  });
-  return out;
-}
-
-/**
- * Attached images ride only on the CURRENT user message (the last one after
- * history replay). Older turns keep just their "[图片: name]" text marker —
- * re-sending base64 on every round would bloat each request. The `apply`
- * callback reshapes that last message into the provider's multimodal shape.
- */
-export function attachImages(
-  messages: unknown[],
-  req: ChatRequest,
-  apply: (last: Record<string, unknown>, images: Attachment[]) => void,
-) {
-  const images = (req.attachments ?? []).filter((a) => typeof a.data === "string" && a.data && !a.kind);
-  if (!images.length) return;
-  const last = messages[messages.length - 1] as (Record<string, unknown> & { role?: string }) | undefined;
-  if (!last || last.role !== "user") return;
-  apply(last, images);
-}
-
-/** Codex CLI's public OAuth client id (the same one codex-cli-rs uses). */
 
 /** Reset the per-turn goal/plan/mutation bookkeeping — called by chat() at
  * the start of every user turn so a stale goal never gates a new request. */
