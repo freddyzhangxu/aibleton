@@ -506,6 +506,33 @@ export const TOOLS = [
     },
   },
   {
+    name: "set_device_parameters",
+    description:
+      'Set MULTIPLE parameters of one device in a single call — strongly preferred over repeated set_device_parameter for sound design (one call instead of many). Each item follows the same rules as set_device_parameter: "parameter" is an exact/partial name or numeric index, "value" a number as a string or an enum option name. Sets run in parallel; per-parameter failures are reported without aborting the rest.',
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        device_index: { type: "number" },
+        device_name: { type: "string", description: 'Device name (alternative to device_index)' },
+        params: {
+          type: "array",
+          description: "Up to 24 {parameter, value} pairs",
+          items: {
+            type: "object",
+            properties: {
+              parameter: { type: "string" },
+              value: { type: "string" },
+            },
+            required: ["parameter", "value"],
+          },
+        },
+      },
+      required: ["params"],
+    },
+  },
+  {
     name: "load_drum_kit",
     description:
       'Load a factory drum kit into a track: builds a Drum Rack with Simpler pads loaded with real samples (from the Drum Essentials pack). Use it for ANY drum style — pass the style in `kit` ("808", "909", "707", "606", "DMX", …); omit it for the default 808 kit. Reuses an existing EMPTY Drum Rack on the track if present, otherwise creates one. Pad note map (use these pitches in write_midi_clip): 36=Kick, 37=Rim, 38=Snare, 39=Clap, 41=Tom Low, 42=Hihat Closed, 43=Tom Mid, 45=Tom Hi, 46=Hihat Open, 49=Cymbal, 51=Ride; the 808 kit also has 75=Clave. The returned pad list is authoritative — write MIDI only with the notes it contains. THIS is the way to make drums audible — ALWAYS use it for drums, never build drum parts track-by-track with load_sample.',
