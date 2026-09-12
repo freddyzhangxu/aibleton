@@ -15,6 +15,12 @@
  */
 
 import { AUDIO_BAND_NAMES, type AudioBandName } from "../dsp.js";
+import { GEN_SCALAR_METRICS, type GenScalarMetric } from "../genlog/diff.js";
+
+/** Scalar metric a gen_* criterion judges, or "band" for one band's energy
+ * share (then `band` names which). Values come from the generation registry
+ * (genlog/) — the generated FILE's decoded features, not the Set. */
+export type GenCriterionMetric = GenScalarMetric | "band";
 
 export type GoalType =
   | "create"
@@ -60,6 +66,14 @@ export interface GoalTarget {
  * the duration-weighted off-scale ratio (analysis.offKey); when no scale is
  * usable or material is too thin the check FAILS as "unknowable" — the model
  * is told why and can turn Scale Mode on or explain the blocker.
+ *
+ * The gen kinds (gen_metric_gte, gen_improved_vs_prev) judge the generation
+ * registry (genlog/) instead of the Set: the LATEST record at gate time vs
+ * the latest record captured at goal declaration. gen_metric_gte needs only
+ * the after-side; gen_improved_vs_prev additionally needs a pre-goal record
+ * and a NEW generation during the turn — with neither it fails as unknowable,
+ * never as "improved by 0". Both fail when the record carries no features
+ * (e.g. an undecodable mp3) — unknown is unknown, never zero.
  */
 export type Criterion =
   | { kind: "section_energy_gt"; a: string; b: string }
@@ -73,7 +87,15 @@ export type Criterion =
   | { kind: "no_new_tracks" }
   | { kind: "tracks_untouched"; names: string[] }
   | { kind: "track_crest_gte"; track: string; db: number }
-  | { kind: "track_band_gte"; track: string; band: AudioBandName; pct: number };
+  | { kind: "track_band_gte"; track: string; band: AudioBandName; pct: number }
+  | { kind: "gen_metric_gte"; metric: GenCriterionMetric; band?: AudioBandName; value: number }
+  | {
+      kind: "gen_improved_vs_prev";
+      metric: GenCriterionMetric;
+      band?: AudioBandName;
+      direction: "up" | "down";
+      min_delta: number;
+    };
 
 export const CRITERION_KINDS = [
   "section_energy_gt",
@@ -88,6 +110,8 @@ export const CRITERION_KINDS = [
   "tracks_untouched",
   "track_crest_gte",
   "track_band_gte",
+  "gen_metric_gte",
+  "gen_improved_vs_prev",
 ] as const;
 
 export interface MusicGoal {
@@ -219,6 +243,50 @@ function normCriterion(raw: unknown, warnings: string[]): Criterion | null {
       }
       return { kind, track, band: band as AudioBandName, pct };
     }
+    case "gen_metric_gte":
+    case "gen_improved_vs_prev": {
+      const metric = str(r.metric);
+      const band = str(r.band);
+      if (metric !== "band" && !(GEN_SCALAR_METRICS as readonly string[]).includes(metric)) {
+        warnings.push(
+          `${kind} 的 metric「${metric || "(空)"}」不可用 — 可用: ${GEN_SCALAR_METRICS.join(", ")}, band，已忽略`,
+        );
+        return null;
+      }
+      if (metric === "band" && !(AUDIO_BAND_NAMES as readonly string[]).includes(band)) {
+        warnings.push(
+          `${kind} 的 metric 为 band 时需要 band（${AUDIO_BAND_NAMES.join(", ")}），已忽略`,
+        );
+        return null;
+      }
+      const base = {
+        kind,
+        metric: metric as GenCriterionMetric,
+        ...(metric === "band" ? { band: band as AudioBandName } : {}),
+      };
+      if (kind === "gen_metric_gte") {
+        const value = typeof r.value === "number" && Number.isFinite(r.value) ? r.value : null;
+        if (value === null) {
+          warnings.push(`gen_metric_gte 需要 value（数字阈值），已忽略`);
+          return null;
+        }
+        return { ...base, kind, value };
+      }
+      const direction = str(r.direction);
+      if (direction !== "up" && direction !== "down") {
+        warnings.push(`gen_improved_vs_prev 需要 direction（"up" 或 "down"），已忽略`);
+        return null;
+      }
+      const minDelta =
+        typeof r.min_delta === "number" && Number.isFinite(r.min_delta) && r.min_delta > 0
+          ? r.min_delta
+          : null;
+      if (minDelta === null) {
+        warnings.push(`gen_improved_vs_prev 需要 min_delta（正数，最小改善幅度），已忽略`);
+        return null;
+      }
+      return { ...base, kind, direction, min_delta: minDelta };
+    }
     default:
       warnings.push(`未知 kind「${kind || "(空)"}」已忽略 — 可用: ${CRITERION_KINDS.join(", ")}`);
       return null;
@@ -230,6 +298,16 @@ function normCriterion(raw: unknown, warnings: string[]): Criterion | null {
 export function goalNeedsAudio(goal: MusicGoal): boolean {
   return [...goal.constraints, ...goal.successCriteria].some(
     (c) => c.kind === "track_crest_gte" || c.kind === "track_band_gte",
+  );
+}
+
+/** True when any condition judges the generation registry — the server
+ * attaches the latest genlog record to the baseline/after GoalViews only
+ * then (goalNeedsAudio is about the Set's clips; this is about generated
+ * files, no audio enrichment needed). */
+export function goalNeedsGenlog(goal: MusicGoal): boolean {
+  return [...goal.constraints, ...goal.successCriteria].some(
+    (c) => c.kind === "gen_metric_gte" || c.kind === "gen_improved_vs_prev",
   );
 }
 

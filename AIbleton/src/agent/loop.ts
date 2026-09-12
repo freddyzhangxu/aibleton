@@ -25,6 +25,12 @@
  *   AGENT_MAX_RETRIES — goal-gate replans. Exactly one: diagnose the failed
  *                       gate against the plan, clear the plan, repair, final
  *                       judgement. Never an open-ended loop.
+ *   AGENT_MAX_REFINEMENTS — generation refinements (PR19). Distinct from a
+ *                       retry: the plan EXECUTED fine but the artifact missed
+ *                       the declared bar, so the loop regenerates with
+ *                       adjusted parameters instead of replanning. Only
+ *                       available when a gen_* criterion failed against an
+ *                       analyzable artifact — anything else is a retry/stop.
  *   AGENT_MAX_ROUNDS  — provider-round backstop behind everything (each
  *                       provider's chat loop caps at this many LLM calls).
  *
@@ -34,8 +40,10 @@
  * the loop's text-exit (gate).
  */
 
-/** Provider-round backstop — replaces the literal `12` in each chat loop. */
-export const AGENT_MAX_ROUNDS = 12;
+/** Provider-round backstop — replaces the per-loop literal. Sized for the
+ * refine loop: 12 covers a plain goal-cycle; each refinement adds a
+ * generate (+import) round-trip of ~2 rounds on top. */
+export const AGENT_MAX_ROUNDS = 20;
 
 /**
  * Hard cap on EXECUTED Set-mutating calls per turn. Deliberately small: a
@@ -50,27 +58,63 @@ export const AGENT_MAX_STEPS = 8;
 /** Goal-gate replans per turn. One — see the header. */
 export const AGENT_MAX_RETRIES = 1;
 
+/** Generation refinements per turn (PR19). Each one is a paid API call, so
+ * three is the compromise between convergence and the user's credit card. */
+export const AGENT_MAX_REFINEMENTS = 3;
+
 // ---------------------------------------------------------------------------
 // The exit decision, as one pure function.
 // ---------------------------------------------------------------------------
 
 export type GateAction =
   | "pass" // goal met (or none pending) — let the turn finish
+  | "refine" // regenerate the artifact with adjusted parameters (gen_* goals)
   | "retry" // inject the diagnosis and continue the loop once
   | "stop"; // finish with the measured-outcome note
+
+/** Refine eligibility, computed by the server from the gate evaluation. */
+export interface RefineState {
+  /** A gen_* criterion failed against an analyzable artifact. */
+  available: boolean;
+  /** Refinements already spent this turn. */
+  used: number;
+}
+
+/**
+ * One refinement = one PAID regeneration. The budget must only burn when a
+ * NEW artifact exists to evaluate: if the model answered a refine injection
+ * with text instead of regenerating, the gate sees the same artifact again —
+ * refining again would spend the counter on nothing. The server records the
+ * generation id each refine was fired against; the next refine is eligible
+ * only for a different (newer) id.
+ */
+export function refineHasNewArtifact(
+  latestGenId: string | undefined,
+  seenGenId: string | undefined,
+): boolean {
+  return latestGenId !== undefined && latestGenId !== seenGenId;
+}
 
 /**
  * What the loop should do at a text-exit, given the goal verdict, how many
  * retries already happened, and how much mutation budget remains.
  *
- * The third rule is the one that keeps the loop honest: a retry with no
- * mutation budget left could only re-analyze and apologize — that is a stop
+ * Precedence: a refineable gap refines (the plan executed; the ARTIFACT
+ * missed — replanning the route would not make the snare brighter). Anything
+ * else unmet falls back to the single retry. Both require mutation budget:
+ * a budget-less loop could only re-analyze and apologize — that is a stop
  * with the measured note, not another round.
  */
-export function gateAction(met: boolean, retries: number, mutationsLeft: number): GateAction {
+export function gateAction(
+  met: boolean,
+  retries: number,
+  mutationsLeft: number,
+  refine?: RefineState,
+): GateAction {
   if (met) return "pass";
-  if (retries >= AGENT_MAX_RETRIES) return "stop";
   if (mutationsLeft <= 0) return "stop";
+  if (refine?.available && refine.used < AGENT_MAX_REFINEMENTS) return "refine";
+  if (retries >= AGENT_MAX_RETRIES) return "stop";
   return "retry";
 }
 
