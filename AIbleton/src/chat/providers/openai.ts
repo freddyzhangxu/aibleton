@@ -113,18 +113,34 @@ interface OpenAIResponseData {
  * output:[] in the terminal event — the actual items arrive via
  * response.output_item.done, so they are collected along the way.
  */
-async function readResponsesStream(stream: AsyncIterable<Buffer>): Promise<OpenAIResponseData> {
+async function readResponsesStream(
+  stream: AsyncIterable<Buffer>,
+  log?: (line: string) => void,
+): Promise<OpenAIResponseData> {
+  const t0 = Date.now();
+  let chunks = 0;
+  let bytes = 0;
+  const eventTypes: string[] = [];
   let buf = "";
+  let rawNonSse = "";
   let finalResponse: OpenAIResponseData | null = null;
   let streamError: string | null = null;
   const items: OpenAIOutputItem[] = [];
-  for await (const chunk of stream) {
-    buf += chunk.toString("utf8");
+  try {
+    for await (const chunk of stream) {
+      chunks++;
+      bytes += chunk.length;
+      buf += chunk.toString("utf8");
     let idx: number;
     while ((idx = buf.indexOf("\n")) >= 0) {
       const line = buf.slice(0, idx).trim();
       buf = buf.slice(idx + 1);
-      if (!line.startsWith("data:")) continue;
+      if (!line.startsWith("data:")) {
+        // The backend answers quota/auth failures with a plain JSON error
+        // body instead of an SSE stream — keep it so it can be surfaced.
+        if (line) rawNonSse += line;
+        continue;
+      }
       const payload = line.slice(5).trim();
       if (!payload || payload === "[DONE]") continue;
       let evt: {
@@ -138,6 +154,7 @@ async function readResponsesStream(stream: AsyncIterable<Buffer>): Promise<OpenA
       } catch {
         continue;
       }
+      if (evt.type) eventTypes.push(evt.type);
       if (evt.type === "response.output_item.done" && evt.item) {
         items.push(evt.item);
       } else if (
@@ -150,12 +167,41 @@ async function readResponsesStream(stream: AsyncIterable<Buffer>): Promise<OpenA
         streamError = evt.message ?? "stream error";
       }
     }
+    }
+  } catch (err) {
+    log?.(
+      `SSE stream threw after ${chunks} chunks ${bytes}B in ${Date.now() - t0}ms: ` +
+        `${err instanceof Error ? err.message : String(err)} — events=[${eventTypes.join(",")}]`,
+    );
+    throw err;
   }
+  log?.(
+    `SSE stream ended: ${chunks} chunks ${bytes}B in ${Date.now() - t0}ms, ` +
+      `events=[${eventTypes.join(",")}], items=${items.length}, ` +
+      `final=${finalResponse ? "yes" : "no"}, tail=${JSON.stringify(buf.slice(-300))}`,
+  );
   if (finalResponse) {
     if (!finalResponse.output?.length && items.length) finalResponse.output = items;
     return finalResponse;
   }
   if (streamError) throw new Error(streamError);
+  // A body without a trailing newline never entered the line loop — it is
+  // still sitting in buf (the quota error body arrives exactly like this).
+  const leftover = buf.trim();
+  if (leftover && !leftover.startsWith("data:")) rawNonSse += leftover;
+  // No SSE events at all but a JSON error body arrived (quota, auth, …) —
+  // surface THAT message instead of the generic "stream interrupted".
+  if (!eventTypes.length && rawNonSse) {
+    try {
+      const body = JSON.parse(rawNonSse) as { error?: { type?: string; message?: string } };
+      if (body.error?.message) throw new Error(body.error.message);
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        throw new Error(`OpenAI 返回了非 SSE 响应: ${rawNonSse.slice(0, 300)}`);
+      }
+      throw e;
+    }
+  }
   throw new Error("OpenAI 流式响应中断（未收到 completed 事件）");
 }
 
@@ -227,7 +273,7 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       }
       status = res.status;
       data = cfg.chatgpt
-        ? await readResponsesStream(res.stream)
+        ? await readResponsesStream(res.stream, (line) => toolHooks.debugLog(context, line))
         : (JSON.parse(await readAll(res.stream)) as OpenAIResponseData);
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
