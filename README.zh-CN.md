@@ -5,16 +5,16 @@
 <h1 align="center">AIbleton</h1>
 
 <p align="center">
-  <b>Ableton Live 里的 AI 音乐制作智能体。</b><br>
-  AIbleton 理解你的 Live Set，对你的音乐进行推理，把自然语言的想法变成 Ableton Live 里的真实改动。
+  <b>运行在 Ableton Live 中的 AI 音乐制作 Agent。</b><br>
+  直接在 Live 中创作、理解、分析、编曲、编辑和优化音乐。
 </p>
 
 <p align="center">
-  聊天 · 创作 · 分析 · 推理 · 编曲 · 编辑 · 控制
+  <b>Chat · Create · Analyze · Reason · Arrange · Edit · Control</b>
 </p>
 
 <p align="center">
-  在你的 Live 工作流中直接使用 <b>Codex、Claude、Gemini 或其他兼容 AI 模型</b>。
+  支持 <b>Codex、Claude、Gemini 及其他兼容的 AI 模型</b>，直接融入你的音乐制作流程。
 </p>
 
 <p align="center">
@@ -22,8 +22,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/freddyzhangxu/aibleton/releases"><img src="https://img.shields.io/github/v/release/freddyzhangxu/aibleton?include_prereleases&label=%E7%89%88%E6%9C%AC" alt="版本"></a>
-  <a href="https://github.com/freddyzhangxu/aibleton/releases"><img src="https://img.shields.io/github/downloads/freddyzhangxu/aibleton/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F" alt="下载量"></a>
+  <a href="https://github.com/freddyzhangxu/aibleton/releases"><img src="https://img.shields.io/github/v/release/freddyzhangxu/aibleton?include_prereleases&label=version" alt="Version"></a>
+  <a href="https://github.com/freddyzhangxu/aibleton/releases"><img src="https://img.shields.io/github/downloads/freddyzhangxu/aibleton/total" alt="Downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 </p>
 
@@ -31,156 +31,221 @@
 
 ## 下载
 
-**当前版本：v0.9.8**（预发布）—— 前往
-[**Releases 页面**](https://github.com/freddyzhangxu/aibleton/releases) 下载：
+**当前版本：v0.9.9**（预发布版）
+
+前往 [**Releases**](https://github.com/freddyzhangxu/aibleton/releases) 下载最新版本。
 
 | 文件 | 说明 |
 |---|---|
-| [AIbleton-0.9.8.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.8/AIbleton-0.9.8.ablx) | Live 扩展本体 —— **必装**。拖进 Live 的 **设置 → Extensions** 页面即可。 |
-| [AIbletonBar-0.9.8-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.8/AIbletonBar-0.9.8-macOS.zip) | 可选的 macOS 悬浮侧边栏。 |
-| [AIbletonBar-0.9.8-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.8/AIbletonBar-0.9.8-Windows.zip) | 可选的 Windows 悬浮侧边栏。 |
-
-用户无需安装 Node.js —— 扩展运行在 Live 自带的 Extension Host 中。
+| `AIbleton-0.9.9.ablx` | Live 扩展，**必需**。通过 **Live → 设置 → 扩展** 安装。 |
+| `AIbletonBar-0.9.9-macOS.zip` | 可选的 macOS 浮动侧边栏。 |
+| `AIbletonBar-0.9.9-Windows.zip` | 可选的 Windows 浮动侧边栏。 |
 
 ## 什么是 AIbleton？
 
-大多数 AI 音乐工具只能生成音乐或给你建议。
+大多数 AI 音乐工具可以生成音乐，或者给你提供建议。
 
-**AIbleton 能真正处理你在 Ableton Live 里已经打开的音乐。**
+**AIbleton 是一个运行在 Ableton Live 中的 AI 音乐制作 Agent，可以直接创作、理解、分析、编曲、编辑和优化音乐。**
 
-你可以这样问：
+你可以让它从零开始创作，也可以让它改进已有作品、分析编曲，或者直接修改当前的 Live Set。
 
-> 「这个工程现在是什么状态？」
+例如：
 
-> 「写一条 A 小调的 4 小节 bassline。」
+> “在 A 小调创建一个 4 小节的 Bassline。”
 
-> 「让 bass 别那么满。」
+> “让 Bass 简洁一些，不要这么密集。”
 
-> 「分析一下编排，告诉我还缺什么。」
+> “分析一下这个编曲，告诉我现在还缺什么。”
 
-> 「给合成器加一个 Auto Filter，扫动截止频率。」
+> “给这个 Synth 加一个 Auto Filter，并做一个 Cutoff Sweep。”
 
-智能体可以**检查你的 Live Set、理解音乐上下文、进行推理，并直接在 Live 中执行改动。**
+> “创建一个受经典 909 Groove 启发的鼓组。”
+
+AIbleton 可以读取你的 Live Set，理解音乐上下文，对音乐进行推理，并直接在 Live 中执行操作。
 
 ## 截图
 
-| Live 内置 AI 智能体对话框 | AIbletonBar 悬浮侧边栏 |
+| Live 中的 AI Agent 对话框 | AIbletonBar 浮动侧边栏 |
 |:---:|:---:|
-| ![Ableton Live 中的 AIbleton 对话框](docs/screenshots/aibleton-dialog.png) | ![停靠在 Ableton Live 旁的 AIbletonBar 侧边栏](docs/screenshots/aibletonbar-sidebar.png) |
+| ![AIbleton Live 中的 AI Agent 对话框](docs/screenshots/aibleton-dialog.png) | ![AIbletonBar 侧边栏](docs/screenshots/aibletonbar-sidebar.png) |
 
-| AI 找采样并经 Wi-Fi 推送到 Move | ……随即出现在设备上 |
+| AI 搜索 Samples 并通过 Wi-Fi 发送到 Move | Samples 已传输到设备 |
 |:---:|:---:|
-| ![AIbleton 向 Ableton Move 上传雷鬼鼓采样](docs/screenshots/move-upload-samples.png) | ![move.local 中看到的 Move 上 Reggae Drum 采样文件夹](docs/screenshots/move-samples-webui.png) |
+| ![AIbleton 向 Ableton Move 上传 Samples](docs/screenshots/move-upload-samples.png) | ![Ableton Move 中的 Samples](docs/screenshots/move-samples-webui.png) |
 
 ## 核心能力
 
-### 理解
+### Create — 创作
+
+- 生成 MIDI Clip 和音乐片段
+- 创建鼓组 Groove 和乐器声部
+- 使用支持的 AI Provider 生成音频
+- 加载 Drum Kit 和乐器
+- 将自然语言创意直接转化为音乐内容
+
+### Understand — 理解
 
 - 分析当前 Live Set
-- 查看轨道、Clip、MIDI 与设备
-- 检测调性、轨道角色与音乐统计
-- 分析编排结构
+- 检查 Track、Clip、MIDI、Device 和参数
+- 理解调性、速度、Track 角色和音乐上下文
+- 分析编曲结构和音乐段落
 - 分析音频特征
 
-### 推理
+### Reason — 推理
 
-- 从 Live Set 提取结构化音乐特征
-- 分析轨道与段落之间的关系
-- 比较段落间的对比度与相似度
-- 理解编排走向与音乐角色
-- 产出有证据支撑的音乐观察
-- 使用参考曲目进行音乐对比
+- 从 Live Set 中提取结构化音乐特征
+- 理解 Track 与 Section 之间的关系
+- 分析不同段落之间的对比与相似性
+- 理解音乐角色和编曲发展
+- 给出基于音乐证据的分析
+- 使用 Reference Track 进行音乐比较
 
-### 创作与编曲
+### Arrange — 编曲
 
-- 生成 MIDI 与鼓型
-- 创建与编辑 Clip
-- 用支持的 provider 生成音频
-- 构建与修改编排
-- 用自然语言指令创建段落
-- 规划并验证针对特定段落的改动
+- 创建和修改编曲
+- 处理不同音乐段落
+- 生成和编辑 Clip
+- 根据 Section 上下文进行修改
+- 在执行前规划音乐制作任务
 
-### 编辑与控制
+### Edit & Control — 编辑与控制
 
-- 创建与管理轨道、场景
-- 插入与控制设备
-- 调整混音与设备参数
-- 让 AI 智能体直接控制 Ableton Live
+- 创建和管理 Track、Scene
+- 插入和控制 Device
+- 修改 Mixer 和 Device 参数
+- 批量执行 Sound Design 修改
+- 直接控制 Ableton Live
 
-### 搜索与记忆
+### Refine — 优化
 
-- 搜索本地采样库
-- 联网搜索
-- 维护音乐人记忆（Artist Memory）与风格偏好
+AIbleton 可以利用音频分析形成迭代式音乐制作闭环：
+
+```text
+生成
+ ↓
+导入
+ ↓
+分析
+ ↓
+评估
+ ↓
+优化
+ ↓
+再次分析
+```
+
+生成的音乐可以根据可量化的音乐目标进行评估，并通过多轮迭代不断优化。
+
+### Search & Remember — 搜索与记忆
+
+- 搜索本地 Sample Library
+- 在启用后搜索 Web
+- 记住 Artist 偏好和音乐上下文
+- 重用 Reference 和分析结果
 
 ### Ableton Move
 
 - 分析 Move Set
-- 传输采样
-- 处理 Move MIDI 与工程
-- 把 Move 接入 AI 辅助工作流
+- 传输 Samples
+- 处理 Move MIDI 和 Project
+- 将 Live Samples 上传到 Move
+- 将 Move 融入 AI 音乐制作流程
 
-## 工作原理
+## 工作方式
 
 ```text
 用户意图
     ↓
-AI 智能体
+AI Agent
     ↓
 理解 Live Set
     ↓
-音乐智能（Music Intelligence）
+Music Intelligence
     ├─ 音乐特征
-    ├─ 关系
-    ├─ 推理
-    └─ 规划
+    ├─ 音乐关系
+    ├─ 音乐分析
+    └─ 音乐推理
     ↓
-创作操作
+规划
+    ↓
+Creative Actions
     ↓
 Ableton Live
     ↓
-更新后的工程
+分析与验证
+    ↓
+必要时继续优化
 ```
 
-AIbleton 把 **AI 模型**与 **Live 集成层**分离 —— 你可以自由更换模型，用同一套工具处理你的音乐。
+AIbleton 将 **AI 模型** 与 **音乐制作运行时** 分离，因此可以使用不同的 AI Provider，同时保持一致的 Live 集成和音乐制作工具。
 
-## 音乐智能（Music Intelligence）
+## Music Intelligence — 音乐智能
 
-AIbleton 围绕对 Live Set 音乐状态的结构化理解而构建。
+AIbleton 建立在对 Live Set 音乐状态的结构化理解之上。
 
 ```text
 Live Set
    ↓
-音乐状态
+Music State
    ↓
-音乐特征
+Musical Features
    ↓
-关系
+Relationships
    ↓
-推理
+Reasoning
    ↓
-创作操作
+Creative Actions
    ↓
-智能体
+Agent
    ↓
 Live
 ```
 
-这让 AIbleton 超越简单的指令执行，成为一个能**理解音乐结构、关系、上下文与意图 —— 并据此规划和执行改动**的智能体。
+这意味着 AIbleton 不只是执行单个指令。
+
+它可以在执行操作前后理解和分析：
+
+- 音乐上下文
+- 音乐结构
+- Track 与 Section 之间的关系
+- 用户意图
+- 可量化的音乐结果
+
+从而让 Agent 不只是“执行命令”，而是能够**理解音乐、制定计划、执行操作并验证结果**。
+
+## Agent Runtime
+
+AIbleton 使用 Agent Runtime 协调：
+
+- 自然语言意图
+- 任务规划与执行
+- Tool Calls
+- Goal Tracking
+- 执行结果验证
+- Retry 与 Replanning
+- 音乐分析
+- Audio Feedback
+- 与 AI Provider 无关的模型访问
+
+目标不是简单地生成一个回答，而是：
+
+**完成一个音乐制作任务，并在 Ableton Live 中验证结果。**
 
 ## 安装
 
-### 环境要求
+### 系统要求
 
 - Ableton Live 12.4.5+
-- Ableton Extensions SDK 支持
-- 一个 AI 服务商
+- 支持 Ableton Extensions SDK
+- 一个 AI Provider
 
-从上方 [下载](#下载) 区获取最新的 `.ablx`，然后安装到：
+从 [Releases](https://github.com/freddyzhangxu/aibleton/releases) 下载最新的 `.ablx` 文件，然后在：
 
-**Ableton Live → 设置 → Extensions**
+**Ableton Live → 设置 → 扩展**
 
-AIbleton 还提供可选的 **AIbletonBar** 悬浮界面（macOS / Windows）。
+中安装。
+
+AIbleton 同时提供可选的 **AIbletonBar** 浮动界面，支持 macOS 和 Windows。
 
 ## 开发
 
@@ -191,26 +256,55 @@ npm install
 npm start
 ```
 
-开发与 SDK 配置详见仓库文档。
+开发和 SDK 配置请参阅项目相关文档。
 
-## 路线图
+## Roadmap
 
-AIbleton 正在走向更深层的智能体音乐制作工作流：
+### 1.0 — AI 音乐制作
 
-- **State Diff & Snapshots** —— 理解并追踪工程变化
-- **更深的音乐理解** —— 更丰富的关系、角色与编排意图
-- **音频反馈闭环** —— 创作 → 分析 → 评估 → 改进
-- **更深的 Ableton 集成** —— 跟进 Extensions SDK 的能力演进
+AIbleton 1.0 的目标，是让 AI 音乐制作在 Ableton Live 中变得**可靠、实用并真正可用于生产环境**。
 
-## 当前状态
+1.0 的核心范围包括：
 
-AIbleton 是一个基于 Ableton Extensions SDK 构建的**开源实验项目**。
+- 可靠的 Live Set 理解
+- 音乐推理与任务规划
+- MIDI 和音频创作
+- 编曲与 Section 编辑
+- Sound Design 与 Device 控制
+- 基于 Reference 的音乐分析
+- Audio Feedback 与迭代优化
+- 可靠的 Agent 执行与结果验证
+- 稳定的 Provider-agnostic AI 工作流
+- Production-ready 的 UX 与可靠性
 
-SDK 仍在演进，API 与能力可能发生变化。
+### Beyond 1.0 — 未来方向
 
-> AIbleton 与 Ableton AG 无任何隶属关系，亦未获得其背书。
-> "Ableton" 与 "Live" 是 Ableton AG 的商标。
+未来版本可能进一步扩展：
 
-## 许可证
+- 更深入的实时交互
+- AI 辅助 Live Performance
+- 面向现场演出的智能控制
+- 更高级的实时音乐决策
+- 更深入的硬件与现场演出工作流集成
+
+## 项目状态
+
+AIbleton 是一个基于 Ableton Extensions SDK 构建的开源 **AI 音乐制作 Agent**。
+
+项目正在迈向 1.0，目前重点关注：
+
+- 稳定性
+- Agent Quality
+- Music Intelligence
+- Audio Feedback 与迭代优化
+- Provider 稳定性
+- 产品体验与整体打磨
+
+Ableton Extensions SDK 仍在持续演进，相关 API 和能力可能发生变化。
+
+> AIbleton 与 Ableton AG 无隶属、合作或官方背书关系。  
+> “Ableton” 和 “Live” 是 Ableton AG 的商标。
+
+## License
 
 [MIT](LICENSE)
