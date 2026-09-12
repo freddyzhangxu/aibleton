@@ -6,15 +6,15 @@
 
 <p align="center">
   <b>An AI music production agent inside Ableton Live.</b><br>
-  AIbleton understands your Live Set, reasons about your music, and turns natural-language ideas into real changes inside Ableton Live.
+  Create, understand, analyze, arrange, edit, and refine music directly inside Live.
 </p>
 
 <p align="center">
-  Chat · Create · Analyze · Reason · Arrange · Edit · Control
+  <b>Chat · Create · Analyze · Reason · Arrange · Edit · Control</b>
 </p>
 
 <p align="center">
-  Use <b>Codex, Claude, Gemini, or other compatible AI models</b> directly from your Live workflow.
+  Use <b>Codex, Claude, Gemini, or other compatible AI models</b> directly in your music production workflow.
 </p>
 
 <p align="center">
@@ -31,26 +31,23 @@
 
 ## Download
 
-**Current version: v0.9.9** (pre-release) — get it from the
-[**Releases page**](https://github.com/freddyzhangxu/aibleton/releases):
+**Current version: v0.9.9** (pre-release) — get it from the [**Releases page**](https://github.com/freddyzhangxu/aibleton/releases).
 
 | File | What it is |
 |---|---|
-| [AIbleton-0.9.9.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.9/AIbleton-0.9.9.ablx) | The Live extension — **required**. Drop it onto Live's **Settings → Extensions** page. |
-| [AIbletonBar-0.9.9-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.9/AIbletonBar-0.9.9-macOS.zip) | Optional macOS floating sidebar app. |
-| [AIbletonBar-0.9.9-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.9/AIbletonBar-0.9.9-Windows.zip) | Optional Windows floating sidebar app. |
-
-No Node.js needed for end users — the extension runs inside Live's own Extension Host.
+| `AIbleton-0.9.9.ablx` | The Live extension — **required**. Install it from **Live → Settings → Extensions**. |
+| `AIbletonBar-0.9.9-macOS.zip` | Optional macOS floating sidebar. |
+| `AIbletonBar-0.9.9-Windows.zip` | Optional Windows floating sidebar. |
 
 ## What is AIbleton?
 
 Most AI music tools can generate music or give you advice.
 
-**AIbleton can actually work with the music you already have open in Ableton Live.**
+**AIbleton is an AI music production agent that can create, understand, analyze, arrange, edit, and refine music directly inside Ableton Live.**
 
-Ask things like:
+Ask it to create something new, improve what you already have, analyze your arrangement, or make changes to your Live Set.
 
-> "What is the current state of this project?"
+For example:
 
 > "Create a 4-bar bassline in A minor."
 
@@ -60,7 +57,9 @@ Ask things like:
 
 > "Add an Auto Filter to the synth and sweep the cutoff."
 
-The agent can **inspect your Live Set, understand musical context, reason about it, and perform changes directly in Live.**
+> "Create a drum groove inspired by a classic 909 pattern."
+
+The agent can inspect your Live Set, understand musical context, reason about your music, and perform changes directly in Live.
 
 ## Screenshots
 
@@ -68,57 +67,87 @@ The agent can **inspect your Live Set, understand musical context, reason about 
 |:---:|:---:|
 | ![AIbleton chat dialog inside Ableton Live](docs/screenshots/aibleton-dialog.png) | ![AIbletonBar sidebar docked next to Ableton Live](docs/screenshots/aibletonbar-sidebar.png) |
 
-| AI finds samples and pushes them to Move over Wi-Fi | …and they land on the device |
+| AI finds samples and pushes them to Move over Wi-Fi | Samples on the device |
 |:---:|:---:|
-| ![AIbleton uploading reggae drum samples to Ableton Move](docs/screenshots/move-upload-samples.png) | ![Reggae Drum sample folder on the Move, seen in move.local](docs/screenshots/move-samples-webui.png) |
+| ![AIbleton uploading samples to Ableton Move](docs/screenshots/move-upload-samples.png) | ![Samples on Ableton Move](docs/screenshots/move-samples-webui.png) |
 
 ## Core Capabilities
+
+### Create
+
+- Generate MIDI clips and musical patterns
+- Create drum grooves and instrument parts
+- Generate audio with supported AI providers
+- Load drum kits and instruments
+- Turn natural-language ideas into musical content
 
 ### Understand
 
 - Analyze the current Live Set
-- Inspect tracks, clips, MIDI and devices
-- Detect key, track roles and musical statistics
-- Analyze arrangement structure
+- Inspect tracks, clips, MIDI, devices, and parameters
+- Understand key, tempo, track roles, and musical context
+- Analyze arrangement structure and sections
 - Analyze audio characteristics
 
 ### Reason
 
-- Extract structured musical features from the Live Set
-- Analyze relationships between tracks and sections
+- Extract structured musical features
+- Understand relationships between tracks and sections
 - Compare section contrast and similarity
-- Understand arrangement arcs and musical roles
+- Analyze musical roles and arrangement arcs
 - Produce evidence-backed musical observations
 - Use reference tracks for musical comparison
 
-### Create & Arrange
+### Arrange
 
-- Generate MIDI and drum patterns
-- Create and edit clips
-- Generate audio with supported providers and refine it against measurable goals (crest, band energy, brightness) in a bounded auto-refine loop
-- Build and modify arrangements
-- Create sections from natural-language instructions
-- Plan and verify section-specific changes
+- Create and modify arrangements
+- Work with musical sections
+- Generate and edit clips
+- Make section-aware changes
+- Plan changes before executing them
 
 ### Edit & Control
 
 - Create and manage tracks and scenes
 - Insert and control devices
 - Change mixer and device parameters
-- Control Ableton Live directly from the AI agent
+- Make batch sound-design changes
+- Control Ableton Live directly from the agent
+
+### Refine
+
+AIbleton can use audio analysis as part of an iterative production loop:
+
+```text
+Generate
+   ↓
+Import
+   ↓
+Analyze
+   ↓
+Evaluate
+   ↓
+Refine
+   ↓
+Analyze again
+```
+
+This allows generated music to be evaluated against measurable goals and refined through multiple iterations.
 
 ### Search & Remember
 
 - Search local sample libraries
-- Search the web
-- Maintain Artist Memory and musical preferences
+- Search the web when enabled
+- Remember artist preferences and musical context
+- Reuse reference and analysis information
 
 ### Ableton Move
 
 - Analyze Move Sets
 - Transfer samples
 - Work with Move MIDI and projects
-- Connect Move to the AI-assisted workflow
+- Upload Live samples to Move
+- Connect Move to the AI-powered production workflow
 
 ## How It Works
 
@@ -132,17 +161,21 @@ Understand Live Set
 Music Intelligence
     ├─ Musical Features
     ├─ Relationships
-    ├─ Reasoning
-    └─ Planning
+    ├─ Analysis
+    └─ Reasoning
+    ↓
+Plan
     ↓
 Creative Actions
     ↓
 Ableton Live
     ↓
-Updated Project
+Analyze & Verify
+    ↓
+Refine when needed
 ```
 
-AIbleton separates the **AI model** from the **Live integration layer**, allowing you to choose different models while using the same tools to work with your music.
+AIbleton separates the **AI model** from the **music-production runtime**, allowing different AI providers to work with the same Live integration and production tools.
 
 ## Music Intelligence
 
@@ -166,7 +199,25 @@ Agent
 Live
 ```
 
-This moves AIbleton beyond simple command execution toward an agent that can **understand musical structure, relationships, context, and intent — then use that understanding to plan and perform changes.**
+This allows the agent to work with more than individual commands.
+
+It can reason about **musical context, structure, relationships, intent, and measurable results** before and after making changes.
+
+## Agent Runtime
+
+AIbleton uses an agent runtime to coordinate:
+
+- Natural-language intent
+- Planning and execution
+- Tool calls
+- Goal tracking
+- Verification
+- Retry and replanning
+- Musical analysis
+- Audio feedback
+- Provider-independent model access
+
+The goal is not simply to generate a response, but to **complete a music-production task and verify the result inside Ableton Live.**
 
 ## Installation
 
@@ -176,7 +227,7 @@ This moves AIbleton beyond simple command execution toward an agent that can **u
 - Ableton Extensions SDK support
 - An AI provider
 
-Download the latest `.ablx` from the [Download](#download) section above and install it from:
+Download the latest `.ablx` from the [Releases page](https://github.com/freddyzhangxu/aibleton/releases) and install it from:
 
 **Ableton Live → Settings → Extensions**
 
@@ -195,17 +246,47 @@ See the repository documentation for development and SDK setup.
 
 ## Roadmap
 
-AIbleton is continuing toward a deeper agentic music-production workflow:
+### 1.0 — AI Music Production
 
-- **State Diff & Snapshots** — understand and track project changes
-- **Deeper Musical Understanding** — richer relationships, roles and arrangement intent
-- **Deeper Ableton Integration** — take advantage of evolving Extensions SDK capabilities
+AIbleton 1.0 focuses on making AI-powered music production reliable and practical inside Ableton Live.
+
+The 1.0 scope includes:
+
+- Reliable Live Set understanding
+- Musical reasoning and planning
+- MIDI and audio creation
+- Arrangement and section editing
+- Sound design and device control
+- Reference-aware musical analysis
+- Audio feedback and iterative refinement
+- Reliable agent execution and verification
+- Stable provider-agnostic AI workflow
+- Production-ready UX and reliability
+
+### Beyond 1.0
+
+Future development may expand AIbleton into:
+
+- Deeper real-time interaction
+- AI-assisted Live Performance
+- Performance-oriented control
+- More advanced real-time musical decision making
+- Deeper integration with hardware and live-performance workflows
 
 ## Status
 
-AIbleton is an **open-source experimental project** built on the Ableton Extensions SDK.
+AIbleton is an open-source **AI music production agent** built on the Ableton Extensions SDK.
 
-The SDK is evolving, and APIs and capabilities may change.
+The project is approaching its 1.0 release, with current development focused on:
+
+- Reliability
+- Agent quality
+- Music intelligence
+- Audio feedback and refinement
+- Provider stability
+- Product polish
+
+The Ableton Extensions SDK is evolving, and APIs and capabilities may change.
 
 > AIbleton is not affiliated with or endorsed by Ableton AG.
 > "Ableton" and "Live" are trademarks of Ableton AG.
