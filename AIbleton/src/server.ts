@@ -1,12 +1,10 @@
 import * as http from "node:http";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
-// The Live extension sandbox does NOT expose Node's usual globals — URL and
-// Buffer must be imported explicitly (a bare `new URL()` crashes the process
-// with ReferenceError inside request handlers).
+// The Live extension sandbox does NOT expose Node's usual globals — URL must
+// be imported explicitly (a bare `new URL()` crashes the process with
+// ReferenceError inside request handlers).
 import { URL } from "node:url";
-import { Buffer } from "node:buffer";
 import { describeBinaryAttachment } from "./fileparsers.js";
 import { detectProxy, rawPost, readAll } from "./http.js";
 import {
@@ -26,7 +24,7 @@ import {
 import type { ExtensionContext } from "@ableton-extensions/sdk";
 import { AGENT_MAX_ROUNDS } from "./agent/loop.js";
 import { toSampleEntry, type SampleEntry } from "./samplemeta.js";
-import { loadLocalConfig, PROVIDER_NAMES, updateCodexTokenCache, type LocalConfig, type Provider } from "./config/local.js";
+import { loadLocalConfig, PROVIDER_NAMES, type LocalConfig, type Provider } from "./config/local.js";
 import {
   chatStoreDir,
   createSession,
@@ -44,6 +42,7 @@ import { answerConfirmation, getPendingConfirm } from "./chat/gates.js";
 import { resolveConfig, type Attachment, type ChatRequest, type ResolvedConfig } from "./chat/config.js";
 import { attachImages, goalGate, callTool, historyWithTools, resetTurnState } from "./chat/toolgate.js";
 import { chatAnthropic } from "./chat/providers/anthropic.js";
+import { chatOpenAI, ensureCodexAuth } from "./chat/providers/openai.js";
 import { activeTools } from "./tools/definitions.js";
 import { toolHooks, toolState, type ArtistMemory } from "./state.js";
 import { toBpm, toStrArr } from "./tools/helpers.js";
@@ -268,6 +267,14 @@ type Ctx = ExtensionContext<"1.0.0">;
 toolHooks.debugLog = debugLog;
 toolHooks.getAudioAutoRefine = () => audioSettings.autoRefine === true;
 toolHooks.getManualConfig = (provider) => manualConfigs[provider];
+toolHooks.updateManualCodexToken = (accessToken, refreshToken) => {
+  const manual = manualConfigs.codex;
+  if (manual?.refreshToken) {
+    manual.authToken = accessToken;
+    if (refreshToken) manual.refreshToken = refreshToken;
+    saveManualConfigs();
+  }
+};
 toolHooks.saveArtistMemory = saveArtistMemory;
 toolHooks.saveManualConfigs = saveManualConfigs;
 toolHooks.invalidateSampleIndex = () => {
@@ -328,80 +335,6 @@ function debugLog(context: Ctx, line: string) {
 
 
 
-const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
-
-function jwtExp(token: string): number | null {
-  try {
-    const payload = token.split(".")[1];
-    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { exp?: number };
-    return typeof parsed.exp === "number" ? parsed.exp : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Refresh an expired ChatGPT-account Codex token and persist it back to auth.json. */
-async function refreshCodexToken(cfg: ResolvedConfig): Promise<void> {
-  const fail = new Error("Codex 登录已过期，请运行 codex login 重新登录 / Codex login expired — run `codex login` again");
-  if (!cfg.refreshToken) throw fail;
-  const res = await rawPost(new URL("https://auth.openai.com/oauth/token"), {
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      client_id: CODEX_CLIENT_ID,
-      grant_type: "refresh_token",
-      refresh_token: cfg.refreshToken,
-    }),
-    proxy: detectProxy(),
-  }).catch(() => null);
-  const data =
-    res && res.status >= 200 && res.status < 300
-      ? (JSON.parse(await readAll(res.stream)) as { access_token?: string; refresh_token?: string; id_token?: string })
-      : null;
-  if (!data?.access_token) throw fail;
-  cfg.authToken = data.access_token;
-  if (data.refresh_token) cfg.refreshToken = data.refresh_token;
-  // Update the manual store too: providers.json lives in the always-writable
-  // storage dir, so refreshed tokens survive even if the write-back to
-  // ~/.codex fails (installed sandbox without the child-process fallback).
-  const manual = manualConfigs.codex;
-  if (manual?.refreshToken) {
-    manual.authToken = data.access_token;
-    if (data.refresh_token) manual.refreshToken = data.refresh_token;
-    saveManualConfigs();
-  }
-  // Persist back, mirroring what codex CLI does (best effort — writeHomeFile
-  // routes around the installed sandbox's fs-write restriction via tee).
-  try {
-    const file = path.join(os.homedir(), ".codex", "auth.json");
-    const raw = readHomeFile(file);
-    if (!raw) throw new Error("auth.json unreadable");
-    const cur = JSON.parse(raw) as {
-      tokens?: Record<string, unknown>;
-      last_refresh?: string;
-    };
-    cur.tokens = {
-      ...(cur.tokens ?? {}),
-      access_token: data.access_token,
-      ...(data.refresh_token ? { refresh_token: data.refresh_token } : {}),
-      ...(data.id_token ? { id_token: data.id_token } : {}),
-    };
-    cur.last_refresh = new Date().toISOString();
-    writeHomeFile(file, JSON.stringify(cur, null, 2));
-    updateCodexTokenCache(data.access_token, data.refresh_token);
-  } catch {
-    // The in-memory token still works for this run.
-  }
-}
-
-/** Proactively refresh a ChatGPT-account Codex token when it is about to expire. */
-async function ensureCodexAuth(cfg: ResolvedConfig): Promise<void> {
-  if (!cfg.chatgpt) return;
-  const exp = cfg.authToken ? jwtExp(cfg.authToken) : null;
-  if (exp && exp - Date.now() / 1000 > 120) return; // still valid
-  if (exp) await refreshCodexToken(cfg); // expired — refresh before the call
-  // No readable exp (opaque token): proceed; a 401 triggers the refresh retry.
-}
-
 async function chat(context: Ctx, req: ChatRequest) {
   // A new user turn: any goal from the previous turn has already been judged
   // (or abandoned) — never let a stale goal gate an unrelated request.
@@ -420,198 +353,6 @@ async function chat(context: Ctx, req: ChatRequest) {
   }
   if (cfg.provider === "gemini") return chatGemini(context, cfg, req);
   return chatAnthropic(context, cfg, req);
-}
-
-// ---------- OpenAI Responses API (Codex) ----------
-
-interface OpenAIOutputItem {
-  type: string;
-  name?: string;
-  arguments?: string;
-  call_id?: string;
-  content?: { type: string; text?: string }[];
-}
-
-interface OpenAIResponseData {
-  output?: OpenAIOutputItem[];
-  error?: { message?: string };
-  status?: string;
-}
-
-/**
- * The chatgpt.com Codex backend only answers with server-sent events.
- * Consume the stream and return the terminal response object
- * (response.completed / response.failed). Note: this backend sends
- * output:[] in the terminal event — the actual items arrive via
- * response.output_item.done, so they are collected along the way.
- */
-async function readResponsesStream(stream: AsyncIterable<Buffer>): Promise<OpenAIResponseData> {
-  let buf = "";
-  let finalResponse: OpenAIResponseData | null = null;
-  let streamError: string | null = null;
-  const items: OpenAIOutputItem[] = [];
-  for await (const chunk of stream) {
-    buf += chunk.toString("utf8");
-    let idx: number;
-    while ((idx = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, idx).trim();
-      buf = buf.slice(idx + 1);
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === "[DONE]") continue;
-      let evt: {
-        type?: string;
-        response?: OpenAIResponseData;
-        item?: OpenAIOutputItem;
-        message?: string;
-      };
-      try {
-        evt = JSON.parse(payload) as typeof evt;
-      } catch {
-        continue;
-      }
-      if (evt.type === "response.output_item.done" && evt.item) {
-        items.push(evt.item);
-      } else if (
-        evt.type === "response.completed" ||
-        evt.type === "response.incomplete" ||
-        evt.type === "response.failed"
-      ) {
-        finalResponse = evt.response ?? null;
-      } else if (evt.type === "error") {
-        streamError = evt.message ?? "stream error";
-      }
-    }
-  }
-  if (finalResponse) {
-    if (!finalResponse.output?.length && items.length) finalResponse.output = items;
-    return finalResponse;
-  }
-  if (streamError) throw new Error(streamError);
-  throw new Error("OpenAI 流式响应中断（未收到 completed 事件）");
-}
-
-async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
-  const input: unknown[] = historyWithTools(currentSession(), {
-    userText: (text) => ({ role: "user", content: [{ type: "input_text", text }] }),
-    assistantText: (text) => ({ role: "assistant", content: [{ type: "output_text", text }] }),
-    toolRound: (acts, p) =>
-      acts.flatMap((a, i) => [
-        { type: "function_call", call_id: p + i, name: a.tool, arguments: JSON.stringify(a.input ?? {}) },
-        { type: "function_call_output", call_id: p + i, output: truncateResult(JSON.stringify(a.result)) },
-      ]),
-  });
-  const actions: { tool: string; input: unknown; result: unknown }[] = [];
-  attachImages(input, req, (last, images) => {
-    if (!Array.isArray(last.content)) return;
-    last.content.push(
-      ...images.map((im) => ({
-        type: "input_image",
-        image_url: `data:${im.mime};base64,${im.data}`,
-      })),
-    );
-  });
-  const tools = activeTools().map((tool) => ({
-    type: "function",
-    name: tool.name,
-    description: tool.description,
-    parameters: tool.input_schema,
-  }));
-
-  for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
-    if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-    const requestBody = JSON.stringify({
-      model: cfg.model,
-      instructions: systemPromptFor(req.language),
-      input,
-      tools,
-      store: false,
-      // The ChatGPT backend requires SSE streaming; api.openai.com takes plain JSON.
-      ...(cfg.chatgpt ? { stream: true } : {}),
-      ...(cfg.reasoningEffort ? { reasoning: { effort: cfg.reasoningEffort } } : {}),
-    });
-    const proxy = detectProxy();
-    const doFetch = () =>
-      rawPost(new URL(`${cfg.baseUrl}/responses`), {
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${cfg.authToken}`,
-          ...(cfg.chatgpt
-            ? {
-                accept: "text/event-stream",
-                "chatgpt-account-id": cfg.accountId ?? "",
-                "OpenAI-Beta": "responses=experimental",
-                originator: "codex_cli_rs",
-              }
-            : {}),
-        },
-        body: requestBody,
-        proxy,
-        signal: toolState.abortCtl?.signal,
-      });
-    let data: OpenAIResponseData;
-    let status: number;
-    try {
-      let res = await doFetch();
-      if (res.status === 401 && cfg.chatgpt && cfg.refreshToken) {
-        await refreshCodexToken(cfg);
-        res = await doFetch();
-      }
-      status = res.status;
-      data = cfg.chatgpt
-        ? await readResponsesStream(res.stream)
-        : (JSON.parse(await readAll(res.stream)) as OpenAIResponseData);
-    } catch (err) {
-      // Aborted mid-request by /api/stop — keep the partial work, no error.
-      if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-      throw err;
-    }
-    if (status < 200 || status >= 300) {
-      console.error(
-        `[ai-assistant] OpenAI API ${status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
-      );
-      throw new Error(data.error?.message || `OpenAI API 错误 (${status})`);
-    }
-    if (data.status === "failed") {
-      throw new Error(data.error?.message || "OpenAI 响应失败");
-    }
-
-    const output = data.output ?? [];
-    debugLog(context, `ROUND ${round}: output=${output.map((o) => o.type).join(",")}`);
-    const calls = output.filter((o) => o.type === "function_call");
-    if (!calls.length) {
-      const reply =
-        output
-          .filter((o) => o.type === "message")
-          .flatMap((o) => o.content ?? [])
-          .filter((c) => c.type === "output_text")
-          .map((c) => c.text ?? "")
-          .join("\n")
-          .trim() || "（无文本回复）";
-      const gate = await goalGate(context, req.language);
-      if (gate && "inject" in gate) {
-        input.push(...output);
-        input.push({ role: "user", content: [{ type: "input_text", text: gate.inject }] });
-        continue;
-      }
-      return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
-    }
-
-    // Echo the model's output items back, then append each tool result.
-    input.push(...output);
-    for (const call of calls) {
-      if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-      let toolInput: Record<string, unknown> = {};
-      try {
-        toolInput = JSON.parse(call.arguments || "{}") as Record<string, unknown>;
-      } catch {
-        // Malformed arguments — run with empty input, the tool error explains.
-      }
-      const resultJson = await callTool(context, actions, call.name!, toolInput, req.yolo !== false);
-      input.push({ type: "function_call_output", call_id: call.call_id, output: resultJson });
-    }
-  }
-  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
 }
 
 // ---------- OpenAI-compatible chat/completions (custom endpoint) ----------

@@ -75,6 +75,11 @@ export const toolHooks = {
   getAudioAutoRefine: (): boolean => {
     throw new Error("toolHooks.getAudioAutoRefine not initialized");
   },
+  /** Persist a refreshed Codex token into the settings-UI config (if the
+   * user configured codex manually) — mirrors refreshCodexToken's write-back. */
+  updateManualCodexToken: (_accessToken: string, _refreshToken?: string): void => {
+    throw new Error("toolHooks.updateManualCodexToken not initialized");
+  },
   /** Settings-UI provider config (providers.json), read by resolveConfig. */
   getManualConfig: (_provider: Provider): LocalConfig | undefined => {
     throw new Error("toolHooks.getManualConfig not initialized");
