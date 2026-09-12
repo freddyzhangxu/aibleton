@@ -17,6 +17,7 @@ import {
   kitRoots,
   mkdirOutsideSandbox,
   pathExists,
+  readdirNames,
   writeHomeBinary,
 } from "../paths.js";
 import { recordGeneration } from "../genlog/index.js";
@@ -59,10 +60,12 @@ import {
 } from "./helpers.js";
 import { arrangeSong } from "./arrange.js";
 
-// ---------- Factory 808 drum kit (Drum Essentials pack) ----------
+// ---------- Factory drum kits (Drum Essentials pack) ----------
+
+type KitPad = { note: number; name: string; file: string };
 
 /** GM-style note map so models can reuse standard drum programming knowledge. */
-const KIT_808 = [
+const KIT_808: KitPad[] = [
   { note: 36, name: "Kick", file: "Kick/Kick 808 Long.aif" },
   { note: 37, name: "Rim", file: "Rim/Rim-808.aif" },
   { note: 38, name: "Snare", file: "Snare/Snare 808 Dry.aif" },
@@ -75,6 +78,73 @@ const KIT_808 = [
   { note: 49, name: "Cymbal", file: "Cymbal/Cymbal 808 VA90.aif" },
   { note: 75, name: "Clave", file: "Wood/Clave-808.aif" },
 ];
+
+const KIT_909: KitPad[] = [
+  { note: 36, name: "Kick", file: "Kick/Kick-909.aif" },
+  { note: 37, name: "Rim", file: "Rim/Rim-909.aif" },
+  { note: 38, name: "Snare", file: "Snare/Snare-909-Tune8.aif" },
+  { note: 39, name: "Clap", file: "Clap/Clap-909.aif" },
+  { note: 41, name: "Tom Low", file: "Tom/Tom-909-Low.aif" },
+  { note: 42, name: "Hihat Closed", file: "Hihat/Hihat-909-Closed.aif" },
+  { note: 43, name: "Tom Mid", file: "Tom/Tom-909-Mid.aif" },
+  { note: 45, name: "Tom Hi", file: "Tom/Tom-909-Hi.aif" },
+  { note: 46, name: "Hihat Open", file: "Hihat/Hihat-909-Open.aif" },
+  { note: 49, name: "Cymbal", file: "Cymbal/Crash-909.aif" },
+  { note: 51, name: "Ride", file: "Ride/Ride-909.aif" },
+];
+
+const NAMED_KITS: Record<string, KitPad[]> = { "808": KIT_808, "909": KIT_909 };
+
+/** Slots for building a kit for any other style keyword by scanning the pack. */
+const KIT_SLOTS: { note: number; name: string; folder: string; hint?: RegExp }[] = [
+  { note: 36, name: "Kick", folder: "Kick" },
+  { note: 37, name: "Rim", folder: "Rim" },
+  { note: 38, name: "Snare", folder: "Snare" },
+  { note: 39, name: "Clap", folder: "Clap" },
+  { note: 41, name: "Tom Low", folder: "Tom", hint: /low/i },
+  { note: 42, name: "Hihat Closed", folder: "Hihat", hint: /clos/i },
+  { note: 43, name: "Tom Mid", folder: "Tom", hint: /mid/i },
+  { note: 45, name: "Tom Hi", folder: "Tom", hint: /hi/i },
+  { note: 46, name: "Hihat Open", folder: "Hihat", hint: /open/i },
+  { note: 49, name: "Cymbal", folder: "Cymbal" },
+  { note: 51, name: "Ride", folder: "Ride" },
+];
+
+const AUDIO_EXT = /\.(aif|aiff|wav)$/i;
+
+/** Resolve a style keyword ("909", "tr-707", "dmx", …) to a pad list under `root`. */
+function resolveKit(root: string, style: string): KitPad[] {
+  const key = style.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!key) return KIT_808;
+  for (const [name, kit] of Object.entries(NAMED_KITS)) {
+    if (key === name || key.endsWith(name)) return kit;
+  }
+  // "tr606"/"roland808" → also try the bare model number/word as keyword.
+  const bare = key.replace(/^[a-z]+/, "");
+  const keys = bare ? [key, bare] : [key];
+  const used = new Set<string>();
+  const pads: KitPad[] = [];
+  for (const slot of KIT_SLOTS) {
+    const dir = path.join(root, slot.folder);
+    const candidates = (readdirNames(dir) ?? []).filter((f) => {
+      if (!AUDIO_EXT.test(f) || used.has(f)) return false;
+      const norm = f.toLowerCase().replace(/[^a-z0-9]/g, "");
+      return keys.some((k) => norm.includes(k));
+    });
+    if (!candidates.length) continue;
+    const pick =
+      (slot.hint ? candidates.find((f) => slot.hint!.test(f)) : undefined) ?? candidates.sort()[0];
+    used.add(pick);
+    pads.push({ note: slot.note, name: slot.name, file: path.join(slot.folder, pick) });
+  }
+  if (!pads.some((p) => p.note === 36) || pads.length < 4) {
+    throw new Error(
+      `Drum Essentials 里找不到风格「${style}」的成套鼓采样（匹配到 ${pads.length} 个 pad，至少需要 kick + 3 件）。` +
+        "已知风格：808 / 909 / 707 / 606 / DMX；其它采样请用 search_samples + load_sample。",
+    );
+  }
+  return pads;
+}
 function requireMovePaired(): void {
   if (!toolState.moveSettings.token) {
     throw new Error("Move 尚未配对 — 先调用 move_pair（不带 code）获取屏幕上的配对码。");
@@ -410,12 +480,14 @@ export async function runTool(
     case "load_drum_kit": {
       const ref = resolveTrack(context, input, "track_index");
       const track = ref.track;
+      const style = String(input.kit ?? "").trim();
       const roots = kitRoots();
       const root = roots.find((r) => pathExists(r));
       if (!root) {
         throw new Error("找不到 Drum Essentials 音色包（已检查: " + roots.join(" | ") + "）");
       }
-      const missing = KIT_808.filter((p) => !pathExists(path.join(root, p.file)));
+      const kit = resolveKit(root, style);
+      const missing = kit.filter((p) => !pathExists(path.join(root, p.file)));
       if (missing.length) {
         throw new Error("缺少采样文件: " + missing.map((m) => m.file).join(", "));
       }
@@ -428,7 +500,7 @@ export async function runTool(
           rack = (await track.insertDevice("Drum Rack", 0)) as DrumRack<"1.0.0">;
         }
         const pads: string[] = [];
-        for (const pad of KIT_808) {
+        for (const pad of kit) {
           const chain = (await rack.insertChain(rack.chains.length)) as DrumChain<"1.0.0">;
           chain.receivingNote = pad.note;
           const simpler = (await chain.insertDevice("Simpler", 0)) as Simpler<"1.0.0">;
@@ -438,7 +510,7 @@ export async function runTool(
         return pads;
       };
       const pads = await context.withinTransaction(build);
-      return trackResult(ref, { track: track.name, kit: "808", pads });
+      return trackResult(ref, { track: track.name, kit: style || "808", pads });
     }
     case "search_samples": {
       const q = String(input.query ?? "").trim();

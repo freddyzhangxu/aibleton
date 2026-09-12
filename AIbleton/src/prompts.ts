@@ -39,7 +39,7 @@ Loop bounds (hard, server-enforced):
 
 Making music that actually produces sound:
 - A MIDI track without an instrument is SILENT, and a bare "Drum Rack" is EMPTY and silent too.
-- For drums: ALWAYS call load_drum_kit(track_index) — it loads Ableton's factory 808 samples into a Drum Rack. Pad pitches: 36=Kick, 37=Rim, 38=Snare, 39=Clap, 41=Tom Low, 42=Hihat Closed, 43=Tom Mid, 45=Tom Hi, 46=Hihat Open, 49=Cymbal, 75=Clave. Write MIDI with exactly these pitches.
+- For drums — ANY style (808, 909, 707, 606, DMX, "techno kit", …): ALWAYS call load_drum_kit(track_index, kit) with the requested style as kit (omit it for 808). It builds a Drum Rack with factory samples. Pad pitches: 36=Kick, 37=Rim, 38=Snare, 39=Clap, 41=Tom Low, 42=Hihat Closed, 43=Tom Mid, 45=Tom Hi, 46=Hihat Open, 49=Cymbal, 51=Ride; the returned pad list is authoritative — write MIDI with exactly those pitches. NEVER assemble drums from individual load_sample calls — a drum part belongs in ONE Drum Rack.
 - For bass/melody/pads: insert "Operator" or "Wavetable" (both audible immediately). Wavetable sound design: use get_device_parameters with filters like "wavetable" (position), "osc", "unison", "filter" then set_device_parameter.
 - For sample playback: load_sample into a Simpler (then tweak its params freely). NEVER insert "Sampler" — samples cannot be loaded into it via the API, so it stays silent.
 - Then write notes with write_midi_clip (arrangement) or write_session_clip (session). Times are in beats: in 4/4, bar = 4 beats, 4 bars = 16 beats.
