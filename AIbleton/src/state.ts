@@ -44,6 +44,8 @@ export const toolState = {
    * (same per-request lifetime as activeAudioConfig; busy = one task at a time). */
   activeLanguage: undefined as string | undefined,
   abortCtl: null as AbortController | null,
+  /** Set by /api/stop: the running task aborts its in-flight request and exits. */
+  stopRequested: false,
 };
 
 /**
@@ -68,6 +70,15 @@ export const toolHooks = {
   /** Append a line to ai-debug.log next to chats.json. */
   debugLog: (_context: Ctx, _line: string): void => {
     throw new Error("toolHooks.debugLog not initialized");
+  },
+  /** Settings-UI audio autoRefine toggle, read by the tool gate. */
+  getAudioAutoRefine: (): boolean => {
+    throw new Error("toolHooks.getAudioAutoRefine not initialized");
+  },
+  /** Persist a refreshed Codex token into the settings-UI config (if the
+   * user configured codex manually) — mirrors refreshCodexToken's write-back. */
+  updateManualCodexToken: (_accessToken: string, _refreshToken?: string): void => {
+    throw new Error("toolHooks.updateManualCodexToken not initialized");
   },
   /** Settings-UI provider config (providers.json), read by resolveConfig. */
   getManualConfig: (_provider: Provider): LocalConfig | undefined => {
