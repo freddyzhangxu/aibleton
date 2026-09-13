@@ -2,6 +2,8 @@
 
 > This English-language guide is for music producers and reflects the actual interface and capabilities of AIbleton v0.9.10.
 
+> Chinese edition: [AIbleton 用户指南](docs/USER_GUIDE_CN.md).
+
 AIbleton is an AI music-production assistant that runs inside Ableton Live. You can talk to it as you would a production partner: ask it to understand your current Set, make suggestions, or directly create, edit, arrange, mix, and analyze material.
 
 ## Quick Start
