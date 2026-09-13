@@ -550,7 +550,7 @@
         </div>
         <div class="menu-row" data-goto="viewAI">
           <span data-i18n="aiConfig">AI 配置</span>
-          <span class="val"><span id="providerVal">Claude Code</span> ›</span>
+          <span class="val"><span id="providerVal">Claude</span> ›</span>
         </div>
         <div class="menu-row" data-goto="viewAudio">
           <span data-i18n="audioConfig">音频生成</span>
@@ -958,7 +958,7 @@
     // ---------- AI providers ----------
     const PROVIDERS = {
       codex:  { name: 'Codex',       base: 'https://api.openai.com/v1', model: 'gpt-5-codex' },
-      claude: { name: 'Claude Code', base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
+      claude: { name: 'Claude',      base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
       gemini: { name: 'Gemini',      base: 'https://generativelanguage.googleapis.com', model: 'gemini-flash-latest' },
       // OpenAI 兼容端点（Grok / DeepSeek / Kimi / OpenRouter / Ollama…）：
       // 无内置默认，base/model 必须手填，本地服务可免 key。
