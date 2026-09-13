@@ -302,7 +302,17 @@
     .steps .chev { flex: none; font-size: 8px; transition: transform 0.12s; }
     .steps[open] .chev { transform: rotate(90deg); }
     .steps .sum { overflow: hidden; text-overflow: ellipsis; }
-    .steps .step-list { border-top: 1px solid var(--c-border); padding: 2px 0; }
+    /* Long action lists scroll vertically inside the expanded block instead of
+       being clipped by the chat window (sidebar windows are tall enough to show
+       everything, the Live dialog is not). max-height ties to the viewport so
+       the summary line stays reachable. */
+    .steps .step-list {
+      border-top: 1px solid var(--c-border);
+      padding: 2px 0;
+      max-height: min(320px, 45vh);
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
     .steps .action {
       padding: 2px 8px 2px 20px;
       white-space: nowrap;
