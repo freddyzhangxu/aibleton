@@ -31,13 +31,13 @@
 
 ## Download
 
-**Current version: v0.9.9** (pre-release) — get it from the [**Releases page**](https://github.com/freddyzhangxu/aibleton/releases).
+**Current version: v0.9.10** — get it from the [**Releases page**](https://github.com/freddyzhangxu/aibleton/releases).
 
 | File | What it is |
 |---|---|
-| `AIbleton-0.9.9.ablx` | The Live extension — **required**. Install it from **Live → Settings → Extensions**. |
-| `AIbletonBar-0.9.9-macOS.zip` | Optional macOS floating sidebar. |
-| `AIbletonBar-0.9.9-Windows.zip` | Optional Windows floating sidebar. |
+| `AIbleton-0.9.10.ablx` | The Live extension — **required**. Install it from **Live → Settings → Extensions**. |
+| `AIbletonBar-0.9.10-macOS.zip` | Optional macOS floating sidebar. |
+| `AIbletonBar-0.9.10-Windows.zip` | Optional Windows floating sidebar. |
 
 ## What is AIbleton?
 

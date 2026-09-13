@@ -77,7 +77,9 @@
       display: flex; align-items: center; justify-content: center;
       font-size: 9px; line-height: 1; color: rgba(0,0,0,0.55);
     }
-    .light span { opacity: 0; transition: opacity 0.1s; pointer-events: none; }
+    .light span { opacity: 0; transition: opacity 0.1s; pointer-events: none; display: flex; }
+    .light svg { width: 8px; height: 8px; display: block; }
+    body.win-dialog .light svg { width: 10px; height: 10px; }
     .lights:hover .light:not(.disabled) span { opacity: 1; }
     .light.close { background: #FF5F57; }
     .light.close:active { background: #d94b44; }
@@ -247,6 +249,9 @@
 
     #log {
       flex: 1;
+      /* As a flex child this must be allowed to shrink; otherwise expanded
+         action logs grow beyond the window while body clips the overflow. */
+      min-height: 0;
       overflow-y: auto;
       padding: 10px 12px;
       display: flex;
@@ -277,6 +282,10 @@
        ~20px lines — that was the "white bar" rendering bug on Windows. */
     .steps {
       align-self: flex-start;
+      /* #log is a vertical flex container. Do not let a long trace be
+         flex-shrunk after it has created its own scroll area, or the parent
+         will clip the list to only a few rows. */
+      flex: 0 0 auto;
       max-width: 92%;
       background: var(--c-input-bg);
       border: 1px solid var(--c-border);
@@ -300,7 +309,18 @@
     .steps .chev { flex: none; font-size: 8px; transition: transform 0.12s; }
     .steps[open] .chev { transform: rotate(90deg); }
     .steps .sum { overflow: hidden; text-overflow: ellipsis; }
-    .steps .step-list { border-top: 1px solid var(--c-border); padding: 2px 0; }
+    /* Keep a long action trace inside a bounded, independently scrollable
+       region. A Live dialog is often too short for the chat log to expose the
+       remainder of an expanded <details> block. */
+    .steps .step-list {
+      border-top: 1px solid var(--c-border);
+      padding: 2px 0;
+      max-height: min(320px, 45vh);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
+      scrollbar-width: thin;
+    }
     .steps .action {
       padding: 2px 8px 2px 20px;
       white-space: nowrap;
@@ -437,6 +457,40 @@
       overflow-y: hidden;
     }
     #input:focus { outline: 2px solid var(--c-text-dim); }
+    /* Slash-command skill picker ("/" in an empty input) */
+    footer .input-row { position: relative; }
+    /* .hidden is scoped per-element in this file — no global utility rule. */
+    #skillPop.hidden { display: none; }
+    #skillPop {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-border);
+      border-radius: 6px;
+      max-height: 200px;
+      overflow-y: auto;
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+      z-index: 30;
+    }
+    .skill-row {
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      padding: 6px 10px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .skill-row.active, .skill-row:hover { background: var(--c-border); }
+    .skill-row .s-name { color: var(--c-accent); flex-shrink: 0; }
+    .skill-row .s-desc {
+      color: var(--c-text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 11px;
+    }
     /* VSCode-style send: small square with an up arrow; while a task runs it
        becomes a stop button (same Ableton orange, filled-square icon). */
     #send {
@@ -471,8 +525,8 @@
   <header>
     <div class="row">
       <div class="lights">
-        <button class="light close" id="btnClose" title="关闭"><span>×</span></button>
-        <button class="light min" id="btnMin" title="最小化为右下角小条（需 AIbletonBar 运行中）"><span>–</span></button>
+        <button class="light close" id="btnClose" title="关闭"><span><svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><path d="M1.6 1.6 L6.4 6.4 M6.4 1.6 L1.6 6.4"/></svg></span></button>
+        <button class="light min" id="btnMin" title="最小化为右下角小条（需 AIbletonBar 运行中）"><span><svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><path d="M1.2 4 H6.8"/></svg></span></button>
       </div>
       <span class="title"><svg class="logo" viewBox="42.666667 298.666667 938.666666 469.333333" xmlns="http://www.w3.org/2000/svg" aria-label="AIbleton"><defs><mask id="logoMaskA" maskUnits="userSpaceOnUse" x="42.666667" y="298.666667" width="426.666666" height="469.333333"><rect x="42.666667" y="298.666667" width="426.666666" height="469.333333" fill="#fff"/><path fill="#000" fill-rule="evenodd" d="M61.0 768.0 199.72117400419287 298.666667H308.73584905660374L450.99999999999994 768.0H358.61006289308176L327.2683438155136 659.01387032349H183.0964360587002L152.84486373165618 768.0ZM203.80922431865827 583.7315437550335H305.73794549266245L293.47379454926624 541.523042666443Q283.6624737945492 505.61431785973156 273.85115303983224 463.72080558523487Q264.03983228511527 421.82729331073824 253.41090146750523 373.9489935684564Q243.32704402515722 422.4572709389262 234.06079664570228 464.3507832134228Q224.79454926624737 506.2442954879195 215.52830188679243 541.523042666443Z M203.8092 583.7315 L305.7379 583.7315 L327.2683 659.0139 L183.0964 659.0139Z"/><path fill="#000" d="M241.4109 363.9490h24v21.0510h-24z"/></mask></defs><g mask="url(#logoMaskA)"><path fill="#797F7E" d="M42.666667 298.666667h426.666666v85.333333H42.666667z M42.666667 426.666667h426.666666v85.333333H42.666667z M42.666667 554.666667h426.666666v85.333333H42.666667z M42.666667 682.666667h426.666666v85.333333H42.666667z"/></g><path fill="#797F7E" d="M512 298.666667h85.333333v469.333333H512z M640 298.666667h85.333333v469.333333H640z M768 298.666667h85.333333v469.333333H768z M896 298.666667h85.333333v469.333333H896z"/></svg>AIbleton</span>
       <span id="status" style="color:var(--c-text-dim);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">…</span>
@@ -619,6 +673,7 @@
       <button class="deny" id="confirmDeny">拒绝</button>
     </div>
     <div class="input-row">
+      <div id="skillPop" class="hidden"></div>
       <textarea id="input" rows="2" placeholder="输入消息，Enter 发送（Shift+Enter 换行）"></textarea>
     </div>
     <div class="bar">
@@ -694,7 +749,7 @@
         memoryConfig: '音乐人记忆', memName: '艺名', memGenres: '风格（逗号分隔）', memBpm: 'BPM 范围',
         memKeys: '常用调性', memSound: '音色偏好', memArtists: '参考艺人', memNotes: '备注',
         memHint: 'AI 每次对话都会带上这些记忆作为默认风格依据；聊天里说「记住我……」可新增。',
-        welcome: '你好！我是 Live 里的 AI 助手。\n可以直接问我制作问题，也可以让我操作当前 Set，例如：\n· 「把速度改成 128」\n· 「新建一条 MIDI 轨道叫 Bass，加个 Operator」\n· 「现在有哪些轨道？把第 2 条静音」',
+        welcome: '你好！我是 Live 里的 AI 音乐制作助手。\n告诉我你想做什么、改什么、分析什么或优化什么，我可以直接操作你的 Live Set。试试：\n· 「写一条 dark techno 贝斯线」\n· 「分析这条轨道并给出改进建议」\n· 「让 drop 更有冲击力」',
       },
       en: {
         settings: 'Settings', language: 'Language', aiConfig: 'AI Provider', audioConfig: 'Audio Generation',
@@ -727,7 +782,7 @@
         memoryConfig: 'Artist Memory', memName: 'Artist name', memGenres: 'Genres (comma-separated)', memBpm: 'BPM range',
         memKeys: 'Preferred keys', memSound: 'Sound preferences', memArtists: 'Reference artists', memNotes: 'Notes',
         memHint: 'The AI carries these memories into every chat as its default style context; say “remember I…” in chat to add one.',
-        welcome: 'Hi! I’m your AI assistant inside Live.\nAsk me production questions, or let me operate the current Set:\n· “Set the tempo to 128”\n· “Create a MIDI track called Bass and add an Operator”\n· “What tracks are there? Mute track 2”',
+        welcome: 'Hi! I’m your AI music production agent inside Live.\nTell me what you want to make, change, analyze, or improve. I can work directly with your Live Set.\nTry:\n· “Create a dark techno bassline”\n· “Analyze this track and suggest improvements”\n· “Make the drop hit harder”',
       },
       de: {
         settings: 'Einstellungen', language: 'Sprache', aiConfig: 'AI-Anbieter', audioConfig: 'Audio-Generierung',
@@ -760,7 +815,7 @@
         memoryConfig: 'Künstlergedächtnis', memName: 'Künstlername', memGenres: 'Genres (kommagetrennt)', memBpm: 'BPM-Bereich',
         memKeys: 'Bevorzugte Tonarten', memSound: 'Klangpräferenzen', memArtists: 'Referenzkünstler', memNotes: 'Notizen',
         memHint: 'Die KI nimmt diese Erinnerungen in jeden Chat als Standard-Stilkontext mit; „Merke dir, ich …“ im Chat fügt eine hinzu.',
-        welcome: 'Hallo! Ich bin dein AI-Assistent in Live.\nStell mir Fragen zum Produzieren oder lass mich das aktuelle Set bedienen:\n· „Stell das Tempo auf 128“\n· „Erstelle eine MIDI-Spur namens Bass und füge Operator hinzu“\n· „Welche Spuren gibt es? Schalte Spur 2 stumm“',
+        welcome: 'Hallo! Ich bin dein AI-Musikproduktions-Agent in Live.\nSag mir, was du machen, ändern, analysieren oder verbessern willst. Ich arbeite direkt mit deinem Live Set.\nProbier mal:\n· „Erstelle eine düstere Techno-Bassline“\n· „Analysiere diese Spur und schlag Verbesserungen vor“\n· „Lass den Drop härter zuschlagen“',
       },
       fr: {
         settings: 'Paramètres', language: 'Langue', aiConfig: 'Fournisseur IA', audioConfig: 'Génération audio',
@@ -793,7 +848,7 @@
         memoryConfig: 'Mémoire d’artiste', memName: 'Nom d’artiste', memGenres: 'Genres (séparés par des virgules)', memBpm: 'Plage de BPM',
         memKeys: 'Tonalités préférées', memSound: 'Préférences sonores', memArtists: 'Artistes de référence', memNotes: 'Notes',
         memHint: 'L’IA emporte ces souvenirs dans chaque conversation comme contexte de style par défaut ; « retiens que je… » dans le chat en ajoute un.',
-        welcome: 'Bonjour ! Je suis votre assistant IA dans Live.\nPosez-moi des questions de production ou laissez-moi piloter le Set actuel :\n· « Règle le tempo à 128 »\n· « Crée une piste MIDI nommée Bass et ajoute un Operator »\n· « Quelles pistes y a-t-il ? Mettez la piste 2 en sourdine »',
+        welcome: 'Bonjour ! Je suis votre agent IA de production musicale dans Live.\nDites-moi ce que vous voulez créer, modifier, analyser ou améliorer. Je peux travailler directement sur votre Set Live.\nEssayez :\n· « Crée une basse techno sombre »\n· « Analyse cette piste et propose des améliorations »\n· « Rends le drop plus percutant »',
       },
       ja: {
         settings: '設定', language: '言語', aiConfig: 'AI プロバイダー', audioConfig: '音声生成',
@@ -826,7 +881,7 @@
         memoryConfig: 'アーティストメモリー', memName: 'アーティスト名', memGenres: 'ジャンル（カンマ区切り）', memBpm: 'BPM 範囲',
         memKeys: 'よく使う調', memSound: '音色の好み', memArtists: '参考アーティスト', memNotes: 'メモ',
         memHint: 'AI は毎回のチャットでこれらの記憶をデフォルトのスタイル情報として使います。チャットで「覚えて：私は…」と言うと追加できます。',
-        welcome: 'こんにちは！Live 内の AI アシスタントです。\n制作の質問や、現在の Set の操作ができます。例：\n· 「テンポを 128 にして」\n· 「Bass という MIDI トラックを作って Operator を追加」\n· 「今どんなトラックがある？2 番目をミュートして」',
+        welcome: 'こんにちは！Live 内の AI 音楽制作エージェントです。\n作りたいこと、変えたいこと、分析や改善したいことを教えてください。Live Set を直接操作できます。\n試してみて：\n· 「ダークなテクノのベースラインを作って」\n· 「このトラックを分析して改善案を出して」\n· 「ドロップをもっと強く叩きつけて」',
       },
       es: {
         settings: 'Ajustes', language: 'Idioma', aiConfig: 'Proveedor de IA', audioConfig: 'Generación de audio',
@@ -859,7 +914,7 @@
         memoryConfig: 'Memoria de artista', memName: 'Nombre artístico', memGenres: 'Géneros (separados por comas)', memBpm: 'Rango de BPM',
         memKeys: 'Tonalidades preferidas', memSound: 'Preferencias de sonido', memArtists: 'Artistas de referencia', memNotes: 'Notas',
         memHint: 'La IA lleva estos recuerdos a cada chat como contexto de estilo por defecto; di «recuerda que yo…» en el chat para añadir uno.',
-        welcome: '¡Hola! Soy tu asistente de IA dentro de Live.\nPregúntame sobre producción o deja que maneje el Set actual:\n· «Pon el tempo a 128»\n· «Crea una pista MIDI llamada Bass y añade un Operator»\n· «¿Qué pistas hay? Silencia la pista 2»',
+        welcome: '¡Hola! Soy tu agente de IA para producción musical dentro de Live.\nDime qué quieres crear, cambiar, analizar o mejorar. Puedo trabajar directamente con tu Set de Live.\nPrueba:\n· «Crea una línea de bajo de techno oscuro»\n· «Analiza esta pista y sugiere mejoras»\n· «Haz que el drop pegue más fuerte»',
       },
       it: {
         settings: 'Impostazioni', language: 'Lingua', aiConfig: 'Provider AI', audioConfig: 'Generazione audio',
@@ -892,7 +947,7 @@
         memoryConfig: 'Memoria artista', memName: 'Nome d’arte', memGenres: 'Generi (separati da virgola)', memBpm: 'Intervallo BPM',
         memKeys: 'Tonalità preferite', memSound: 'Preferenze timbriche', memArtists: 'Artisti di riferimento', memNotes: 'Note',
         memHint: 'L’IA porta questi ricordi in ogni chat come contesto di stile predefinito; dì «ricorda che io…» in chat per aggiungerne uno.',
-        welcome: 'Ciao! Sono il tuo assistente AI dentro Live.\nFammi domande sulla produzione o lasciami operare sul Set corrente:\n· «Imposta il tempo a 128»\n· «Crea una traccia MIDI chiamata Bass e aggiungi un Operator»\n· «Quali tracce ci sono? Silenzia la traccia 2»',
+        welcome: 'Ciao! Sono il tuo agente AI per la produzione musicale dentro Live.\nDimmi cosa vuoi creare, modificare, analizzare o migliorare. Posso lavorare direttamente sul tuo Set di Live.\nProva:\n· «Crea una bassline techno scura»\n· «Analizza questa traccia e suggerisci miglioramenti»\n· «Rendi il drop più incisivo»',
       },
     };
 
@@ -1918,10 +1973,81 @@
         send();
       }
     });
+    // ----- Slash 技能选择器：空输入按 "/" 列出 ~/.aibleton/skills -----
+    // 列表来自服务端 /api/skills（每次打开对话框拉一次，新建 skill 重开即见）。
+    // 选中后插入 "/name "，发送时服务端按显式调用强制加载该 skill。
+    const skillPop = document.getElementById('skillPop');
+    let SKILLS = [];
+    let skillSel = 0;   // 当前高亮行
+    let skillHits = []; // 当前过滤结果
+
+    fetch('/api/skills')
+      .then((r) => r.json())
+      .then((list) => { SKILLS = Array.isArray(list) ? list : []; })
+      .catch(() => {});
+
+    // 只有输入框内容形如 "/xxx"（单 token）时才视为正在挑 skill
+    function slashQuery() {
+      const m = /^\/([\w-]*)$/.exec(input.value);
+      return m ? m[1].toLowerCase() : null;
+    }
+
+    function closeSkillPop() {
+      skillPop.classList.add('hidden');
+      skillHits = [];
+    }
+
+    function renderSkillPop() {
+      const q = slashQuery();
+      if (q === null || !SKILLS.length) { closeSkillPop(); return; }
+      skillHits = SKILLS.filter((s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.triggers || []).some((t) => t.toLowerCase().includes(q)) ||
+        (s.description || '').toLowerCase().includes(q)
+      ).slice(0, 8);
+      if (!skillHits.length) { closeSkillPop(); return; }
+      skillSel = Math.min(skillSel, skillHits.length - 1);
+      skillPop.innerHTML = '';
+      skillHits.forEach((s, i) => {
+        const row = document.createElement('div');
+        row.className = 'skill-row' + (i === skillSel ? ' active' : '');
+        const name = document.createElement('span');
+        name.className = 's-name';
+        name.textContent = '/' + s.name;
+        const desc = document.createElement('span');
+        desc.className = 's-desc';
+        desc.textContent = s.description || (s.triggers || []).join(' · ');
+        row.append(name, desc);
+        row.addEventListener('mousedown', (e) => { e.preventDefault(); pickSkill(i); });
+        skillPop.appendChild(row);
+      });
+      skillPop.classList.remove('hidden');
+    }
+
+    function pickSkill(i) {
+      const s = skillHits[i];
+      if (!s) return;
+      input.value = '/' + s.name + ' ';
+      localStorage.setItem(DRAFT_KEY, input.value);
+      closeSkillPop();
+      fitInput();
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+
+    input.addEventListener('input', () => { skillSel = 0; renderSkillPop(); });
+
     input.addEventListener('keydown', (e) => {
       // 中文输入法组合中（候选窗打开）按回车是确认上屏，不是发送：
       // isComposing 为标准判断，keyCode 229 兜底老 WebKit。
       if (e.isComposing || e.keyCode === 229) return;
+      // 技能选择器打开时，方向键/回车/Tab/Esc 先归它
+      if (!skillPop.classList.contains('hidden')) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); skillSel = (skillSel + 1) % skillHits.length; renderSkillPop(); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); skillSel = (skillSel - 1 + skillHits.length) % skillHits.length; renderSkillPop(); return; }
+        if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); pickSkill(skillSel); return; }
+        if (e.key === 'Escape') { e.preventDefault(); closeSkillPop(); return; }
+      }
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
 

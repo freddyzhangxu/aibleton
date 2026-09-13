@@ -44,6 +44,7 @@ import { chatGemini } from "./chat/providers/gemini.js";
 import { toolHooks, toolState, type ArtistMemory } from "./state.js";
 import { toBpm, toStrArr } from "./tools/helpers.js";
 import { NO_AUTH_HINT } from "./prompts.js";
+import { loadSkills, matchSkills } from "./skills.js";
 
 // ---------- Local sample library search ----------
 
@@ -558,6 +559,16 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       });
       return;
     }
+    if (req.method === "GET" && req.url === "/api/skills") {
+      // Slash-picker listing: metadata only, bodies load server-side on match.
+      send(
+        200,
+        JSON.stringify(
+          loadSkills().map((s) => ({ name: s.name, description: s.description, triggers: s.triggers })),
+        ),
+      );
+      return;
+    }
     if (req.method === "GET" && req.url === "/api/open") {
       if (selfUrl) {
         void context.ui.showModalDialog(selfUrl, 560, 680).catch(() => {});
@@ -705,6 +716,10 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         // stop it. Clients poll /api/status and then read /api/history.
         send(202, JSON.stringify({ ok: true }));
         debugLog(context, `TASK start: "${text.slice(0, 60)}"`);
+        const matched = matchSkills(text);
+        if (matched.length) {
+          debugLog(context, `SKILLS matched: ${matched.map((s) => s.name).join(", ")}`);
+        }
         void (async () => {
           try {
             await chat(context, parsed);

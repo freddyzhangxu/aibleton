@@ -31,15 +31,15 @@
 
 ## 下载
 
-**当前版本：v0.9.9**（预发布版）
+**当前版本：v0.9.10**
 
 前往 [**Releases**](https://github.com/freddyzhangxu/aibleton/releases) 下载最新版本。
 
 | 文件 | 说明 |
 |---|---|
-| `AIbleton-0.9.9.ablx` | Live 扩展，**必需**。通过 **Live → 设置 → 扩展** 安装。 |
-| `AIbletonBar-0.9.9-macOS.zip` | 可选的 macOS 浮动侧边栏。 |
-| `AIbletonBar-0.9.9-Windows.zip` | 可选的 Windows 浮动侧边栏。 |
+| `AIbleton-0.9.10.ablx` | Live 扩展，**必需**。通过 **Live → 设置 → 扩展** 安装。 |
+| `AIbletonBar-0.9.10-macOS.zip` | 可选的 macOS 浮动侧边栏。 |
+| `AIbletonBar-0.9.10-Windows.zip` | 可选的 Windows 浮动侧边栏。 |
 
 ## 什么是 AIbleton？
 
