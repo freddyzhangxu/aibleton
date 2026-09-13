@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="AIbletonBar/Resources/AIbleton.png" alt="AIbleton" width="420">
+  <img src="../AIbletonBar/Resources/AIbleton.png" alt="AIbleton" width="420">
 </p>
 
 <h1 align="center">AIbleton</h1>
@@ -18,13 +18,13 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> · <b>中文</b>
+  <a href="../README.md">English</a> · <b>中文</b>
 </p>
 
 <p align="center">
   <a href="https://github.com/freddyzhangxu/aibleton/releases"><img src="https://img.shields.io/github/v/release/freddyzhangxu/aibleton?include_prereleases&label=version" alt="Version"></a>
   <a href="https://github.com/freddyzhangxu/aibleton/releases"><img src="https://img.shields.io/github/downloads/freddyzhangxu/aibleton/total" alt="Downloads"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
+  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 </p>
 
 ---
@@ -67,11 +67,11 @@ AIbleton 可以读取你的 Live Set，理解音乐上下文，对音乐进行�
 
 | Live 中的 AI Agent 对话框 | AIbletonBar 浮动侧边栏 |
 |:---:|:---:|
-| ![AIbleton Live 中的 AI Agent 对话框](docs/screenshots/aibleton-dialog.png) | ![AIbletonBar 侧边栏](docs/screenshots/aibletonbar-sidebar.png) |
+| ![AIbleton Live 中的 AI Agent 对话框](screenshots/aibleton-dialog.png) | ![AIbletonBar 侧边栏](screenshots/aibletonbar-sidebar.png) |
 
 | AI 搜索 Samples 并通过 Wi-Fi 发送到 Move | Samples 已传输到设备 |
 |:---:|:---:|
-| ![AIbleton 向 Ableton Move 上传 Samples](docs/screenshots/move-upload-samples.png) | ![Ableton Move 中的 Samples](docs/screenshots/move-samples-webui.png) |
+| ![AIbleton 向 Ableton Move 上传 Samples](screenshots/move-upload-samples.png) | ![Ableton Move 中的 Samples](screenshots/move-samples-webui.png) |
 
 ## 核心能力
 
@@ -145,7 +145,7 @@ AIbleton 可以利用音频分析形成迭代式音乐制作闭环：
 
 ### Ableton Move
 
-有关设置、路由、配对和故障排查，请参阅 [Ableton Move 操作手册](docs/ableton-move.zh-CN.md)。
+有关设置、路由、配对和故障排查，请参阅 [Ableton Move 操作手册](ableton-move.zh-CN.md)。
 
 - 分析 Move Set
 - 传输 Samples
@@ -309,4 +309,4 @@ Ableton Extensions SDK 仍在持续演进，相关 API 和能力可能发生变�
 
 ## License
 
-[MIT](LICENSE)
+[MIT](../LICENSE)
