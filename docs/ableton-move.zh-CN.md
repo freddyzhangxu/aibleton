@@ -3,7 +3,7 @@
 AIbleton 可以把写好的 clip 通过 USB-C 发送到 **Ableton Move** 上播放——Live 充当
 MIDI 中枢，Move 充当外部音源，用它自带的乐器（Drift、Drum Sampler 等）发声。
 
-> English version: [move.md](move.md)
+> English version: [ableton-move.md](ableton-move.md)
 
 ## 前提条件
 
