@@ -9,6 +9,9 @@ extensions-sdk-*/
 # 调试日志
 .playwright-mcp/
 
+# 内部文档（不公开）
+.docs/
+
 # AIbletonBar 构建产物
 *.app
 
