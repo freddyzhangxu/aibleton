@@ -4,7 +4,7 @@ AIbleton can write clips that play on an **Ableton Move** over USB-C — Live ac
 the MIDI hub, Move acts as an external sound module playing its own instruments
 (Drift, Drum Sampler, …).
 
-> 中文版本：[move.zh-CN.md](move.zh-CN.md)
+> Chinese version: [ableton-move.zh-CN.md](ableton-move.zh-CN.md)
 
 ## Requirements
 
@@ -62,11 +62,11 @@ a stale MIDI device entry and the new port configuration never appears:
 ## Typical session
 
 ```
-you:  给我建一条 Move 轨，通道 1
-AI:   [create_move_track] → 轨道已建好；请把 Output Type 设为 Ableton Move、
-      Output Channel 设为 1（每个 Set 只需一次）
-you:  写一段 4 小节 house 鼓
-AI:   [write_session_clip] → 已写入，触发 clip 即可在 Move 上听到
+you:  Create a Move track on channel 1.
+AI:   [create_move_track] → The track is ready. Set Output Type to Ableton Move
+      and Output Channel to 1 (only once per Set).
+you:  Write a 4-bar house drum groove.
+AI:   [write_session_clip] → Written. Launch the clip to hear it on Move.
 ```
 
 ## File transfer over WiFi (pairing)
@@ -86,20 +86,22 @@ AIbleton also talks to the Move Manager's stock HTTP API — no USB cable, no SS
 `move_analyze_set` parses the `.ablbundle` (a zip holding `Song.abl` — JSON,
 Ableton's `song/1.8.x` schema — plus the WAVs). Move Sets have no arrangement
 view, so all clips are reported as session clips. Typical questions it answers
-out of the box: "这个 Set 什么调/什么速度", "贝斯轨弹了多少音、什么音域",
-"哪些采样是录的、哪些是核心库的", and it's the natural first step before
-recreating or extending a Move Set in Live.
+out of the box include: "What key and tempo is this Set in?", "How many notes
+does the bass track play, and what is its note range?", and "Which samples were
+recorded and which come from the core library?" It is also the natural first
+step before recreating or extending a Move Set in Live.
 
 Pairing is a one-time handshake — the token is persisted by the extension:
 
 ```
-you:  配对我的 Move
-AI:   [move_pair] → Move 屏幕上显示了 6 位配对码，报给我
+you:  Pair my Move.
+AI:   [move_pair] → A 6-digit pairing code is shown on Move's display. Tell me
+      the code.
 you:  438217
-AI:   [move_pair code=438217] → 已配对 ✅
-you:  生成一个 120bpm 的 dusty kick，然后发到 Move 上
-AI:   [generate_audio] → [move_upload_sample] → kick.wav 已在 Move 的
-      Samples 文件夹，装上鼓垫就能用
+AI:   [move_pair code=438217] → Paired successfully.
+you:  Generate a 120 BPM dusty kick, then send it to Move.
+AI:   [generate_audio] → [move_upload_sample] → kick.wav is in Move's Samples
+      folder and can be loaded onto a drum pad.
 ```
 
 Notes:
@@ -108,4 +110,4 @@ Notes:
   `move.local` (pass another hostname/IP to `move_pair` if renamed).
 - Uploads and downloads ask for confirmation in the chat UI (like any
   state-changing tool); pairing/listing run straight through.
-- If calls start failing with "未配对", the token expired — pair again.
+- If calls start failing with "Not paired", the token has expired — pair again.

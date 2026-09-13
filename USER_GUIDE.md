@@ -229,6 +229,8 @@ The extension stores conversation history, producer memory, provider / audio-gen
 
 AIbleton has two separate workflows for Move: **USB-C MIDI sequencing** and **Wi-Fi file / Set management**.
 
+For the complete setup, routing, pairing, and troubleshooting instructions, see the [Ableton Move guide](docs/ableton-move.md).
+
 ### USB-C: Make Live Clips Play Through Move
 
 Requirements: Move firmware ≥1.5, Standalone Mode, and a USB-C connection. Enable the Move port once, then set the track routing for each Live Set:
@@ -239,7 +241,7 @@ Requirements: Move firmware ≥1.5, Standalone Mode, and a USB-C connection. Ena
 4. On Move, hold `Shift` and press the track button, then set that track’s **MIDI In** to the same channel or `Auto`.
 5. You can now ask AI to write Arrangement or Session MIDI clips on that track.
 
-This path sends notes, velocity, and poly aftertouch. Move does not receive MIDI CC, and AI cannot automatically set Live Output Routing through the SDK. See the [Move Guide](../docs/move.md) for details.
+This path sends notes, velocity, and poly aftertouch. Move does not receive MIDI CC, and AI cannot automatically set Live Output Routing through the SDK.
 
 ### Wi-Fi: Upload Samples and Read or Analyze Move Sets
 

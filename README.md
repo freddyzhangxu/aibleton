@@ -143,6 +143,8 @@ This allows generated music to be evaluated against measurable goals and refined
 
 ### Ableton Move
 
+For setup, routing, pairing, and troubleshooting, see the [Ableton Move guide](docs/ableton-move.md).
+
 - Analyze Move Sets
 - Transfer samples
 - Work with Move MIDI and projects
