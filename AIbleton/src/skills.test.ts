@@ -42,9 +42,22 @@ test("accepts CRLF and missing description/triggers", () => {
   assert.equal(s.body, "body here");
 });
 
-test("rejects files without frontmatter or without a name", () => {
+test("falls back to the folder name when frontmatter is missing or nameless", () => {
+  const plain = parseSkillMd("just do the thing\nstep by step", "my-folder");
+  assert.ok(plain);
+  assert.equal(plain.name, "my-folder");
+  assert.equal(plain.description, "");
+  assert.deepEqual(plain.triggers, []);
+  assert.equal(plain.body, "just do the thing\nstep by step");
+
+  const nameless = parseSkillMd("---\ndescription: no name\n---\nbody", "dir-name");
+  assert.ok(nameless);
+  assert.equal(nameless.name, "dir-name");
+  assert.equal(nameless.description, "no name");
+  assert.equal(nameless.body, "body");
+
+  // No frontmatter AND no fallback → nothing to reference the skill by.
   assert.equal(parseSkillMd("no frontmatter at all"), null);
-  assert.equal(parseSkillMd("---\ndescription: no name\n---\nbody"), null);
 });
 
 const skill = (over: Partial<Skill>): Skill => ({
