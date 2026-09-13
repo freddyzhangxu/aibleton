@@ -13,8 +13,9 @@
  *
  *   ## Goal / ## Workflow / ## Constraints / ## Tools / ## Verification …
  *
- * Only the three frontmatter fields are required; the body is injected
- * verbatim. Matching is server-side keyword matching against the user's
+ * Frontmatter is optional: a plain-text SKILL.md still works — the folder
+ * name becomes the skill name and the whole file is the body. Matching is
+ * server-side keyword matching against the user's
  * message (auto trigger) — it does NOT depend on the model choosing to load
  * a skill, which keeps it reliable on weaker tool-calling relays. Matched
  * bodies append to the system prompt for the whole turn.
@@ -53,15 +54,19 @@ export function skillsDir(): string {
 
 /**
  * Minimal frontmatter parser for exactly the three supported fields.
- * Returns null when the file has no `name` (a skill without one can't be
- * referenced or matched reliably).
+ * Frontmatter is optional: without it (or without a `name` inside it) the
+ * skill falls back to `fallbackName` — the folder name — so a plain-text
+ * SKILL.md just works. Returns null only when no name is available at all.
  */
-export function parseSkillMd(raw: string): { name: string; description: string; triggers: string[]; body: string } | null {
+export function parseSkillMd(raw: string, fallbackName?: string): { name: string; description: string; triggers: string[]; body: string } | null {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
-  if (!m) return null;
+  if (!m) {
+    if (!fallbackName) return null;
+    return { name: fallbackName, description: "", triggers: [], body: raw.trim() };
+  }
   const fm = m[1];
   const body = raw.slice(m[0].length).trim();
-  const name = /^name:\s*(.+)$/m.exec(fm)?.[1]?.trim();
+  const name = /^name:\s*(.+)$/m.exec(fm)?.[1]?.trim() ?? fallbackName;
   if (!name) return null;
   const description = /^description:\s*(.+)$/m.exec(fm)?.[1]?.trim() ?? "";
   const triggers: string[] = [];
@@ -90,8 +95,8 @@ export function loadSkills(): Skill[] {
   const skills: Skill[] = [];
   for (const entry of readdirNames(dir) ?? []) {
     const raw = readHomeFile(path.join(dir, entry, "SKILL.md"));
-    if (!raw) continue;
-    const parsed = parseSkillMd(raw);
+    if (!raw?.trim()) continue;
+    const parsed = parseSkillMd(raw, entry);
     if (parsed) skills.push(parsed);
   }
   cache = { at: Date.now(), skills };
