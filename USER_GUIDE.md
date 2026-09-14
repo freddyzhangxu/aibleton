@@ -1,6 +1,6 @@
 # AIbleton User Guide
 
-> This English-language guide is for music producers and reflects the actual interface and capabilities of AIbleton v0.9.10.
+> This English-language guide is for music producers and reflects the actual interface and capabilities of AIbleton.
 
 > Chinese edition: [AIbleton 用户指南](docs/USER_GUIDE_CN.md).
 
