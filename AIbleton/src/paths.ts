@@ -183,6 +183,24 @@ export function writeHomeBinary(p: string, content: Buffer): void {
   });
 }
 
+/**
+ * Open a URL in the system browser. The sandboxed webview can't be trusted to
+ * hand external links to the OS, and spawned children escape the permission
+ * model anyway (same mechanism as the fs fallbacks above).
+ */
+export function openExternal(url: string): void {
+  if (process.platform === "win32") {
+    // rundll32 takes the URL as a plain argument — no cmd quoting pitfalls.
+    execFileSync("rundll32", ["url.dll,FileProtocolHandler", url], {
+      timeout: 10000,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    return;
+  }
+  execFileSync("/usr/bin/open", [url], { timeout: 10000, stdio: "ignore" });
+}
+
 /** mkdirSync -p with the same child-process fallback as writeHomeFile. */
 export function mkdirOutsideSandbox(dir: string): void {
   try {
