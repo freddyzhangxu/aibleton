@@ -16,10 +16,12 @@ import {
   AUDIO_EXT,
   listAudioFilesViaFind,
   mkdirOutsideSandbox,
+  openExternal,
   readHomeFile,
   sampleRoots,
   writeHomeFile,
 } from "./paths.js";
+import { checkForUpdate, isNewer, startUpdateLoop, RELEASES_PAGE } from "./updatecheck.js";
 import type { ExtensionContext } from "@ableton-extensions/sdk";
 import { toSampleEntry, type SampleEntry } from "./samplemeta.js";
 import { loadLocalConfig, PROVIDER_NAMES, type LocalConfig, type Provider } from "./config/local.js";
@@ -206,6 +208,7 @@ function loadManualConfigs(context: Ctx): void {
         audio?: Partial<PersistedAudio>;
         web?: { enabled?: unknown };
         move?: { host?: unknown; token?: unknown };
+        update?: { latest?: unknown; url?: unknown; checkedAt?: unknown; dismissed?: unknown };
       };
     manualConfigs = {};
     for (const p of ["claude", "codex", "gemini", "custom"] as Provider[]) {
@@ -235,6 +238,15 @@ function loadManualConfigs(context: Ctx): void {
         token: typeof mv.token === "string" && mv.token ? mv.token : undefined,
       };
     }
+    const up = data.update;
+    if (up && typeof up === "object") {
+      toolState.updateInfo = {
+        latest: typeof up.latest === "string" && up.latest ? up.latest : undefined,
+        url: typeof up.url === "string" && up.url ? up.url : undefined,
+        checkedAt: typeof up.checkedAt === "number" ? up.checkedAt : undefined,
+        dismissed: typeof up.dismissed === "string" && up.dismissed ? up.dismissed : undefined,
+      };
+    }
   } catch {
     manualConfigs = {};
   }
@@ -247,7 +259,7 @@ function saveManualConfigs(): void {
   try {
     mkdirOutsideSandbox(path.dirname(manualConfigPath));
     writeHomeFile(manualConfigPath,
-      JSON.stringify({ ...manualConfigs, lastProvider, audio: audioSettings, web: toolState.webSettings, move: toolState.moveSettings }, null, 2));
+      JSON.stringify({ ...manualConfigs, lastProvider, audio: audioSettings, web: toolState.webSettings, move: toolState.moveSettings, update: toolState.updateInfo }, null, 2));
   } catch {
     // In-memory copy still works for this run.
   }
@@ -533,6 +545,57 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       });
       return;
     }
+    // ---------- Update check (GitHub Releases, 24h cache) ----------
+    const updatePayload = () => {
+      const info = toolState.updateInfo;
+      return {
+        current: APP_VERSION,
+        latest: info.latest ?? null,
+        url: info.url ?? null,
+        hasUpdate: Boolean(
+          info.latest && info.latest !== info.dismissed && isNewer(info.latest, APP_VERSION),
+        ),
+        checkedAt: info.checkedAt ?? null,
+      };
+    };
+    if (req.method === "GET" && req.url?.startsWith("/api/update")) {
+      const refresh =
+        new URL(req.url, "http://127.0.0.1").searchParams.get("refresh") === "1";
+      const reply = () => send(200, JSON.stringify(updatePayload()));
+      if (refresh) {
+        // Manual "check now" from the settings UI: answer after the fetch.
+        void checkForUpdate(true).then(reply, reply);
+      } else {
+        // Kick a background check if the cache is stale (no-op when fresh).
+        void checkForUpdate(false);
+        reply();
+      }
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/update/dismiss") {
+      if (toolState.updateInfo.latest) {
+        toolState.updateInfo.dismissed = toolState.updateInfo.latest;
+        saveManualConfigs();
+      }
+      send(200, JSON.stringify({ ok: true }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/update/open") {
+      // Only ever open the server-side release URL — never a client-supplied
+      // one, so this endpoint can't be turned into an open-anything primitive.
+      const url = toolState.updateInfo.url ?? RELEASES_PAGE;
+      if (!/^https:\/\/github\.com\/freddyzhangxu\/aibleton\//.test(url)) {
+        send(400, JSON.stringify({ error: "unexpected url" }));
+        return;
+      }
+      try {
+        openExternal(url);
+        send(200, JSON.stringify({ ok: true }));
+      } catch (err) {
+        send(500, JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+      }
+      return;
+    }
     if (req.method === "GET" && req.url === "/api/memory") {
       send(200, JSON.stringify(toolState.artistMemory));
       return;
@@ -765,6 +828,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     loadStore(context);
     loadManualConfigs(context);
     loadArtistMemory(context);
+    startUpdateLoop();
     tryListen(PREFERRED_PORT);
   });
 }

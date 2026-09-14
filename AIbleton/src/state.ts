@@ -37,6 +37,10 @@ export const toolState = {
   /** Ableton Move pairing state (host + challenge-response token), persisted
    * in providers.json under "move". */
   moveSettings: {} as { host?: string; token?: string },
+  /** Update-check cache, persisted in providers.json under "update". dismissed
+   * remembers which version the user closed the banner for — a newer release
+   * re-raises it. */
+  updateInfo: {} as { latest?: string; url?: string; checkedAt?: number; dismissed?: string },
   artistMemory: {} as ArtistMemory,
   /** Resolved audio-generation config for the running chat task. */
   activeAudioConfig: null as AudioGenConfig | null,

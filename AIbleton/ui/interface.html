@@ -511,13 +511,42 @@
     #send .ic-stop { display: none; }
     #send.stop .ic-send { display: none; }
     #send.stop .ic-stop { display: block; }
-    /* 设置页底部版本号（构建时由 server 注入） */
+    /* 设置页底部版本号（构建时由 server 注入）；点击 = 手动检查更新 */
     #appVersion {
       padding: 10px 14px;
       font-size: 11px;
       color: var(--c-text-dim);
       text-align: center;
+      cursor: pointer;
     }
+    /* 发现新版时出现在聊天区顶部的提示条 */
+    #updateBar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      background: var(--c-panel);
+      border-bottom: 1px solid var(--c-border);
+    }
+    #updateBar.hidden { display: none; }
+    #updateBar .msg {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #updateBar button {
+      border: 1px solid var(--c-border);
+      background: transparent;
+      color: var(--c-text-dim);
+      border-radius: 6px;
+      font-size: 11px;
+      padding: 2px 8px;
+      cursor: pointer;
+      flex: none;
+    }
+    #updateBar #updateGo { color: var(--c-accent); border-color: var(--c-accent); }
   </style>
 </head>
 
@@ -656,6 +685,12 @@
     <div id="historyPanel" class="hidden"></div>
   </header>
 
+  <div id="updateBar" class="hidden">
+    <span class="msg" id="updateMsg"></span>
+    <button id="updateGo" data-i18n="updateGo">下载</button>
+    <button id="updateDismiss">✕</button>
+  </div>
+
   <div id="log">
     <div class="msg ai">你好！我是 Live 里的 AI 助手。
 可以直接问我制作问题，也可以让我操作当前 Set，例如：
@@ -719,6 +754,8 @@
 
     const I18N = {
       zh: {
+        updateAvailable: '发现新版本 v{v}', updateGo: '下载', updateLatest: '已是最新',
+        updateChecking: '检查中…', updateFailed: '检查失败',
         settings: '设置', language: '语言', aiConfig: 'AI 配置', audioConfig: '音频生成',
         close: '关闭', minimize: '最小化为右下角小条（需 AIbletonBar 运行中）',
         newChat: '新建对话', history: '历史对话',
@@ -752,6 +789,8 @@
         welcome: '你好！我是 Live 里的 AI 音乐制作助手。\n告诉我你想做什么、改什么、分析什么或优化什么，我可以直接操作你的 Live Set。试试：\n· 「写一条 dark techno 贝斯线」\n· 「分析这条轨道并给出改进建议」\n· 「让 drop 更有冲击力」',
       },
       en: {
+        updateAvailable: 'New version v{v} available', updateGo: 'Download', updateLatest: 'Up to date',
+        updateChecking: 'Checking…', updateFailed: 'Check failed',
         settings: 'Settings', language: 'Language', aiConfig: 'AI Provider', audioConfig: 'Audio Generation',
         close: 'Close', minimize: 'Minimize to the corner bar (requires AIbletonBar running)',
         newChat: 'New chat', history: 'History',
@@ -785,6 +824,8 @@
         welcome: 'Hi! I’m your AI music production agent inside Live.\nTell me what you want to make, change, analyze, or improve. I can work directly with your Live Set.\nTry:\n· “Create a dark techno bassline”\n· “Analyze this track and suggest improvements”\n· “Make the drop hit harder”',
       },
       de: {
+        updateAvailable: 'Neue Version v{v} verfügbar', updateGo: 'Herunterladen', updateLatest: 'Aktuell',
+        updateChecking: 'Prüfe…', updateFailed: 'Prüfung fehlgeschlagen',
         settings: 'Einstellungen', language: 'Sprache', aiConfig: 'AI-Anbieter', audioConfig: 'Audio-Generierung',
         close: 'Schließen', minimize: 'Zur Leiste unten rechts minimieren (AIbletonBar muss laufen)',
         newChat: 'Neuer Chat', history: 'Verlauf',
@@ -818,6 +859,8 @@
         welcome: 'Hallo! Ich bin dein AI-Musikproduktions-Agent in Live.\nSag mir, was du machen, ändern, analysieren oder verbessern willst. Ich arbeite direkt mit deinem Live Set.\nProbier mal:\n· „Erstelle eine düstere Techno-Bassline“\n· „Analysiere diese Spur und schlag Verbesserungen vor“\n· „Lass den Drop härter zuschlagen“',
       },
       fr: {
+        updateAvailable: 'Nouvelle version v{v} disponible', updateGo: 'Télécharger', updateLatest: 'À jour',
+        updateChecking: 'Vérification…', updateFailed: 'Échec de la vérification',
         settings: 'Paramètres', language: 'Langue', aiConfig: 'Fournisseur IA', audioConfig: 'Génération audio',
         close: 'Fermer', minimize: 'Réduire en barre en bas à droite (AIbletonBar requis)',
         newChat: 'Nouvelle conversation', history: 'Historique',
@@ -851,6 +894,8 @@
         welcome: 'Bonjour ! Je suis votre agent IA de production musicale dans Live.\nDites-moi ce que vous voulez créer, modifier, analyser ou améliorer. Je peux travailler directement sur votre Set Live.\nEssayez :\n· « Crée une basse techno sombre »\n· « Analyse cette piste et propose des améliorations »\n· « Rends le drop plus percutant »',
       },
       ja: {
+        updateAvailable: '新しいバージョン v{v} があります', updateGo: 'ダウンロード', updateLatest: '最新です',
+        updateChecking: '確認中…', updateFailed: '確認に失敗しました',
         settings: '設定', language: '言語', aiConfig: 'AI プロバイダー', audioConfig: '音声生成',
         close: '閉じる', minimize: '右下のミニバーに最小化（AIbletonBar の起動が必要）',
         newChat: '新規チャット', history: '履歴',
@@ -884,6 +929,8 @@
         welcome: 'こんにちは！Live 内の AI 音楽制作エージェントです。\n作りたいこと、変えたいこと、分析や改善したいことを教えてください。Live Set を直接操作できます。\n試してみて：\n· 「ダークなテクノのベースラインを作って」\n· 「このトラックを分析して改善案を出して」\n· 「ドロップをもっと強く叩きつけて」',
       },
       es: {
+        updateAvailable: 'Nueva versión v{v} disponible', updateGo: 'Descargar', updateLatest: 'Actualizado',
+        updateChecking: 'Comprobando…', updateFailed: 'Error al comprobar',
         settings: 'Ajustes', language: 'Idioma', aiConfig: 'Proveedor de IA', audioConfig: 'Generación de audio',
         close: 'Cerrar', minimize: 'Minimizar a la barra inferior derecha (requiere AIbletonBar)',
         newChat: 'Nuevo chat', history: 'Historial',
@@ -917,6 +964,8 @@
         welcome: '¡Hola! Soy tu agente de IA para producción musical dentro de Live.\nDime qué quieres crear, cambiar, analizar o mejorar. Puedo trabajar directamente con tu Set de Live.\nPrueba:\n· «Crea una línea de bajo de techno oscuro»\n· «Analiza esta pista y sugiere mejoras»\n· «Haz que el drop pegue más fuerte»',
       },
       it: {
+        updateAvailable: 'Nuova versione v{v} disponibile', updateGo: 'Scarica', updateLatest: 'Aggiornato',
+        updateChecking: 'Controllo…', updateFailed: 'Controllo fallito',
         settings: 'Impostazioni', language: 'Lingua', aiConfig: 'Provider AI', audioConfig: 'Generazione audio',
         close: 'Chiudi', minimize: 'Riduci a barra in basso a destra (richiede AIbletonBar)',
         newChat: 'Nuova chat', history: 'Cronologia',
@@ -1627,6 +1676,39 @@
       if (h) renderMessages(h.messages);
       if (s.error) addMsg('error', t('error') + s.error);
     }
+
+    // ----- update check -----
+    // 有新版且未忽略时显示顶部提示条；点设置页版本号 = 手动检查（绕过 24h 缓存）。
+    const updateBar = document.getElementById('updateBar');
+    const updateMsg = document.getElementById('updateMsg');
+    const versionEl = document.getElementById('appVersion');
+    const versionLabel = versionEl.textContent;
+
+    async function refreshUpdate(manual) {
+      if (manual) versionEl.textContent = t('updateChecking');
+      const s = await fetch('/api/update' + (manual ? '?refresh=1' : ''))
+        .then(r => r.json()).catch(() => null);
+      if (!s) {
+        if (manual) versionEl.textContent = t('updateFailed');
+      } else if (s.hasUpdate) {
+        updateMsg.textContent = t('updateAvailable').replace('{v}', s.latest);
+        updateBar.classList.remove('hidden');
+      } else {
+        updateBar.classList.add('hidden');
+        if (manual) versionEl.textContent = s.latest ? t('updateLatest') : t('updateFailed');
+      }
+      if (manual) setTimeout(() => { versionEl.textContent = versionLabel; }, 2500);
+    }
+
+    document.getElementById('updateGo').addEventListener('click', () => {
+      fetch('/api/update/open', { method: 'POST' }).catch(() => {});
+    });
+    document.getElementById('updateDismiss').addEventListener('click', () => {
+      updateBar.classList.add('hidden');
+      fetch('/api/update/dismiss', { method: 'POST' }).catch(() => {});
+    });
+    versionEl.addEventListener('click', () => refreshUpdate(true));
+    refreshUpdate(false);
 
     // Pick up a task that is still running from before this window opened.
     fetch('/api/status').then(r => r.json()).then(s => {
