@@ -36,8 +36,8 @@
 | File | What it is |
 |---|---|
 | [Download AIbleton-0.9.10.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.10/AIbleton-0.9.10.ablx) | The Live extension — **required**. Install it from **Live → Settings → Extensions**. |
-| [Download AIbletonBar-0.9.10-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.10/AIbletonBar-0.9.10-macOS.zip) | Optional macOS floating sidebar. |
-| [Download AIbletonBar-0.9.10-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.10/AIbletonBar-0.9.10-Windows.zip) | Optional Windows floating sidebar. |
+| [Download AIbletonBar for macOS](https://github.com/freddyzhangxu/aibleton/releases/latest/download/AIbletonBar-macOS.zip) | Optional floating sidebar. **No update needed** — it only loads the UI served by the extension, so keeping the `.ablx` above current is enough. ⚠️ **First launch is blocked by macOS** (ad-hoc signed, not notarized): run `xattr -cr /Applications/AIbletonBar.app` once in Terminal — or right-click the app → **Open** → **Open**. After that it launches normally. |
+| [Download AIbletonBar for Windows](https://github.com/freddyzhangxu/aibleton/releases/latest/download/AIbletonBar-Windows.zip) | Optional floating sidebar. **No update needed** — updating the `.ablx` above is enough. |
 
 ## What is AIbleton?
 

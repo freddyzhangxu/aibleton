@@ -2,8 +2,10 @@
 # Build AIbletonBar for Windows (single-file win-x64 exe) — no Windows machine
 # needed: .NET cross-publishes from macOS via EnableWindowsTargeting.
 #
-# The version ALWAYS follows the AIbleton extension (single source of truth:
-# AIbleton/package.json), same as the macOS build.sh one level up.
+# Like the macOS build.sh one level up, the sidebar ships UNVERSIONED:
+# the zip is always AIbletonBar-Windows.zip so releases/latest/download/
+# links stay valid forever. The exe still gets an internal version stamp
+# from AIbleton/package.json (Windows metadata only — invisible to users).
 set -e
 cd "$(dirname "$0")"
 
@@ -50,7 +52,7 @@ dotnet publish AIbletonBar.csproj -c Release -r win-x64 --self-contained true \
     -p:Version="$VERSION" \
     -o publish
 
-ZIP="AIbletonBar-$VERSION-Windows.zip"
+ZIP="AIbletonBar-Windows.zip"
 rm -f "$ZIP"
 # zip -j (not ditto): no macOS ._ AppleDouble junk in the archive.
 zip -j "$ZIP" publish/AIbletonBar.exe >/dev/null
