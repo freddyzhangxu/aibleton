@@ -1,4 +1,5 @@
 import { toolState } from "./state.js";
+import { setContextPrompt } from "./setcontext.js";
 import { lastUserText, skillPromptFor } from "./skills.js";
 
 export const SYSTEM_PROMPT = `You are an AI music-production assistant living inside Ableton Live 12.
@@ -14,6 +15,7 @@ Rules:
 - You cannot delete tracks or scenes, load third-party plugins, or do realtime audio/MIDI processing. Say so if asked. (arrange_song CAN clear clips in a bar range as part of arranging.)
 - After tools run, confirm what changed in one short sentence.
 - Mutating tool results carry a "verified" flag: the server re-read the Set and checked the change actually landed (value, device, clip). If verified:false comes back with an error, the action DID execute but missed the target — do NOT re-run the same call blindly (that would duplicate content); correct it using the reported actual state, or tell the user what mismatch you see.
+- Mutating tool results may also carry a "listen_hint" (tracks / start_bar–end_bar / suggest_solo / suggest_ab), computed by the server. When present, end your reply with a one-line listening suggestion quoting it — which bar to play from, which track changed, whether to solo it, whether an A/B against the previous version is worthwhile. Never invent a hint when none was returned.
 - NEVER claim you changed the Live Set unless a tool actually performed the change in THIS turn. If you did not call a tool, nothing changed — do not pretend otherwise.
 
 Goals (tasks that change the Set):
@@ -173,6 +175,8 @@ export function systemPromptFor(language?: string): string {
     memoryPrompt() +
     (toolState.webSettings.enabled ? WEB_PROMPT : "") +
     skillPromptFor(lastUserText()) +
+    // Current-Set identity + one-turn "set changed" warning (see setcontext.ts)
+    setContextPrompt() +
     `\n\nToday's date: ${today}.` +
     `\nThe user's UI language is ${name} — use it as the default reply language unless they write in a different language.`
   );

@@ -13,6 +13,7 @@ import {
   truncateResult,
 } from "../session.js";
 import { callTool, goalGate } from "../../agent/runtime.js";
+import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 
@@ -92,6 +93,7 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       candidates?: { content?: { parts?: GeminiPart[] } }[];
       error?: { message?: string };
     };
+    let status = 0;
     try {
       const res = await rawPost(
         new URL(`${cfg.baseUrl}/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`),
@@ -102,17 +104,31 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
           signal: toolState.abortCtl?.signal,
         },
       );
+      status = res.status;
       data = JSON.parse(await readAll(res.stream)) as typeof data;
-      if (res.status < 200 || res.status >= 300) {
-        console.error(
-          `[ai-assistant] Gemini API ${res.status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
-        );
-        throw new Error(data.error?.message || `Gemini API 错误 (${res.status})`);
-      }
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-      throw err;
+      throw friendlyApiError({
+        what: "Gemini",
+        settings: settingsPath(req.language, "ai"),
+        raw: errMessage(err),
+        model: cfg.model,
+        language: req.language,
+      });
+    }
+    if (status < 200 || status >= 300) {
+      console.error(
+        `[ai-assistant] Gemini API ${status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
+      );
+      throw friendlyApiError({
+        what: "Gemini",
+        settings: settingsPath(req.language, "ai"),
+        status,
+        raw: data.error?.message ?? "",
+        model: cfg.model,
+        language: req.language,
+      });
     }
 
     const parts = data.candidates?.[0]?.content?.parts ?? [];

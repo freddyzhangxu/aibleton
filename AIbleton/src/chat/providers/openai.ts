@@ -18,6 +18,7 @@ import {
   truncateResult,
 } from "../session.js";
 import { callTool, goalGate } from "../../agent/runtime.js";
+import { actionableError, errMessage, friendlyApiError, isFriendlyError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 
@@ -35,7 +36,7 @@ function jwtExp(token: string): number | null {
 
 /** Refresh an expired ChatGPT-account Codex token and persist it back to auth.json. */
 async function refreshCodexToken(cfg: ResolvedConfig): Promise<void> {
-  const fail = new Error("Codex 登录已过期，请运行 codex login 重新登录 / Codex login expired — run `codex login` again");
+  const fail = actionableError("Codex 登录已过期，请运行 codex login 重新登录 / Codex login expired — run `codex login` again");
   if (!cfg.refreshToken) throw fail;
   const res = await rawPost(new URL("https://auth.openai.com/oauth/token"), {
     headers: { "content-type": "application/json" },
@@ -185,7 +186,7 @@ async function readResponsesStream(
     if (!finalResponse.output?.length && items.length) finalResponse.output = items;
     return finalResponse;
   }
-  if (streamError) throw new Error(streamError);
+  if (streamError) throw actionableError(`Codex 流式响应报错: ${streamError} / Codex stream error: ${streamError}`);
   // A body without a trailing newline never entered the line loop — it is
   // still sitting in buf (the quota error body arrives exactly like this).
   const leftover = buf.trim();
@@ -198,12 +199,18 @@ async function readResponsesStream(
       if (body.error?.message) throw new Error(body.error.message);
     } catch (e) {
       if (e instanceof SyntaxError) {
-        throw new Error(`OpenAI 返回了非 SSE 响应: ${rawNonSse.slice(0, 300)}`);
+        throw actionableError(
+          `Codex 端点返回了非流式（非 SSE）响应 — 若使用自建中转，请确认它支持 ChatGPT 后端，或在 设置（齿轮）→ AI 配置 改用 Custom 提供商。详情: ${rawNonSse.slice(0, 300)}` +
+            ` / The endpoint answered a non-SSE response — if this is a relay, make sure it supports the ChatGPT backend, or switch to the Custom provider in Settings.`,
+        );
       }
       throw e;
     }
   }
-  throw new Error("OpenAI 流式响应中断（未收到 completed 事件）");
+  throw actionableError(
+    "Codex 连接中断：流式响应未完成（未收到 completed 事件）— 检查网络/代理后重试。" +
+      " / Connection dropped before the response completed — check your network/proxy and retry.",
+  );
 }
 
 export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
@@ -279,16 +286,37 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-      throw err;
+      if (isFriendlyError(err)) throw err;
+      throw friendlyApiError({
+        what: "Codex",
+        settings: settingsPath(req.language, "ai"),
+        raw: errMessage(err),
+        model: cfg.model,
+        language: req.language,
+      });
     }
     if (status < 200 || status >= 300) {
       console.error(
         `[ai-assistant] OpenAI API ${status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
       );
-      throw new Error(data.error?.message || `OpenAI API 错误 (${status})`);
+      throw friendlyApiError({
+        what: "Codex",
+        settings: settingsPath(req.language, "ai"),
+        status,
+        raw: data.error?.message ?? "",
+        model: cfg.model,
+        language: req.language,
+      });
     }
     if (data.status === "failed") {
-      throw new Error(data.error?.message || "OpenAI 响应失败");
+      throw friendlyApiError({
+        what: "Codex",
+        settings: settingsPath(req.language, "ai"),
+        status,
+        raw: data.error?.message ?? "",
+        model: cfg.model,
+        language: req.language,
+      });
     }
 
     const output = data.output ?? [];

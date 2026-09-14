@@ -13,6 +13,7 @@ import {
   truncateResult,
 } from "../session.js";
 import { callTool, goalGate } from "../../agent/runtime.js";
+import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 
@@ -104,13 +105,26 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-      throw err;
+      throw friendlyApiError({
+        what: "Custom",
+        settings: settingsPath(req.language, "ai"),
+        raw: errMessage(err),
+        model: cfg.model,
+        language: req.language,
+      });
     }
     if (status < 200 || status >= 300) {
       console.error(
         `[ai-assistant] custom API ${status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
       );
-      throw new Error(data.error?.message || `自定义端点错误 (${status})`);
+      throw friendlyApiError({
+        what: "Custom",
+        settings: settingsPath(req.language, "ai"),
+        status,
+        raw: data.error?.message ?? "",
+        model: cfg.model,
+        language: req.language,
+      });
     }
     const msg = data.choices?.[0]?.message ?? {};
     const calls = (msg.tool_calls ?? []).filter((c) => c.function?.name);

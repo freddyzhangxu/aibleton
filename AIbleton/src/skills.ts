@@ -80,6 +80,21 @@ export function parseSkillMd(raw: string, fallbackName?: string): { name: string
   return { name, description, triggers, body };
 }
 
+/** A skill folder whose SKILL.md exists but didn't load cleanly. */
+export interface SkillProblem {
+  folder: string;
+  /** Ready-to-show bilingual reason (rides /api/skills to the slash picker). */
+  issue: string;
+}
+
+let problems: SkillProblem[] = [];
+
+/** Problems found by the latest scan (triggers one if never run). */
+export function skillProblems(): SkillProblem[] {
+  loadSkills();
+  return problems;
+}
+
 /** Scan ~/.aibleton/skills (cached 30 s — rescans pick up edits quickly). */
 export function loadSkills(): Skill[] {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.skills;
@@ -93,12 +108,29 @@ export function loadSkills(): Skill[] {
     }
   }
   const skills: Skill[] = [];
+  const found: SkillProblem[] = [];
   for (const entry of readdirNames(dir) ?? []) {
     const raw = readHomeFile(path.join(dir, entry, "SKILL.md"));
-    if (!raw?.trim()) continue;
+    if (raw !== null && raw !== undefined && !raw.trim()) {
+      found.push({
+        folder: entry,
+        issue: "SKILL.md 是空的 — 写入技能内容或删除该文件夹 / SKILL.md is empty — add content or remove the folder",
+      });
+      continue;
+    }
+    if (!raw?.trim()) continue; // no SKILL.md — just a stray folder, not an error
+    // Frontmatter opened but never closed: the whole file (broken header
+    // included) silently becomes the body — flag it so the user can fix it.
+    if (/^---\r?\n/.test(raw) && !/^---\r?\n[\s\S]*?\r?\n---\r?\n?/.test(raw)) {
+      found.push({
+        folder: entry,
+        issue: "frontmatter 未闭合（缺少结束的 ---），已按纯文本加载 / frontmatter never closed (missing ---), loaded as plain text",
+      });
+    }
     const parsed = parseSkillMd(raw, entry);
     if (parsed) skills.push(parsed);
   }
+  problems = found;
   cache = { at: Date.now(), skills };
   return skills;
 }

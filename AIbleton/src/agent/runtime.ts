@@ -80,6 +80,7 @@ import { buildMusicState } from "../musicstate/builder.js";
 import { readHomeBinary } from "../paths.js";
 import { TOOLS } from "../tools/definitions.js";
 import { runTool } from "../tools/dispatcher.js";
+import { listenHintFor } from "../tools/listenhint.js";
 import { buildSongSnapshot } from "../tools/helpers.js";
 import {
   askConfirmation,
@@ -88,7 +89,8 @@ import {
   verifyToolResult,
 } from "../chat/gates.js";
 import * as fs from "node:fs";
-import { toolHooks, type Ctx } from "../state.js";
+import { friendlyToolError } from "../errors.js";
+import { toolHooks, toolState, type Ctx } from "../state.js";
 import { truncateResult } from "../chat/session.js";
 
 // ---------- Goal/Intent layer (goal/) ----------
@@ -599,6 +601,9 @@ function goalUnmetNote(
 export async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult> {
   const held = pendingGoal;
   if (!held) return null;
+  // The gate re-measures the Set (and may decode clip audio) — that work is
+  // "analyzing" from the user's seat, not idle thinking.
+  toolState.phase = "analyzing";
   try {
     // Rebuild the after-view against the current Set; when the goal (or a
     // plan built on it) judges source-file audio, decode first — the feature
@@ -752,7 +757,28 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
     pendingPlan = null;
     toolHooks.debugLog(context, `GOAL gate skipped: ${err instanceof Error ? err.message : String(err)}`);
     return null;
+  } finally {
+    toolState.phase = "thinking";
   }
+}
+
+/** UI phase per tool (toolState.phase → /api/status → the thinking bubble).
+ * Only long-feeling tools are named explicitly; the rest fall back by kind —
+ * reads are "reading", mutations "applying". The string is an i18n KEY the
+ * UI localizes, never user-facing text itself. */
+const TOOL_PHASES: Record<string, string> = {
+  generate_audio: "generating",
+  analyze_song: "analyzing",
+  move_analyze_set: "analyzing",
+  set_goal: "planning",
+  set_plan: "planning",
+  web_search: "searching",
+  web_fetch: "searching",
+  search_samples: "searching",
+};
+
+function phaseForTool(name: string): string {
+  return TOOL_PHASES[name] ?? (READ_ONLY_TOOLS.has(name) ? "reading" : "applying");
 }
 
 export async function callTool(
@@ -797,6 +823,7 @@ export async function callTool(
     }
   }
   let result: unknown;
+  toolState.phase = phaseForTool(name);
   try {
     result = await runTool(context, name, input);
     // Plan-layer step matching counts every call that actually ran — a call
@@ -804,9 +831,23 @@ export async function callTool(
     // happened"); the step's effect check carries that diagnosis instead.
     if (!PLAN_META_TOOLS.has(name)) executedToolsThisTurn.push(name);
   } catch (err) {
-    result = { error: err instanceof Error ? err.message : String(err) };
+    result = { error: friendlyToolError(err) };
+  } finally {
+    // The model digests the result next — back to the generic phase.
+    toolState.phase = "thinking";
   }
   result = await verifyToolResult(context, name, input, result);
+  // Deterministic listen hint (tools/listenhint.ts): after a successful
+  // mutation, tell the user what to play to judge the change. Advisory only —
+  // a hint bug must never fail or alter a working call.
+  if (result !== null && typeof result === "object" && !("error" in result)) {
+    try {
+      const hint = listenHintFor(context, name, input, result as Record<string, unknown>);
+      if (hint) result = { ...(result as Record<string, unknown>), listen_hint: hint };
+    } catch (err) {
+      toolHooks.debugLog(context, `LISTEN-HINT skipped ${name}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   // Count executed mutations so a set_goal declared mid-turn can flag that
   // its baseline is already post-change (handleSetGoal's late warning).
   if (

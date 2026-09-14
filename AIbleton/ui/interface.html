@@ -246,6 +246,24 @@
     #customFields { display: flex; flex-direction: column; gap: 8px; }
     #customFields.hidden { display: none; }
     .cfg-hint { font-size: 10px; color: var(--c-text-dim); line-height: 1.45; }
+    /* Per-provider connection status badge (Settings → AI 配置) */
+    .conn-badge { margin-left: auto; font-size: 10px; color: var(--c-text-dim); display: flex; align-items: center; gap: 4px; }
+    .conn-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-text-dim); flex: none; }
+    .conn-badge.ok { color: hsl(120, 45%, 60%); }
+    .conn-badge.ok .dot { background: hsl(120, 45%, 55%); }
+    .conn-badge.warn { color: var(--c-accent); }
+    .conn-badge.warn .dot { background: var(--c-accent); }
+    .conn-badge.err { color: hsl(0, 70%, 62%); }
+    .conn-badge.err .dot { background: hsl(0, 70%, 55%); }
+    .conn-test { display: flex; align-items: center; gap: 8px; }
+    .conn-test button {
+      background: var(--c-input-bg); color: var(--c-text);
+      border: 1px solid var(--c-border); border-radius: 3px;
+      font-size: 10px; padding: 3px 10px; cursor: pointer; flex: none;
+    }
+    .conn-test button:hover { color: var(--c-accent); border-color: var(--c-text-dim); }
+    .conn-test button:disabled { opacity: .5; cursor: default; }
+    #connTestOut { font-size: 10px; color: var(--c-text-dim); line-height: 1.4; }
 
     #log {
       flex: 1;
@@ -336,6 +354,21 @@
       max-height: 160px;
       overflow-y: auto;
     }
+    /* Listen-hint card under a steps group: what to play to judge the change. */
+    .hints {
+      align-self: flex-start;
+      flex: 0 0 auto;
+      max-width: 92%;
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-border);
+      border-left: 2px solid var(--c-accent);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: var(--c-text-dim);
+      line-height: 1.7;
+    }
+    .hints b { color: var(--c-text); font-weight: 600; }
 
     footer {
       display: flex;
@@ -484,6 +517,8 @@
       overflow: hidden;
     }
     .skill-row.active, .skill-row:hover { background: var(--c-border); }
+    .skill-row.skill-warn { color: hsl(40, 80%, 60%); cursor: default; font-size: 11px; }
+    .skill-row.skill-warn:hover { background: none; }
     .skill-row .s-name { color: var(--c-accent); flex-shrink: 0; }
     .skill-row .s-desc {
       color: var(--c-text-dim);
@@ -607,6 +642,10 @@
           <label><span data-i18n="baseUrl">API 地址</span><input id="cfgBase" autocomplete="off" spellcheck="false"></label>
           <label><span data-i18n="model">模型</span><input id="cfgModel" autocomplete="off" spellcheck="false"></label>
           <div class="cfg-hint" id="cfgHint" data-i18n="cfgHint">留空将自动使用本机 CLI 配置与默认值</div>
+          <div class="conn-test">
+            <button id="connTestBtn" data-i18n="testConnection">测试连接</button>
+            <span id="connTestOut"></span>
+          </div>
         </div>
       </div>
       <div class="set-view hidden" id="viewAudio">
@@ -761,8 +800,14 @@
         newChat: '新建对话', history: '历史对话',
         send: '发送', stop: '停止', inputPh: '输入消息，Enter 发送（Shift+Enter 换行）',
         thinking: '思考中…（可关闭窗口，任务在后台继续）',
+        phase_reading: '读取 Live Set…', phase_analyzing: '分析编曲…',
+        phase_generating: '生成音频…（通常需要几十秒）', phase_applying: '应用修改…',
+        phase_planning: '规划方案…', phase_searching: '联网搜索…',
         error: '出错：', noHistory: '暂无历史对话', delSession: '删除此对话', msgUnit: '条',
         stepsDone: '{n} 个操作',
+        hintPlayBar: '▶ 从第 {a} 小节播放', hintPlayRange: '▶ 播放第 {a}–{b} 小节',
+        hintPlaySession: '▶ 触发该场景试听',
+        hintTracks: '轨道：{t}', hintSolo: '建议 Solo「{t}」', hintAB: '建议 A/B 对比',
         cfgLoaded: '已加载本机 {p} 配置', cfgKeySet: '{p} · 使用自定义 API Key',
         cfgMissing: '未找到 {p} 认证信息，请在设置中填写 API Key',
         apiKey: 'API Key', baseUrl: 'API 地址', model: '模型',
@@ -774,6 +819,10 @@
         cfgHint: '留空将自动使用本机 CLI 配置与默认值',
         cfgHintCustom: 'Custom：API 地址与模型必填；本地服务（如 Ollama）可留空 API Key',
         apiKeyPhCustom: '可选，本地服务可留空',
+        testConnection: '测试连接', connTesting: '测试中…',
+        connConnected: '已连接', connNotConfigured: '未配置',
+        connAuthExpired: '认证失效', connModelUnavailable: '模型不可用',
+        connUnreachable: '无法连接', connError: '连接出错',
         effortDefault: '默认 Effort',
         effortTitle: '思考强度：更高 = 推理更深但更慢',
         attachTitle: '上传文件给 AI：图片/文本 ≤2MB，MIDI/Ableton 工程 ≤5MB；点击选择、拖入窗口或 ⌘V 粘贴',
@@ -786,7 +835,7 @@
         memoryConfig: '音乐人记忆', memName: '艺名', memGenres: '风格（逗号分隔）', memBpm: 'BPM 范围',
         memKeys: '常用调性', memSound: '音色偏好', memArtists: '参考艺人', memNotes: '备注',
         memHint: 'AI 每次对话都会带上这些记忆作为默认风格依据；聊天里说「记住我……」可新增。',
-        welcome: '你好！我是 Live 里的 AI 音乐制作助手。\n告诉我你想做什么、改什么、分析什么或优化什么，我可以直接操作你的 Live Set。试试：\n· 「写一条 dark techno 贝斯线」\n· 「分析这条轨道并给出改进建议」\n· 「让 drop 更有冲击力」',
+        welcome: '你好！我是 Live 里的 AI 音乐制作助手。\n告诉我你想创作什么、修改什么、分析什么或优化什么——我可以直接操作你的 Live Set。试试：\n· 「写一条 dark techno 贝斯线」\n· 「分析这个 Live Set 并给出改进建议」\n· 「让 drop 更有冲击力」',
       },
       en: {
         updateAvailable: 'New version v{v} available', updateGo: 'Download', updateLatest: 'Up to date',
@@ -796,8 +845,14 @@
         newChat: 'New chat', history: 'History',
         send: 'Send', stop: 'Stop', inputPh: 'Type a message — Enter to send (Shift+Enter for a new line)',
         thinking: 'Thinking… (you can close this window; the task continues in the background)',
+        phase_reading: 'Reading Live Set…', phase_analyzing: 'Analyzing arrangement…',
+        phase_generating: 'Generating audio… (usually takes tens of seconds)', phase_applying: 'Applying changes…',
+        phase_planning: 'Planning…', phase_searching: 'Searching the web…',
         error: 'Error: ', noHistory: 'No past conversations', delSession: 'Delete this conversation', msgUnit: '',
         stepsDone: '{n} actions',
+        hintPlayBar: '▶ Play from bar {a}', hintPlayRange: '▶ Play bars {a}–{b}',
+        hintPlaySession: '▶ Trigger the scene to hear it',
+        hintTracks: 'Track: {t}', hintSolo: 'Try soloing “{t}”', hintAB: 'Worth an A/B against the previous version',
         cfgLoaded: 'Loaded local {p} config', cfgKeySet: '{p} · custom API Key',
         cfgMissing: 'No {p} credentials found — add an API Key in Settings',
         apiKey: 'API Key', baseUrl: 'Base URL', model: 'Model',
@@ -809,6 +864,10 @@
         cfgHint: 'Leave empty to use local CLI config and defaults',
         cfgHintCustom: 'Custom: Base URL and model are required; local servers (e.g. Ollama) may leave the API Key empty',
         apiKeyPhCustom: 'Optional — local servers may leave empty',
+        testConnection: 'Test connection', connTesting: 'Testing…',
+        connConnected: 'Connected', connNotConfigured: 'Not configured',
+        connAuthExpired: 'Authentication expired', connModelUnavailable: 'Model unavailable',
+        connUnreachable: 'Unreachable', connError: 'Connection error',
         effortDefault: 'Default effort',
         effortTitle: 'Reasoning effort: higher = deeper but slower',
         attachTitle: 'Attach images/text (≤2MB), MIDI/Live sets (≤5MB): click, drag in, or paste',
@@ -821,7 +880,7 @@
         memoryConfig: 'Artist Memory', memName: 'Artist name', memGenres: 'Genres (comma-separated)', memBpm: 'BPM range',
         memKeys: 'Preferred keys', memSound: 'Sound preferences', memArtists: 'Reference artists', memNotes: 'Notes',
         memHint: 'The AI carries these memories into every chat as its default style context; say “remember I…” in chat to add one.',
-        welcome: 'Hi! I’m your AI music production agent inside Live.\nTell me what you want to make, change, analyze, or improve. I can work directly with your Live Set.\nTry:\n· “Create a dark techno bassline”\n· “Analyze this track and suggest improvements”\n· “Make the drop hit harder”',
+        welcome: 'Hi! I’m your AI music production agent inside Live.\nTell me what you want to create, change, analyze, or improve—I can work directly with your Live Set.\nTry:\n· “Create a dark techno bassline”\n· “Analyze this Live Set and suggest improvements”\n· “Make the drop hit harder”',
       },
       de: {
         updateAvailable: 'Neue Version v{v} verfügbar', updateGo: 'Herunterladen', updateLatest: 'Aktuell',
@@ -831,8 +890,14 @@
         newChat: 'Neuer Chat', history: 'Verlauf',
         send: 'Senden', stop: 'Stoppen', inputPh: 'Nachricht eingeben – Enter zum Senden (Umschalt+Enter für Zeilenumbruch)',
         thinking: 'Denkt nach… (Fenster kann geschlossen werden, die Aufgabe läuft im Hintergrund weiter)',
+        phase_reading: 'Live Set wird gelesen…', phase_analyzing: 'Arrangement wird analysiert…',
+        phase_generating: 'Audio wird generiert… (dauert meist einige zehn Sekunden)', phase_applying: 'Änderungen werden angewendet…',
+        phase_planning: 'Planung…', phase_searching: 'Websuche…',
         error: 'Fehler: ', noHistory: 'Keine früheren Unterhaltungen', delSession: 'Diese Unterhaltung löschen', msgUnit: '',
         stepsDone: '{n} Aktionen',
+        hintPlayBar: '▶ Ab Takt {a} abspielen', hintPlayRange: '▶ Takte {a}–{b} abspielen',
+        hintPlaySession: '▶ Szene zum Anhören triggern',
+        hintTracks: 'Spur: {t}', hintSolo: '„{t}“ solo schalten', hintAB: 'A/B-Vergleich lohnt sich',
         cfgLoaded: 'Lokale {p}-Konfiguration geladen', cfgKeySet: '{p} · eigener API-Schlüssel',
         cfgMissing: 'Keine {p}-Zugangsdaten gefunden – API-Schlüssel in den Einstellungen eintragen',
         apiKey: 'API-Schlüssel', baseUrl: 'API-Adresse', model: 'Modell',
@@ -844,6 +909,10 @@
         cfgHint: 'Leer lassen = lokale CLI-Konfiguration und Standardwerte',
         cfgHintCustom: 'Custom: API-Adresse und Modell erforderlich; lokale Server (z. B. Ollama) können ohne API-Schlüssel laufen',
         apiKeyPhCustom: 'Optional — lokale Server können leer bleiben',
+        testConnection: 'Verbindung testen', connTesting: 'Teste…',
+        connConnected: 'Verbunden', connNotConfigured: 'Nicht konfiguriert',
+        connAuthExpired: 'Authentifizierung abgelaufen', connModelUnavailable: 'Modell nicht verfügbar',
+        connUnreachable: 'Nicht erreichbar', connError: 'Verbindungsfehler',
         effortDefault: 'Standard-Effort',
         effortTitle: 'Denktiefe: höher = gründlicher, aber langsamer',
         attachTitle: 'Dateien anhängen: Bilder/Text ≤2MB, MIDI/Live-Sets ≤5MB — klicken, ziehen oder einfügen',
@@ -856,7 +925,7 @@
         memoryConfig: 'Künstlergedächtnis', memName: 'Künstlername', memGenres: 'Genres (kommagetrennt)', memBpm: 'BPM-Bereich',
         memKeys: 'Bevorzugte Tonarten', memSound: 'Klangpräferenzen', memArtists: 'Referenzkünstler', memNotes: 'Notizen',
         memHint: 'Die KI nimmt diese Erinnerungen in jeden Chat als Standard-Stilkontext mit; „Merke dir, ich …“ im Chat fügt eine hinzu.',
-        welcome: 'Hallo! Ich bin dein AI-Musikproduktions-Agent in Live.\nSag mir, was du machen, ändern, analysieren oder verbessern willst. Ich arbeite direkt mit deinem Live Set.\nProbier mal:\n· „Erstelle eine düstere Techno-Bassline“\n· „Analysiere diese Spur und schlag Verbesserungen vor“\n· „Lass den Drop härter zuschlagen“',
+        welcome: 'Hallo! Ich bin dein AI-Musikproduktions-Agent in Live.\nSag mir, was du erstellen, ändern, analysieren oder verbessern willst – ich kann direkt mit deinem Live Set arbeiten.\nProbier mal:\n· „Erstelle eine düstere Techno-Bassline“\n· „Analysiere dieses Live Set und schlag Verbesserungen vor“\n· „Lass den Drop härter zuschlagen“',
       },
       fr: {
         updateAvailable: 'Nouvelle version v{v} disponible', updateGo: 'Télécharger', updateLatest: 'À jour',
@@ -866,8 +935,14 @@
         newChat: 'Nouvelle conversation', history: 'Historique',
         send: 'Envoyer', stop: 'Arrêter', inputPh: 'Saisissez un message — Entrée pour envoyer (Maj+Entrée pour sauter une ligne)',
         thinking: 'Réflexion… (vous pouvez fermer la fenêtre, la tâche continue en arrière-plan)',
+        phase_reading: 'Lecture du Live Set…', phase_analyzing: 'Analyse de l’arrangement…',
+        phase_generating: 'Génération audio… (comptez quelques dizaines de secondes)', phase_applying: 'Application des modifications…',
+        phase_planning: 'Planification…', phase_searching: 'Recherche web…',
         error: 'Erreur : ', noHistory: 'Aucune conversation passée', delSession: 'Supprimer cette conversation', msgUnit: '',
         stepsDone: '{n} actions',
+        hintPlayBar: '▶ Écouter à partir de la mesure {a}', hintPlayRange: '▶ Écouter les mesures {a}–{b}',
+        hintPlaySession: '▶ Déclenchez la scène pour écouter',
+        hintTracks: 'Piste : {t}', hintSolo: 'Essayez « {t} » en solo', hintAB: 'Comparaison A/B conseillée',
         cfgLoaded: 'Configuration {p} locale chargée', cfgKeySet: '{p} · clé API personnalisée',
         cfgMissing: 'Aucun identifiant {p} trouvé — ajoutez une clé API dans les paramètres',
         apiKey: 'Clé API', baseUrl: 'Adresse API', model: 'Modèle',
@@ -879,6 +954,10 @@
         cfgHint: 'Laisser vide = config CLI locale et valeurs par défaut',
         cfgHintCustom: 'Custom : adresse API et modèle requis ; les serveurs locaux (ex. Ollama) peuvent laisser la clé API vide',
         apiKeyPhCustom: 'Optionnel — les serveurs locaux peuvent laisser vide',
+        testConnection: 'Tester la connexion', connTesting: 'Test en cours…',
+        connConnected: 'Connecté', connNotConfigured: 'Non configuré',
+        connAuthExpired: 'Authentification expirée', connModelUnavailable: 'Modèle indisponible',
+        connUnreachable: 'Inaccessible', connError: 'Erreur de connexion',
         effortDefault: 'Effort par défaut',
         effortTitle: 'Intensité de raisonnement : plus haut = plus profond mais plus lent',
         attachTitle: 'Joindre images/texte (≤2Mo), MIDI/Live Sets (≤5Mo) : cliquer, glisser ou coller',
@@ -891,7 +970,7 @@
         memoryConfig: 'Mémoire d’artiste', memName: 'Nom d’artiste', memGenres: 'Genres (séparés par des virgules)', memBpm: 'Plage de BPM',
         memKeys: 'Tonalités préférées', memSound: 'Préférences sonores', memArtists: 'Artistes de référence', memNotes: 'Notes',
         memHint: 'L’IA emporte ces souvenirs dans chaque conversation comme contexte de style par défaut ; « retiens que je… » dans le chat en ajoute un.',
-        welcome: 'Bonjour ! Je suis votre agent IA de production musicale dans Live.\nDites-moi ce que vous voulez créer, modifier, analyser ou améliorer. Je peux travailler directement sur votre Set Live.\nEssayez :\n· « Crée une basse techno sombre »\n· « Analyse cette piste et propose des améliorations »\n· « Rends le drop plus percutant »',
+        welcome: 'Bonjour ! Je suis votre agent IA de production musicale dans Live.\nDites-moi ce que vous voulez créer, modifier, analyser ou améliorer — je peux travailler directement sur votre Set Live.\nEssayez :\n· « Crée une basse techno sombre »\n· « Analyse ce Set Live et propose des améliorations »\n· « Rends le drop plus percutant »',
       },
       ja: {
         updateAvailable: '新しいバージョン v{v} があります', updateGo: 'ダウンロード', updateLatest: '最新です',
@@ -901,8 +980,14 @@
         newChat: '新規チャット', history: '履歴',
         send: '送信', stop: '停止', inputPh: 'メッセージを入力 — Enter で送信（Shift+Enter で改行）',
         thinking: '思考中…（ウィンドウを閉じてもタスクはバックグラウンドで続行）',
+        phase_reading: 'Live Set を読み込み中…', phase_analyzing: 'アレンジを解析中…',
+        phase_generating: 'オーディオ生成中…（数十秒かかることがあります）', phase_applying: '変更を適用中…',
+        phase_planning: 'プラン作成中…', phase_searching: 'Web を検索中…',
         error: 'エラー：', noHistory: '過去の会話はありません', delSession: 'この会話を削除', msgUnit: '件',
         stepsDone: '{n} 件の操作',
+        hintPlayBar: '▶ {a} 小節目から再生', hintPlayRange: '▶ {a}–{b} 小節を再生',
+        hintPlaySession: '▶ シーンをトリガーして試聴',
+        hintTracks: 'トラック：{t}', hintSolo: '「{t}」を Solo にしてみる', hintAB: 'A/B 比較をおすすめ',
         cfgLoaded: 'ローカルの {p} 設定を読み込みました', cfgKeySet: '{p} · カスタム API キー',
         cfgMissing: '{p} の認証情報が見つかりません — 設定で API キーを入力してください',
         apiKey: 'API キー', baseUrl: 'API アドレス', model: 'モデル',
@@ -914,6 +999,10 @@
         cfgHint: '空欄ならローカル CLI 設定とデフォルト値を使用します',
         cfgHintCustom: 'Custom：API アドレスとモデルは必須です。ローカルサーバー（Ollama 等）は API キー空欄可',
         apiKeyPhCustom: '任意 — ローカルサーバーは空欄可',
+        testConnection: '接続テスト', connTesting: 'テスト中…',
+        connConnected: '接続済み', connNotConfigured: '未設定',
+        connAuthExpired: '認証の有効期限切れ', connModelUnavailable: 'モデル利用不可',
+        connUnreachable: '接続できません', connError: '接続エラー',
         effortDefault: 'デフォルト',
         effortTitle: '思考の強さ：高いほど深く推論しますが遅くなります',
         attachTitle: 'ファイル添付：画像/テキスト ≤2MB、MIDI/Live Set ≤5MB。クリック、ドラッグ、または貼り付け',
@@ -926,7 +1015,7 @@
         memoryConfig: 'アーティストメモリー', memName: 'アーティスト名', memGenres: 'ジャンル（カンマ区切り）', memBpm: 'BPM 範囲',
         memKeys: 'よく使う調', memSound: '音色の好み', memArtists: '参考アーティスト', memNotes: 'メモ',
         memHint: 'AI は毎回のチャットでこれらの記憶をデフォルトのスタイル情報として使います。チャットで「覚えて：私は…」と言うと追加できます。',
-        welcome: 'こんにちは！Live 内の AI 音楽制作エージェントです。\n作りたいこと、変えたいこと、分析や改善したいことを教えてください。Live Set を直接操作できます。\n試してみて：\n· 「ダークなテクノのベースラインを作って」\n· 「このトラックを分析して改善案を出して」\n· 「ドロップをもっと強く叩きつけて」',
+        welcome: 'こんにちは！Live 内の AI 音楽制作エージェントです。\n作りたいこと、変えたいこと、分析や改善したいことを教えてください。Live Set を直接操作できます。\n試してみて：\n· 「ダークなテクノのベースラインを作って」\n· 「この Live Set を分析して改善案を出して」\n· 「ドロップをもっと強く叩きつけて」',
       },
       es: {
         updateAvailable: 'Nueva versión v{v} disponible', updateGo: 'Descargar', updateLatest: 'Actualizado',
@@ -936,8 +1025,14 @@
         newChat: 'Nuevo chat', history: 'Historial',
         send: 'Enviar', stop: 'Detener', inputPh: 'Escribe un mensaje — Enter para enviar (Mayús+Enter para nueva línea)',
         thinking: 'Pensando… (puedes cerrar la ventana; la tarea continúa en segundo plano)',
+        phase_reading: 'Leyendo el Live Set…', phase_analyzing: 'Analizando el arreglo…',
+        phase_generating: 'Generando audio… (suele tardar decenas de segundos)', phase_applying: 'Aplicando cambios…',
+        phase_planning: 'Planificando…', phase_searching: 'Buscando en la web…',
         error: 'Error: ', noHistory: 'No hay conversaciones', delSession: 'Eliminar esta conversación', msgUnit: '',
         stepsDone: '{n} acciones',
+        hintPlayBar: '▶ Reproducir desde el compás {a}', hintPlayRange: '▶ Reproducir compases {a}–{b}',
+        hintPlaySession: '▶ Dispara la escena para escucharla',
+        hintTracks: 'Pista: {t}', hintSolo: 'Prueba «{t}» en solo', hintAB: 'Conviene una comparación A/B',
         cfgLoaded: 'Configuración local de {p} cargada', cfgKeySet: '{p} · API Key personalizada',
         cfgMissing: 'No se encontraron credenciales de {p} — añade una API Key en Ajustes',
         apiKey: 'API Key', baseUrl: 'Dirección API', model: 'Modelo',
@@ -949,6 +1044,10 @@
         cfgHint: 'Vacío = config CLI local y valores por defecto',
         cfgHintCustom: 'Custom: la dirección API y el modelo son obligatorios; los servidores locales (p. ej. Ollama) pueden dejar la API Key vacía',
         apiKeyPhCustom: 'Opcional — los servidores locales pueden dejarlo vacío',
+        testConnection: 'Probar conexión', connTesting: 'Probando…',
+        connConnected: 'Conectado', connNotConfigured: 'No configurado',
+        connAuthExpired: 'Autenticación caducada', connModelUnavailable: 'Modelo no disponible',
+        connUnreachable: 'Inalcanzable', connError: 'Error de conexión',
         effortDefault: 'Effort por defecto',
         effortTitle: 'Intensidad de razonamiento: mayor = más profundo pero más lento',
         attachTitle: 'Adjuntar imágenes/texto (≤2MB), MIDI/Sets de Live (≤5MB): clic, arrastrar o pegar',
@@ -961,7 +1060,7 @@
         memoryConfig: 'Memoria de artista', memName: 'Nombre artístico', memGenres: 'Géneros (separados por comas)', memBpm: 'Rango de BPM',
         memKeys: 'Tonalidades preferidas', memSound: 'Preferencias de sonido', memArtists: 'Artistas de referencia', memNotes: 'Notas',
         memHint: 'La IA lleva estos recuerdos a cada chat como contexto de estilo por defecto; di «recuerda que yo…» en el chat para añadir uno.',
-        welcome: '¡Hola! Soy tu agente de IA para producción musical dentro de Live.\nDime qué quieres crear, cambiar, analizar o mejorar. Puedo trabajar directamente con tu Set de Live.\nPrueba:\n· «Crea una línea de bajo de techno oscuro»\n· «Analiza esta pista y sugiere mejoras»\n· «Haz que el drop pegue más fuerte»',
+        welcome: '¡Hola! Soy tu agente de IA para producción musical dentro de Live.\nDime qué quieres crear, cambiar, analizar o mejorar — puedo trabajar directamente con tu Set de Live.\nPrueba:\n· «Crea una línea de bajo de techno oscuro»\n· «Analiza este Set de Live y sugiere mejoras»\n· «Haz que el drop pegue más fuerte»',
       },
       it: {
         updateAvailable: 'Nuova versione v{v} disponibile', updateGo: 'Scarica', updateLatest: 'Aggiornato',
@@ -971,8 +1070,14 @@
         newChat: 'Nuova chat', history: 'Cronologia',
         send: 'Invia', stop: 'Interrompi', inputPh: 'Scrivi un messaggio — Invio per inviare (Maiusc+Invio per andare a capo)',
         thinking: 'Sto pensando… (puoi chiudere la finestra; l’attività continua in background)',
+        phase_reading: 'Lettura del Live Set…', phase_analyzing: 'Analisi dell’arrangiamento…',
+        phase_generating: 'Generazione audio… (di solito richiede decine di secondi)', phase_applying: 'Applicazione delle modifiche…',
+        phase_planning: 'Pianificazione…', phase_searching: 'Ricerca web…',
         error: 'Errore: ', noHistory: 'Nessuna conversazione passata', delSession: 'Elimina questa conversazione', msgUnit: '',
         stepsDone: '{n} azioni',
+        hintPlayBar: '▶ Riproduci dalla battuta {a}', hintPlayRange: '▶ Riproduci battute {a}–{b}',
+        hintPlaySession: '▶ Lancia la scena per ascoltare',
+        hintTracks: 'Traccia: {t}', hintSolo: 'Prova «{t}» in solo', hintAB: 'Confronto A/B consigliato',
         cfgLoaded: 'Configurazione locale di {p} caricata', cfgKeySet: '{p} · API Key personalizzata',
         cfgMissing: 'Nessuna credenziale {p} trovata — aggiungi una API Key nelle Impostazioni',
         apiKey: 'API Key', baseUrl: 'Indirizzo API', model: 'Modello',
@@ -984,6 +1089,10 @@
         cfgHint: 'Vuoto = config CLI locale e valori predefiniti',
         cfgHintCustom: 'Custom: indirizzo API e modello obbligatori; i server locali (es. Ollama) possono lasciare vuota la API Key',
         apiKeyPhCustom: 'Opzionale — i server locali possono lasciarlo vuoto',
+        testConnection: 'Testa connessione', connTesting: 'Test in corso…',
+        connConnected: 'Connesso', connNotConfigured: 'Non configurato',
+        connAuthExpired: 'Autenticazione scaduta', connModelUnavailable: 'Modello non disponibile',
+        connUnreachable: 'Irraggiungibile', connError: 'Errore di connessione',
         effortDefault: 'Effort predefinito',
         effortTitle: 'Intensità di ragionamento: più alta = più profonda ma più lenta',
         attachTitle: 'Allega immagini/testo (≤2MB), MIDI/Live Set (≤5MB): clic, trascina o incolla',
@@ -996,7 +1105,7 @@
         memoryConfig: 'Memoria artista', memName: 'Nome d’arte', memGenres: 'Generi (separati da virgola)', memBpm: 'Intervallo BPM',
         memKeys: 'Tonalità preferite', memSound: 'Preferenze timbriche', memArtists: 'Artisti di riferimento', memNotes: 'Note',
         memHint: 'L’IA porta questi ricordi in ogni chat come contesto di stile predefinito; dì «ricorda che io…» in chat per aggiungerne uno.',
-        welcome: 'Ciao! Sono il tuo agente AI per la produzione musicale dentro Live.\nDimmi cosa vuoi creare, modificare, analizzare o migliorare. Posso lavorare direttamente sul tuo Set di Live.\nProva:\n· «Crea una bassline techno scura»\n· «Analizza questa traccia e suggerisci miglioramenti»\n· «Rendi il drop più incisivo»',
+        welcome: 'Ciao! Sono il tuo agente AI per la produzione musicale dentro Live.\nDimmi cosa vuoi creare, modificare, analizzare o migliorare — posso lavorare direttamente sul tuo Set di Live.\nProva:\n· «Crea una bassline techno scura»\n· «Analizza questo Set di Live e suggerisci miglioramenti»\n· «Rendi il drop più incisivo»',
       },
     };
 
@@ -1085,6 +1194,8 @@
         localStorage.setItem(`ai.${currentProvider}.${f}`, cfgInputs[f].value);
         saveProviderFields();
         refreshHealth();
+        // New credentials/baseUrl/model — re-check this provider's badge.
+        testProvider(currentProvider, false);
       });
     }
     cfgInputs.model.addEventListener('input', () => updateModelName());
@@ -1124,6 +1235,8 @@
 
     function showView(id) {
       settingsPanel.querySelectorAll('.set-view').forEach(v => v.classList.toggle('hidden', v.id !== id));
+      // Opening the AI view re-checks every provider badge (quick, keyless probes).
+      if (id === 'viewAI') testAllProviders();
     }
     settingsPanel.querySelectorAll('[data-goto]').forEach(el =>
       el.addEventListener('click', () => showView(el.dataset.goto)));
@@ -1166,7 +1279,11 @@
         tick.textContent = code === currentProvider ? '✓' : '';
         const name = document.createElement('span');
         name.textContent = p.name;
-        row.append(tick, name);
+        const badge = document.createElement('span');
+        badge.className = 'conn-badge';
+        connBadges[code] = badge;
+        row.append(tick, name, badge);
+        renderConnBadge(code);
         row.addEventListener('click', (e) => {
           e.stopPropagation();
           if (code !== currentProvider) {
@@ -1189,6 +1306,72 @@
         providerList.appendChild(row);
       }
     }
+
+    // ---------- Connection status (Settings → AI 配置) ----------
+    // Badge per provider row; quick probes fire when the view opens (free
+    // models-list calls only), the button runs the full probe which may spend
+    // a 1-token generation on endpoints without a model list.
+    const CONN_KEYS = {
+      connected: 'connConnected', not_configured: 'connNotConfigured',
+      auth_expired: 'connAuthExpired', model_unavailable: 'connModelUnavailable',
+      unreachable: 'connUnreachable', error: 'connError',
+    };
+    const CONN_CLASS = {
+      connected: 'ok', not_configured: '', testing: '',
+      model_unavailable: 'warn', unreachable: 'err', error: 'err',
+    };
+    const connBadges = {};            // provider → badge element
+    const connState = {};             // provider → last result {status, detail}
+    const connTestBtn = document.getElementById('connTestBtn');
+    const connTestOut = document.getElementById('connTestOut');
+
+    function connLabel(st) {
+      return st.status === 'testing' ? t('connTesting') : t(CONN_KEYS[st.status] || 'connError');
+    }
+    function renderConnBadge(p) {
+      const el = connBadges[p];
+      if (!el) return;
+      const st = connState[p];
+      el.className = 'conn-badge' + (st && CONN_CLASS[st.status] ? ' ' + CONN_CLASS[st.status] : '');
+      el.innerHTML = '';
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      const txt = document.createElement('span');
+      txt.textContent = st ? connLabel(st) : '';
+      el.append(dot, txt);
+      el.title = (st && st.detail) || '';
+    }
+    function renderConnOut() {
+      const st = connState[currentProvider];
+      connTestOut.textContent = st ? connLabel(st) + (st.detail ? ` · ${st.detail}` : '') : '';
+    }
+    function testProvider(p, full) {
+      connState[p] = { status: 'testing' };
+      renderConnBadge(p);
+      if (p === currentProvider) {
+        connTestBtn.disabled = true;
+        renderConnOut();
+      }
+      return fetch('/api/test-connection?provider=' + p + (full ? '&full=1' : ''))
+        .then(r => r.json())
+        .then(res => {
+          connState[p] = { status: res.status || 'error', detail: res.detail || '' };
+        })
+        .catch(() => {
+          connState[p] = { status: 'unreachable', detail: '' };
+        })
+        .finally(() => {
+          renderConnBadge(p);
+          if (p === currentProvider) {
+            connTestBtn.disabled = false;
+            renderConnOut();
+          }
+        });
+    }
+    function testAllProviders() {
+      for (const p of Object.keys(PROVIDERS)) testProvider(p, false);
+    }
+    connTestBtn.addEventListener('click', () => testProvider(currentProvider, true));
 
     // ---------- Audio generation providers (Settings → 音频生成) ----------
     const AUDIO_PROVIDERS = {
@@ -1515,6 +1698,9 @@
       loadAudioFields();
       renderEfforts();
       refreshHealth();
+      // Status badges + test output hold localized text — re-render on switch.
+      for (const p of Object.keys(connBadges)) renderConnBadge(p);
+      renderConnOut();
     }
 
     // Conversation history lives on the extension server (persisted to disk),
@@ -1559,6 +1745,42 @@
       for (const a of actions) list.appendChild(addAction(a.tool, a.input, a.result));
       det.append(sum, list);
       log.appendChild(det);
+      addListenHints(actions);
+    }
+
+    // Listen-hint card under a steps group: the server attaches a
+    // deterministic listen_hint to mutating tool results (what to play to
+    // judge the change). One line per distinct hint, deduped.
+    function addListenHints(actions) {
+      const lines = [];
+      for (const a of actions) {
+        const h = a.result && typeof a.result === 'object' ? a.result.listen_hint : null;
+        if (!h || !Array.isArray(h.tracks) || !h.tracks.length) continue;
+        const sep2 = (currentLang === 'zh' || currentLang === 'ja') ? '、' : ', ';
+        const parts = [];
+        if (typeof h.start_bar === 'number') {
+          parts.push(h.end_bar
+            ? t('hintPlayRange').replace('{a}', h.start_bar).replace('{b}', h.end_bar)
+            : t('hintPlayBar').replace('{a}', h.start_bar));
+        } else {
+          parts.push(t('hintPlaySession'));
+        }
+        parts.push(t('hintTracks').replace('{t}', h.tracks.join(sep2)));
+        if (h.suggest_solo) parts.push(t('hintSolo').replace('{t}', h.suggest_solo));
+        if (h.suggest_ab) parts.push(t('hintAB'));
+        const line = parts.join(' · ');
+        if (!lines.includes(line)) lines.push(line);
+      }
+      if (!lines.length) return;
+      const div = document.createElement('div');
+      div.className = 'hints';
+      for (const line of lines) {
+        const row = document.createElement('div');
+        row.textContent = line;
+        div.appendChild(row);
+      }
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
     }
 
     // Traffic-light buttons: post close_and_send to the Live host to dismiss the dialog.
@@ -1622,7 +1844,7 @@
     }
 
     function renderMessages(messages) {
-      log.querySelectorAll('.msg, .steps').forEach(el => el.remove());
+      log.querySelectorAll('.msg, .steps, .hints').forEach(el => el.remove());
       if (!messages || !messages.length) {
         log.appendChild(welcome);
         return;
@@ -1651,10 +1873,20 @@
       sendBtn.title = on ? t('stop') : t('send');
     }
 
-    function setThinking(on) {
-      if (on && !thinkingEl) {
-        thinkingEl = addMsg('thinking', t('thinking'));
-      } else if (!on && thinkingEl) {
+    // phase = coarse server-side stage key (thinking/reading/analyzing/
+    // generating/applying/planning/searching) — long tasks show WHAT is
+    // happening, not just that the task is still alive.
+    function thinkingLabel(phase) {
+      const key = 'phase_' + phase;
+      return (phase && I18N.en[key]) ? t(key) : t('thinking');
+    }
+
+    function setThinking(on, phase) {
+      if (on) {
+        const label = thinkingLabel(phase);
+        if (!thinkingEl) thinkingEl = addMsg('thinking', label);
+        else if (thinkingEl.textContent !== label) thinkingEl.textContent = label;
+      } else if (thinkingEl) {
         thinkingEl.remove();
         thinkingEl = null;
       }
@@ -1664,7 +1896,7 @@
       const s = await fetch('/api/status').then(r => r.json()).catch(() => null);
       if (!s) return;
       if (s.busy) {
-        setThinking(true);
+        setThinking(true, s.phase);
         showConfirm(s.pending || null);
         setTimeout(pollStatus, 900);
         return;
@@ -1714,7 +1946,7 @@
     fetch('/api/status').then(r => r.json()).then(s => {
       if (s && s.busy) {
         setBusy(true);
-        setThinking(true);
+        setThinking(true, s.phase);
         setTimeout(pollStatus, 700);
       }
     }).catch(() => {});
@@ -2060,12 +2292,16 @@
     // 选中后插入 "/name "，发送时服务端按显式调用强制加载该 skill。
     const skillPop = document.getElementById('skillPop');
     let SKILLS = [];
+    let SKILL_PROBLEMS = []; // 格式错误未能加载的 skill（服务端 /api/skills 返回）
     let skillSel = 0;   // 当前高亮行
     let skillHits = []; // 当前过滤结果
 
     fetch('/api/skills')
       .then((r) => r.json())
-      .then((list) => { SKILLS = Array.isArray(list) ? list : []; })
+      .then((data) => {
+        SKILLS = Array.isArray(data && data.skills) ? data.skills : [];
+        SKILL_PROBLEMS = Array.isArray(data && data.problems) ? data.problems : [];
+      })
       .catch(() => {});
 
     // 只有输入框内容形如 "/xxx"（单 token）时才视为正在挑 skill
@@ -2081,13 +2317,13 @@
 
     function renderSkillPop() {
       const q = slashQuery();
-      if (q === null || !SKILLS.length) { closeSkillPop(); return; }
+      if (q === null || (!SKILLS.length && !SKILL_PROBLEMS.length)) { closeSkillPop(); return; }
       skillHits = SKILLS.filter((s) =>
         s.name.toLowerCase().includes(q) ||
         (s.triggers || []).some((t) => t.toLowerCase().includes(q)) ||
         (s.description || '').toLowerCase().includes(q)
       ).slice(0, 8);
-      if (!skillHits.length) { closeSkillPop(); return; }
+      if (!skillHits.length && !SKILL_PROBLEMS.length) { closeSkillPop(); return; }
       skillSel = Math.min(skillSel, skillHits.length - 1);
       skillPop.innerHTML = '';
       skillHits.forEach((s, i) => {
@@ -2101,6 +2337,13 @@
         desc.textContent = s.description || (s.triggers || []).join(' · ');
         row.append(name, desc);
         row.addEventListener('mousedown', (e) => { e.preventDefault(); pickSkill(i); });
+        skillPop.appendChild(row);
+      });
+      // 格式问题的 skill 不再静默消失：在选择器底部指出文件夹与修法。
+      SKILL_PROBLEMS.forEach((p) => {
+        const row = document.createElement('div');
+        row.className = 'skill-row skill-warn';
+        row.textContent = '⚠ ' + p.folder + ': ' + p.issue;
         skillPop.appendChild(row);
       });
       skillPop.classList.remove('hidden');
