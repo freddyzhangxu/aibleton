@@ -524,7 +524,10 @@ export async function runTool(
       const kit = resolveKit(root, style);
       const missing = kit.filter((p) => !pathExists(path.join(root, p.file)));
       if (missing.length) {
-        throw new Error("缺少采样文件: " + missing.map((m) => m.file).join(", "));
+        throw new Error(
+          "缺少采样文件: " + missing.map((m) => m.file).join(", ") +
+            " — Drum Essentials 包不完整；改用 search_samples 找替代采样，再用 load_sample 手动加载",
+        );
       }
 
       const build = () => {
@@ -582,7 +585,9 @@ export async function runTool(
         throw new Error(`轨道 ${ref.index}（${track.name}）不是音频轨道，先用 create_audio_track 建一条`);
       }
       const filePath = String(input.file_path ?? "");
-      if (!pathExists(filePath)) throw new Error(`文件不存在: ${filePath}`);
+      if (!pathExists(filePath)) {
+        throw new Error(`找不到文件: ${filePath} — 用 search_samples 按关键词搜索可用样本，或检查路径拼写`);
+      }
       const managed = await context.resources.importIntoProject(filePath);
       const clip = await context.withinTransaction(() =>
         track.createAudioClip({
@@ -598,7 +603,9 @@ export async function runTool(
       const ref = resolveTrack(context, input, "track_index");
       const track = ref.track;
       const filePath = String(input.file_path ?? "");
-      if (!pathExists(filePath)) throw new Error(`文件不存在: ${filePath}`);
+      if (!pathExists(filePath)) {
+        throw new Error(`找不到文件: ${filePath} — 用 search_samples 按关键词搜索可用样本，或检查路径拼写`);
+      }
       const managed = await context.resources.importIntoProject(filePath);
       let simpler = track.devices.find((d): d is Simpler<"1.0.0"> => d instanceof Simpler);
       if (!simpler) {
@@ -626,6 +633,7 @@ export async function runTool(
           seconds: duration,
           instrumental: typeof input.instrumental === "boolean" ? input.instrumental : undefined,
           lyrics: typeof input.lyrics === "string" ? input.lyrics : undefined,
+          language: toolState.activeLanguage,
         },
         toolState.abortCtl?.signal ?? undefined,
       );
@@ -747,7 +755,12 @@ export async function runTool(
       if (!(clip instanceof MidiClip)) throw new Error("该 clip 不是 MIDI clip");
       const notes = parseNotes(input.notes, clip.duration);
       clip.notes = notes;
-      return trackResult(ref, { clip: clip.name, noteCount: notes.length });
+      return trackResult(ref, {
+        clip: clip.name,
+        noteCount: notes.length,
+        start: Number(clip.startTime),
+        length: Number(clip.duration),
+      });
     }
     case "rename_scene": {
       const scenes = song.scenes;

@@ -39,6 +39,7 @@ import {
 import { answerConfirmation, getPendingConfirm } from "./chat/gates.js";
 import { resolveConfig, type Attachment, type ChatRequest } from "./chat/config.js";
 import { resetTurnState } from "./agent/runtime.js";
+import { updateSetContext } from "./setcontext.js";
 import { chatAnthropic } from "./chat/providers/anthropic.js";
 import { chatOpenAI, ensureCodexAuth } from "./chat/providers/openai.js";
 import { chatCustom } from "./chat/providers/custom.js";
@@ -46,7 +47,9 @@ import { chatGemini } from "./chat/providers/gemini.js";
 import { toolHooks, toolState, type ArtistMemory } from "./state.js";
 import { toBpm, toStrArr } from "./tools/helpers.js";
 import { NO_AUTH_HINT } from "./prompts.js";
-import { loadSkills, matchSkills } from "./skills.js";
+import { loadSkills, matchSkills, skillProblems } from "./skills.js";
+import { testConnection } from "./chat/testconn.js";
+import { errMessage } from "./errors.js";
 
 // ---------- Local sample library search ----------
 
@@ -344,6 +347,10 @@ async function chat(context: Ctx, req: ChatRequest) {
   // A new user turn: any goal from the previous turn has already been judged
   // (or abandoned) — never let a stale goal gate an unrelated request.
   resetTurnState();
+  // Refresh the current-Set identity for the system prompt — flags the turn
+  // when the user has opened a different Set since the previous message.
+  const setFp = updateSetContext(context);
+  if (setFp) debugLog(context, `SET key=${setFp.key}${setFp.changed ? " CHANGED" : ""}`);
   const cfg = resolveConfig(req);
   // Custom endpoints may legitimately need no key (Ollama & co.) — they get
   // their own validation (baseUrl + model) inside chatCustom instead.
@@ -415,6 +422,26 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         model: cfg.model,
         source,
       }));
+      return;
+    }
+    // Settings-page connection probe (see chat/testconn.ts). Quick mode
+    // (?full absent) only makes free models-list calls — the UI fires it for
+    // every provider badge when the AI settings view opens. full=1 is the
+    // explicit "Test connection" button and may spend a 1-token generation
+    // on endpoints that expose no model list.
+    if (req.method === "GET" && req.url?.startsWith("/api/test-connection")) {
+      const u = new URL(req.url, "http://127.0.0.1");
+      const providerParam = u.searchParams.get("provider") ?? undefined;
+      const provider: Provider =
+        providerParam === "codex" || providerParam === "gemini" || providerParam === "custom"
+          ? providerParam
+          : "claude";
+      const full = u.searchParams.get("full") === "1";
+      void testConnection(provider, full).then(
+        (r) => send(200, JSON.stringify({ provider, ...r })),
+        (err) =>
+          send(200, JSON.stringify({ provider, status: "error", detail: errMessage(err).slice(0, 160) })),
+      );
       return;
     }
     if (req.method === "GET" && req.url?.startsWith("/api/provider-config")) {
@@ -624,11 +651,14 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     }
     if (req.method === "GET" && req.url === "/api/skills") {
       // Slash-picker listing: metadata only, bodies load server-side on match.
+      // problems = folders whose SKILL.md exists but didn't load cleanly, so a
+      // broken skill surfaces in the picker instead of vanishing silently.
       send(
         200,
-        JSON.stringify(
-          loadSkills().map((s) => ({ name: s.name, description: s.description, triggers: s.triggers })),
-        ),
+        JSON.stringify({
+          skills: loadSkills().map((s) => ({ name: s.name, description: s.description, triggers: s.triggers })),
+          problems: skillProblems(),
+        }),
       );
       return;
     }
@@ -686,6 +716,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         busy,
         error: lastError,
         pending: getPendingConfirm(),
+        phase: toolState.phase,
       }));
       return;
     }
@@ -774,6 +805,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         toolState.activeAudioConfig = resolveAudioConfig(
           mergeAudioRequest(parsed.audio as AudioRequestConfig | undefined));
         toolState.activeLanguage = typeof parsed.language === "string" ? parsed.language : undefined;
+        toolState.phase = "thinking";
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT
         // stop it. Clients poll /api/status and then read /api/history.
@@ -796,6 +828,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             busy = false;
             toolState.abortCtl = null;
             toolState.activeLanguage = undefined;
+            toolState.phase = null;
             // Never leave a confirmation dangling past its task's lifetime.
             answerConfirmation(false);
           }

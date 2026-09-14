@@ -8,6 +8,7 @@ import {
   truncateResult,
 } from "../session.js";
 import { callTool, goalGate } from "../../agent/runtime.js";
+import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 
@@ -61,6 +62,12 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
 
   // Bounded retries when max_tokens truncates a text-only answer (see below).
   let continuations = 0;
+  // Visible text salvaged from truncated rounds — without this the user only
+  // ever sees the LAST round's text and earlier partials are silently lost.
+  let textCarry = "";
+  // Set when a round burns its whole budget on thinking: drop the thinking
+  // field for the rest of this task so the model acts instead of deliberating.
+  let suppressThinking = false;
 
   for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
@@ -81,13 +88,14 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
       system: systemPromptFor(req.language),
       tools: chatTools,
       messages,
-      ...(thinking ? { thinking } : {}),
+      ...(thinking && !suppressThinking ? { thinking } : {}),
     });
     let data: {
       content?: { type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }[];
       stop_reason?: string;
       error?: { message?: string };
     };
+    let status = 0;
     try {
       const res = await fetch(`${baseUrl}/v1/messages`, {
         method: "POST",
@@ -95,18 +103,32 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
         body: requestBody,
         signal: toolState.abortCtl?.signal ?? null,
       });
+      status = res.status;
       data = (await res.json()) as typeof data;
-      if (!res.ok) {
-        console.error(
-          `[ai-assistant] API ${res.status} · 请求 ${requestBody.length} 字符 · ` +
-            `messages=${messages.length} tools=${chatTools.length} · 响应: ${JSON.stringify(data).slice(0, 500)}`,
-        );
-        throw new Error(data.error?.message || `Claude API 错误 (${res.status})`);
-      }
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-      throw err;
+      throw friendlyApiError({
+        what: "Claude",
+        settings: settingsPath(req.language, "ai"),
+        raw: errMessage(err),
+        model,
+        language: req.language,
+      });
+    }
+    if (status < 200 || status >= 300) {
+      console.error(
+        `[ai-assistant] API ${status} · 请求 ${requestBody.length} 字符 · ` +
+          `messages=${messages.length} tools=${chatTools.length} · 响应: ${JSON.stringify(data).slice(0, 500)}`,
+      );
+      throw friendlyApiError({
+        what: "Claude",
+        settings: settingsPath(req.language, "ai"),
+        status,
+        raw: data.error?.message ?? "",
+        model,
+        language: req.language,
+      });
     }
 
     const content = data.content ?? [];
@@ -145,35 +167,55 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
 
     // Pure text truncation (a long thinking block ate the budget): echo the
     // partial text and ask the model to pick up where it stopped, bounded so
-    // a runaway can't burn the whole round budget.
+    // a runaway can't burn the whole round budget. Salvaged partials ride in
+    // textCarry so the final reply assembles ALL rounds, not just the last.
     if (data.stop_reason === "max_tokens") {
       const partial = content
         .filter((b) => b.type === "text")
         .map((b) => b.text ?? "")
         .join("\n")
         .trim();
+      if (partial) textCarry = textCarry ? textCarry + "\n" + partial : partial;
       if (continuations < 2) {
         continuations++;
         toolHooks.debugLog(context, `ROUND ${round}: max_tokens — auto-continue ${continuations}/2`);
-        messages.push({ role: "assistant", content: partial || "…" });
-        messages.push({
-          role: "user",
-          content:
-            "你的上一条回复因长度限制被截断，请从中断处继续，不要重复已输出的内容。" +
-            " / Your previous reply was cut off by the token limit — continue exactly where you stopped, without repeating yourself.",
-        });
+        if (!partial) {
+          // Zero visible text = the entire budget went to thinking. Force the
+          // model to act now, and never use "…" as the placeholder — the model
+          // parrots it back as its whole reply (seen in the wild).
+          suppressThinking = true;
+          messages.push({ role: "assistant", content: "（上一条仅为内部思考，无可见输出）" });
+          messages.push({
+            role: "user",
+            content:
+              "思考已用尽长度限制，没有产生任何可见内容。停止推演，立即行动：直接调用工具或给出完整答复，" +
+              "不要输出省略号或占位符。 / Thinking consumed the entire token limit with no visible output. " +
+              "Stop deliberating and act now: call tools or give the full reply — no ellipses, no placeholders.",
+          });
+        } else {
+          messages.push({ role: "assistant", content: partial });
+          messages.push({
+            role: "user",
+            content:
+              "你的上一条回复因长度限制被截断，请从中断处继续，不要重复已输出的内容。" +
+              " / Your previous reply was cut off by the token limit — continue exactly where you stopped, without repeating yourself.",
+          });
+        }
         continue;
       }
       const note = TRUNC_NOTE[req.language ?? ""] ?? TRUNC_NOTE.en;
-      return finishChat(context, actions, (partial ? partial + "\n\n" : "") + note);
+      return finishChat(context, actions, (textCarry ? textCarry + "\n\n" : "") + note);
     }
 
-    const reply =
-      content
-        .filter((b) => b.type === "text")
-        .map((b) => b.text ?? "")
-        .join("\n")
-        .trim() || "（无文本回复）";
+    const lastText = content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text ?? "")
+      .join("\n")
+      .trim();
+    // A bare ellipsis after truncated rounds is the model parroting the old
+    // continuation placeholder — drop it when real text was salvaged earlier.
+    const finalText = lastText === "…" && textCarry ? "" : lastText;
+    const reply = [textCarry, finalText].filter(Boolean).join("\n") || "（无文本回复）";
     const gate = await goalGate(context, req.language);
     if (gate && "inject" in gate) {
       messages.push({ role: "assistant", content });

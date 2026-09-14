@@ -50,6 +50,11 @@ export const toolState = {
   abortCtl: null as AbortController | null,
   /** Set by /api/stop: the running task aborts its in-flight request and exits. */
   stopRequested: false,
+  /** Coarse phase of the running task ("thinking" | "reading" | "analyzing" |
+   * "generating" | "applying" | "planning" | "searching"), surfaced through
+   * /api/status so the UI can show WHAT is happening, not just that it is
+   * busy. Same per-request lifetime as activeLanguage. */
+  phase: null as string | null,
 };
 
 /**

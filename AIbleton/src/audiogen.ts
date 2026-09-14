@@ -30,6 +30,7 @@ import {
   writeHomeBinary,
 } from "./paths.js";
 import { detectProxy, rawGet, rawPost, readAll, readAllBinary } from "./http.js";
+import { actionableError, errMessage, friendlyAudioError, isFriendlyError } from "./errors.js";
 
 export type AudioProvider = "stable-audio" | "elevenlabs" | "minimax" | "custom";
 
@@ -117,6 +118,8 @@ export interface GenerateOptions {
   instrumental?: boolean;
   /** Vocal lyrics (MiniMax music-3.0 with vocals requires them). */
   lyrics?: string;
+  /** UI language for error messages (zh → Chinese, anything else → English). */
+  language?: string;
 }
 
 export async function generateAudio(
@@ -124,15 +127,22 @@ export async function generateAudio(
   opts: GenerateOptions,
   signal?: AbortSignal,
 ): Promise<string> {
-  switch (cfg.provider) {
-    case "elevenlabs":
-      return genElevenLabs(cfg, opts, signal);
-    case "minimax":
-      return genMiniMax(cfg, opts, signal);
-    case "custom":
-      return genCustom(cfg, opts, signal);
-    default:
-      return genStableAudio(cfg, opts, signal);
+  try {
+    switch (cfg.provider) {
+      case "elevenlabs":
+        return await genElevenLabs(cfg, opts, signal);
+      case "minimax":
+        return await genMiniMax(cfg, opts, signal);
+      case "custom":
+        return await genCustom(cfg, opts, signal);
+      default:
+        return await genStableAudio(cfg, opts, signal);
+    }
+  } catch (err) {
+    // Stop signal and already-actionable errors pass through; raw transport
+    // failures (ECONNREFUSED, proxy down, …) get the actionable rewrite.
+    if (isFriendlyError(err) || errMessage(err) === "请求已停止") throw err;
+    throw friendlyAudioError(AUDIO_PROVIDER_NAMES[cfg.provider], undefined, errMessage(err), opts.language);
   }
 }
 
@@ -177,10 +187,12 @@ async function genStableAudio(
     } catch {
       // Not JSON — keep the raw excerpt.
     }
-    throw new Error(`Stable Audio API 错误 (${res.status}): ${msg}`);
+    throw friendlyAudioError("Stable Audio", res.status, msg, opts.language);
   }
   const audio = await readAllBinary(res.stream);
-  if (!audio.length) throw new Error("Stable Audio 返回了空音频");
+  if (!audio.length) {
+    throw actionableError("Stable Audio 返回了空音频 — 调整 prompt 或稍后重试；持续出现请检查 设置（齿轮）→ 音频生成 的配置。");
+  }
   return saveGeneratedAudio(audio, "wav");
 }
 
@@ -217,10 +229,12 @@ async function genElevenLabs(
     } catch {
       // Not JSON — keep the raw excerpt.
     }
-    throw new Error(`ElevenLabs API 错误 (${res.status}): ${msg}`);
+    throw friendlyAudioError("ElevenLabs", res.status, msg, opts.language);
   }
   const audio = await readAllBinary(res.stream);
-  if (!audio.length) throw new Error("ElevenLabs 返回了空音频");
+  if (!audio.length) {
+    throw actionableError("ElevenLabs 返回了空音频 — 调整 prompt 或稍后重试；持续出现请检查 设置（齿轮）→ 音频生成 的配置。");
+  }
   return saveGeneratedAudio(audio, "mp3");
 }
 
@@ -285,20 +299,27 @@ async function genMiniMax(
     try {
       data = JSON.parse(text) as MiniMaxResponse;
     } catch {
-      throw new Error(`MiniMax API 错误 (${res.status}): ${text.slice(0, 300)}`);
+      throw friendlyAudioError("MiniMax", res.status, text.slice(0, 300), opts.language);
     }
     const base = data.base_resp;
     if (res.status < 200 || res.status >= 300 || (base?.status_code ?? 0) !== 0) {
-      throw new Error(
-        `MiniMax API 错误 (${res.status}${base?.status_code ? ` / code ${base.status_code}` : ""}): ${base?.status_msg || text.slice(0, 200)}`,
+      throw friendlyAudioError(
+        "MiniMax",
+        res.status,
+        `${base?.status_code ? `code ${base.status_code}: ` : ""}${base?.status_msg || text.slice(0, 200)}`,
+        opts.language,
       );
     }
     if (data.data?.status === 1 || !data.data?.audio) continue; // still rendering
     const audio = Buffer.from(data.data.audio, "hex");
-    if (!audio.length) throw new Error("MiniMax 返回了空音频");
+    if (!audio.length) {
+      throw actionableError("MiniMax 返回了空音频 — 调整 prompt 或稍后重试；持续出现请检查 设置（齿轮）→ 音频生成 的配置。");
+    }
     return saveGeneratedAudio(audio, "mp3");
   }
-  throw new Error("MiniMax 生成超时(约 3 分钟仍在渲染)");
+  throw actionableError(
+    "MiniMax 生成超时：约 3 分钟仍未渲染完成 — 缩短 duration_seconds 后重试；持续出现请检查 MiniMax 账户状态或网络。",
+  );
 }
 
 // ---------- Custom HTTP provider (relays / self-hosted / Suno-style) ----------
@@ -359,7 +380,7 @@ async function genCustom(
 ): Promise<string> {
   const t = cfg.custom ?? {};
   if (!cfg.baseUrl) {
-    throw new Error("自定义 provider 未填接口地址:设置(齿轮)→ 音频生成 → Custom,填 Request URL");
+    throw actionableError("自定义 provider 未填接口地址 — 打开 设置（齿轮）→ 音频生成 → Custom，填 Request URL");
   }
   const body = t.bodyTemplate?.trim()
     ? fillTemplate(t.bodyTemplate, opts.prompt, opts.seconds)
@@ -374,18 +395,18 @@ async function genCustom(
   // Async task mode: submit answered a task id → poll until done → download.
   if (t.pollUrl && t.pollTaskId) {
     if (res.status < 200 || res.status >= 300) {
-      throw new Error(`自定义 API 提交失败 (${res.status}): ${(await readAll(res.stream)).slice(0, 300)}`);
+      throw friendlyAudioError("自定义音频服务", res.status, (await readAll(res.stream)).slice(0, 300), opts.language);
     }
     const submitText = await readAll(res.stream);
     let submitJson: unknown;
     try {
       submitJson = JSON.parse(submitText);
     } catch {
-      throw new Error(`自定义 API 提交响应不是 JSON: ${submitText.slice(0, 200)}`);
+      throw actionableError(`自定义 API 提交响应不是 JSON — 检查 设置 → 音频生成 → Custom 的接口配置（异步任务需返回 JSON）。响应: ${submitText.slice(0, 200)}`);
     }
     const taskId = jsonPath(submitJson, t.pollTaskId);
     if (taskId == null || taskId === "") {
-      throw new Error(`提交响应里找不到任务 ID(路径 ${t.pollTaskId}): ${submitText.slice(0, 200)}`);
+      throw actionableError(`提交响应里找不到任务 ID（路径 ${t.pollTaskId}）— 修正 设置 → 音频生成 → Custom 的 Task ID 字段路径。响应: ${submitText.slice(0, 200)}`);
     }
     return pollCustom(cfg, t, String(taskId), signal);
   }
@@ -402,11 +423,11 @@ async function customFromResponse(
 ): Promise<string> {
   const type = t.responseType ?? "bytes";
   if (status < 200 || status >= 300) {
-    throw new Error(`自定义 API 错误 (${status}): ${(await readAll(res.stream)).slice(0, 300)}`);
+    throw friendlyAudioError("自定义音频服务", status, (await readAll(res.stream)).slice(0, 300), undefined);
   }
   if (type === "bytes") {
     const audio = await readAllBinary(res.stream);
-    if (!audio.length) throw new Error("自定义 API 返回了空音频");
+    if (!audio.length) throw actionableError("自定义 API 返回了空音频 — 确认服务正常后重试，或检查 设置 → 音频生成 → Custom 的响应类型配置");
     return saveGeneratedAudio(audio, guessExt(t.format, res.headers["content-type"]));
   }
   const text = await readAll(res.stream);
@@ -414,15 +435,15 @@ async function customFromResponse(
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`自定义 API 响应不是 JSON(responseType=${type}): ${text.slice(0, 200)}`);
+    throw actionableError(`自定义 API 响应不是 JSON（responseType=${type}）— 若接口直接返回音频流，把 设置 → 音频生成 → Custom 的响应类型改为 bytes。响应: ${text.slice(0, 200)}`);
   }
   const value = t.audioPath ? jsonPath(json, t.audioPath) : undefined;
   if (typeof value !== "string" || !value) {
-    throw new Error(`响应里找不到音频字段(路径 ${t.audioPath ?? "(未填)"}): ${text.slice(0, 200)}`);
+    throw actionableError(`响应里找不到音频字段（路径 ${t.audioPath ?? "(未填)"}）— 修正 设置 → 音频生成 → Custom 的音频字段路径。响应: ${text.slice(0, 200)}`);
   }
   if (type === "url") return downloadCustom(value, t, undefined);
   const audio = Buffer.from(value, type === "hex" ? "hex" : "base64");
-  if (!audio.length) throw new Error(`自定义 API 的 ${type} 字段解码后为空`);
+  if (!audio.length) throw actionableError(`自定义 API 的 ${type} 字段解码后为空 — 检查 设置 → 音频生成 → Custom 的响应类型（${type}）是否与接口实际返回一致`);
   return saveGeneratedAudio(audio, guessExt(t.format, undefined, sourceUrl));
 }
 
@@ -438,10 +459,10 @@ async function downloadCustom(
     signal,
   });
   if (res.status < 200 || res.status >= 300) {
-    throw new Error(`音频下载失败 (${res.status}): ${url.slice(0, 120)}`);
+    throw actionableError(`音频下载失败（HTTP ${res.status}）— 确认音频地址可访问（可能需代理）后重试: ${url.slice(0, 120)}`);
   }
   const audio = await readAllBinary(res.stream);
-  if (!audio.length) throw new Error("下载到的音频为空");
+  if (!audio.length) throw actionableError("下载到的音频为空 — 服务返回的音频地址没有内容，请检查服务状态后重试");
   return saveGeneratedAudio(audio, guessExt(t.format, res.headers["content-type"], url));
 }
 
@@ -467,25 +488,27 @@ async function pollCustom(
     try {
       json = JSON.parse(text);
     } catch {
-      throw new Error(`轮询响应不是 JSON (${res.status}): ${text.slice(0, 200)}`);
+      throw actionableError(`轮询响应不是 JSON（HTTP ${res.status}）— 检查 设置 → 音频生成 → Custom 的轮询 URL 配置。响应: ${text.slice(0, 200)}`);
     }
     const status = jsonPath(json, statusPath);
     if (String(status) === doneValue) {
       const audioUrl = t.pollAudioPath ? jsonPath(json, t.pollAudioPath) : undefined;
       if (typeof audioUrl !== "string" || !audioUrl) {
-        throw new Error(`任务完成但找不到音频地址(路径 ${t.pollAudioPath ?? "(未填)"})`);
+        throw actionableError(`任务完成但找不到音频地址（路径 ${t.pollAudioPath ?? "(未填)"}）— 修正 设置 → 音频生成 → Custom 的音频地址字段路径`);
       }
       return downloadCustom(audioUrl, t, signal);
     }
     if (status == null) {
-      throw new Error(`轮询响应里找不到状态字段(路径 ${statusPath}): ${text.slice(0, 200)}`);
+      throw actionableError(`轮询响应里找不到状态字段（路径 ${statusPath}）— 修正 设置 → 音频生成 → Custom 的状态字段路径。响应: ${text.slice(0, 200)}`);
     }
     const s = String(status).toLowerCase();
     if (s === "failed" || s === "error" || s === "cancelled" || s === "canceled") {
-      throw new Error(`自定义 API 任务失败: ${text.slice(0, 200)}`);
+      throw actionableError(`自定义 API 任务失败: ${text.slice(0, 200)} — 调整 prompt 后重试；持续失败请检查服务日志`);
     }
   }
-  throw new Error("自定义 API 生成超时(约 4 分钟仍未完成)");
+  throw actionableError(
+    "自定义音频服务生成超时：轮询约 4 分钟仍未完成 — 确认服务仍在运行后重试；若服务本身较慢属正常，可缩短时长再试。",
+  );
 }
 
 // ---------- Save into the User Library ----------
