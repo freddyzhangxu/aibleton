@@ -48,7 +48,7 @@ import { toolHooks, toolState, type ArtistMemory } from "./state.js";
 import { toBpm, toStrArr } from "./tools/helpers.js";
 import { NO_AUTH_HINT } from "./prompts.js";
 import { loadSkills, matchSkills, skillProblems } from "./skills.js";
-import { testConnection } from "./chat/testconn.js";
+import { testConnection, testAudioConnection } from "./chat/testconn.js";
 import { errMessage } from "./errors.js";
 
 // ---------- Local sample library search ----------
@@ -431,6 +431,21 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     // on endpoints that expose no model list.
     if (req.method === "GET" && req.url?.startsWith("/api/test-connection")) {
       const u = new URL(req.url, "http://127.0.0.1");
+      // Audio probes never generate (billed per call) — free account-info /
+      // validation-error checks only, so there's no quick/full split here.
+      if (u.searchParams.get("kind") === "audio") {
+        const ap = u.searchParams.get("provider");
+        const provider = AUDIO_PROVIDERS_ALL.includes(ap as AudioProvider)
+          ? (ap as AudioProvider)
+          : "stable-audio";
+        const cfg = resolveAudioConfig(mergeAudioRequest({ provider }));
+        void testAudioConnection(cfg).then(
+          (r) => send(200, JSON.stringify({ provider, ...r })),
+          (err) =>
+            send(200, JSON.stringify({ provider, status: "error", detail: errMessage(err).slice(0, 160) })),
+        );
+        return;
+      }
       const providerParam = u.searchParams.get("provider") ?? undefined;
       const provider: Provider =
         providerParam === "codex" || providerParam === "gemini" || providerParam === "custom"
