@@ -690,6 +690,10 @@
             <label><span>Poll: audio url path</span><input id="cstPollAudioPath" autocomplete="off" spellcheck="false" placeholder="data.audio_url"></label>
           </div>
           <div class="cfg-hint" id="audioCfgHint"></div>
+          <div class="conn-test">
+            <button id="audioConnTestBtn" data-i18n="testConnection">测试连接</button>
+            <span id="audioConnTestOut"></span>
+          </div>
         </div>
       </div>
       <div class="set-view hidden" id="viewWeb">
@@ -1235,8 +1239,9 @@
 
     function showView(id) {
       settingsPanel.querySelectorAll('.set-view').forEach(v => v.classList.toggle('hidden', v.id !== id));
-      // Opening the AI view re-checks every provider badge (quick, keyless probes).
+      // Opening the AI/audio views re-checks every provider badge (free probes).
       if (id === 'viewAI') testAllProviders();
+      if (id === 'viewAudio') testAllAudioProviders();
     }
     settingsPanel.querySelectorAll('[data-goto]').forEach(el =>
       el.addEventListener('click', () => showView(el.dataset.goto)));
@@ -1320,18 +1325,21 @@
       connected: 'ok', not_configured: '', testing: '',
       model_unavailable: 'warn', unreachable: 'err', error: 'err',
     };
-    const connBadges = {};            // provider → badge element
-    const connState = {};             // provider → last result {status, detail}
+    // Keys: chat providers bare ("claude"), audio providers prefixed ("audio:minimax").
+    const connBadges = {};            // key → badge element
+    const connState = {};             // key → last result {status, detail}
     const connTestBtn = document.getElementById('connTestBtn');
     const connTestOut = document.getElementById('connTestOut');
+    const audioConnTestBtn = document.getElementById('audioConnTestBtn');
+    const audioConnTestOut = document.getElementById('audioConnTestOut');
 
     function connLabel(st) {
       return st.status === 'testing' ? t('connTesting') : t(CONN_KEYS[st.status] || 'connError');
     }
-    function renderConnBadge(p) {
-      const el = connBadges[p];
+    function renderConnBadge(key) {
+      const el = connBadges[key];
       if (!el) return;
-      const st = connState[p];
+      const st = connState[key];
       el.className = 'conn-badge' + (st && CONN_CLASS[st.status] ? ' ' + CONN_CLASS[st.status] : '');
       el.innerHTML = '';
       const dot = document.createElement('span');
@@ -1341,30 +1349,41 @@
       el.append(dot, txt);
       el.title = (st && st.detail) || '';
     }
-    function renderConnOut() {
+    function renderConnOut(kind) {
+      if (kind === 'audio') {
+        const st = connState['audio:' + currentAudioProvider];
+        audioConnTestOut.textContent = st ? connLabel(st) + (st.detail ? ` · ${st.detail}` : '') : '';
+        return;
+      }
       const st = connState[currentProvider];
       connTestOut.textContent = st ? connLabel(st) + (st.detail ? ` · ${st.detail}` : '') : '';
     }
-    function testProvider(p, full) {
-      connState[p] = { status: 'testing' };
-      renderConnBadge(p);
-      if (p === currentProvider) {
-        connTestBtn.disabled = true;
-        renderConnOut();
+    // kind: 'chat' (default) | 'audio'. full=1 is chat-only (may spend a
+    // 1-token probe); audio probes are always free — never a generation.
+    function testProvider(p, full, kind) {
+      const key = kind === 'audio' ? 'audio:' + p : p;
+      const isCurrent = kind === 'audio' ? p === currentAudioProvider : p === currentProvider;
+      const btn = kind === 'audio' ? audioConnTestBtn : connTestBtn;
+      connState[key] = { status: 'testing' };
+      renderConnBadge(key);
+      if (isCurrent) {
+        btn.disabled = true;
+        renderConnOut(kind);
       }
-      return fetch('/api/test-connection?provider=' + p + (full ? '&full=1' : ''))
+      return fetch('/api/test-connection?' + (kind === 'audio' ? 'kind=audio&' : '') +
+          'provider=' + p + (full ? '&full=1' : ''))
         .then(r => r.json())
         .then(res => {
-          connState[p] = { status: res.status || 'error', detail: res.detail || '' };
+          connState[key] = { status: res.status || 'error', detail: res.detail || '' };
         })
         .catch(() => {
-          connState[p] = { status: 'unreachable', detail: '' };
+          connState[key] = { status: 'unreachable', detail: '' };
         })
         .finally(() => {
-          renderConnBadge(p);
-          if (p === currentProvider) {
-            connTestBtn.disabled = false;
-            renderConnOut();
+          renderConnBadge(key);
+          if (isCurrent) {
+            btn.disabled = false;
+            renderConnOut(kind);
           }
         });
     }
@@ -1476,12 +1495,14 @@
       audioCfgInputs[f].addEventListener('change', () => {
         localStorage.setItem(`ai.audio.${currentAudioProvider}.${f}`, audioCfgInputs[f].value);
         saveAudioFields();
+        testProvider(currentAudioProvider, false, 'audio');
       });
     }
     for (const f of Object.keys(customInputs)) {
       customInputs[f].addEventListener('change', () => {
         localStorage.setItem(`ai.audio.custom.${f}`, customInputs[f].value);
         saveCustomFields();
+        if (currentAudioProvider === 'custom') testProvider('custom', false, 'audio');
       });
     }
 
@@ -1496,7 +1517,11 @@
         tick.textContent = code === currentAudioProvider ? '✓' : '';
         const name = document.createElement('span');
         name.textContent = p.name;
-        row.append(tick, name);
+        const badge = document.createElement('span');
+        badge.className = 'conn-badge';
+        connBadges['audio:' + code] = badge;
+        row.append(tick, name, badge);
+        renderConnBadge('audio:' + code);
         row.addEventListener('click', (e) => {
           e.stopPropagation();
           currentAudioProvider = code;
@@ -1509,10 +1534,15 @@
           audioVal.textContent = p.name;
           loadAudioFields();
           renderAudioProviders();
+          renderConnOut('audio');
         });
         audioProviderList.appendChild(row);
       }
     }
+    function testAllAudioProviders() {
+      for (const p of Object.keys(AUDIO_PROVIDERS)) testProvider(p, false, 'audio');
+    }
+    audioConnTestBtn.addEventListener('click', () => testProvider(currentAudioProvider, false, 'audio'));
 
     // ---------- Auto-refine toggle (Settings → 音频生成) ----------
     // 与 webToggle 同一规则：状态以服务端 providers.json 为准（/api/audio-config
@@ -1700,7 +1730,8 @@
       refreshHealth();
       // Status badges + test output hold localized text — re-render on switch.
       for (const p of Object.keys(connBadges)) renderConnBadge(p);
-      renderConnOut();
+      renderConnOut('chat');
+      renderConnOut('audio');
     }
 
     // Conversation history lives on the extension server (persisted to disk),

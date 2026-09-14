@@ -24,6 +24,7 @@ import { resolveConfig, type ResolvedConfig } from "./config.js";
 import { ensureCodexAuth } from "./providers/openai.js";
 import { errMessage } from "../errors.js";
 import type { Provider } from "../config/local.js";
+import type { AudioGenConfig } from "../audiogen.js";
 
 export type ConnStatus =
   | "connected"
@@ -357,4 +358,89 @@ export function testConnection(provider: Provider, full: boolean): Promise<ConnT
   if (provider === "gemini") return testGemini();
   if (provider === "custom") return testCustom(full);
   return testClaude(full);
+}
+
+// ---------- Audio-generation providers ----------
+//
+// Same question, one hard constraint: generation is BILLED PER CALL, so no
+// probe may ever produce audio. Every check below is free:
+//   stable-audio / elevenlabs — official account-info GETs
+//   minimax                   — an empty-body POST: MiniMax reports auth
+//                               failures vs payload-validation failures
+//                               differently, and validation rejects cost nothing
+//   custom                    — bare GET on the request URL (POSTing the body
+//                               template would trigger a billed generation)
+
+/** MiniMax auth-failure phrasing inside its HTTP-200 base_resp envelope. */
+const MINIMAX_AUTH_RE = /api[- ]?key|token|unauthor|forbidden|鉴权|认证|授权/i;
+
+export async function testAudioConnection(cfg: AudioGenConfig | null): Promise<ConnTestResult> {
+  if (cfg?.provider === "custom") {
+    if (!cfg.baseUrl) return fail("not_configured");
+    const auth = cfg.custom?.authHeader ?? "bearer";
+    const headers: Record<string, string> =
+      auth === "none" || !cfg.apiKey
+        ? {}
+        : auth === "x-api-key"
+          ? { "x-api-key": cfg.apiKey }
+          : { authorization: `Bearer ${cfg.apiKey}` };
+    let r: { status: number; body: string };
+    try {
+      r = await getJson(new URL(cfg.baseUrl), headers);
+    } catch (err) {
+      return netFail(err);
+    }
+    const authFail = classifyAuth(r.status);
+    if (authFail) return fail(authFail);
+    // Any other answer proves host + path exist; whether the key is ACCEPTED
+    // can't be learned without a billed generation.
+    return ok(undefined, `endpoint answered HTTP ${r.status} — key verified only on first generation`);
+  }
+  if (!cfg) return fail("not_configured");
+
+  if (cfg.provider === "minimax") {
+    let r: { status: number; body: string };
+    try {
+      r = await postJson(
+        new URL(`${cfg.baseUrl}/v1/music_generation`),
+        { authorization: `Bearer ${cfg.apiKey}` },
+        {}, // invalid payload on purpose — rejected at validation, never rendered
+      );
+    } catch (err) {
+      return netFail(err);
+    }
+    const authFail = classifyAuth(r.status);
+    if (authFail) return fail(authFail);
+    try {
+      const data = JSON.parse(r.body) as {
+        base_resp?: { status_code?: number; status_msg?: string };
+      };
+      const code = data.base_resp?.status_code ?? 0;
+      const msg = data.base_resp?.status_msg ?? "";
+      if (MINIMAX_AUTH_RE.test(msg)) return fail("auth_expired", undefined, `code ${code}: ${msg}`.slice(0, 120));
+      // Any other structured biz error (missing prompt, …) means the key was
+      // accepted and the request reached business logic.
+      return ok(undefined, code ? `key accepted (validation code ${code})` : undefined);
+    } catch {
+      return fail("error", undefined, `HTTP ${r.status}`);
+    }
+  }
+
+  // stable-audio / elevenlabs: free account-info endpoints.
+  const path = cfg.provider === "elevenlabs" ? "/v1/user" : "/v1/user/account";
+  const headers: Record<string, string> =
+    cfg.provider === "elevenlabs"
+      ? { "xi-api-key": cfg.apiKey }
+      : { authorization: `Bearer ${cfg.apiKey}` };
+  let r: { status: number; body: string };
+  try {
+    r = await getJson(new URL(`${cfg.baseUrl}${path}`), headers);
+  } catch (err) {
+    return netFail(err);
+  }
+  const authFail = classifyAuth(r.status);
+  if (authFail) return fail(authFail);
+  if (r.status === 429) return ok(undefined, "rate limited (auth OK)");
+  if (r.status >= 200 && r.status < 300) return ok();
+  return fail("error", undefined, `HTTP ${r.status}`);
 }
