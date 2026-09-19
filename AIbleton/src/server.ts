@@ -40,7 +40,7 @@ import { answerConfirmation, getPendingConfirm } from "./chat/gates.js";
 import { deleteAuthorizationFor } from "./chat/deleteauth.js";
 import { resolveConfig, type Attachment, type ChatRequest } from "./chat/config.js";
 import { resetTurnState } from "./agent/runtime.js";
-import { clearRightClickFocus, updateSetContext } from "./setcontext.js";
+import { clearRightClickFocus, clearSelectionContext, updateSetContext } from "./setcontext.js";
 import { chatAnthropic } from "./chat/providers/anthropic.js";
 import { chatOpenAI, ensureCodexAuth } from "./chat/providers/openai.js";
 import { chatCustom } from "./chat/providers/custom.js";
@@ -51,6 +51,13 @@ import { NO_AUTH_HINT } from "./prompts.js";
 import { loadSkills, matchSkills, skillProblems } from "./skills.js";
 import { testConnection, testAudioConnection } from "./chat/testconn.js";
 import { errMessage } from "./errors.js";
+
+/** A selection is the default editing boundary. These are intentionally
+ * narrow, explicit whole-Set requests — a vague "make it bigger" must not
+ * escape the selection. */
+function hasGlobalIntent(text: string): boolean {
+  return /(?:整首歌|整曲|全曲|全局|整个项目|整个工程|whole\s+(?:song|track|set)|entire\s+(?:song|track|set)|full\s+(?:song|track|set)|globally|across\s+the\s+(?:song|set))/i.test(text);
+}
 
 // ---------- Local sample library search ----------
 
@@ -407,6 +414,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       // Direct browser navigation is a fresh, non-context-menu entry point.
       // Do not let it inherit a target from an earlier right-click dialog.
       clearRightClickFocus();
+      clearSelectionContext();
       send(200, chatInterface.replaceAll("__APP_VERSION__", APP_VERSION), "text/html");
       return;
     }
@@ -696,6 +704,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       // A regular browser/hotkey open has no clicked Live object, so it must
       // not inherit a target from a previous context-menu invocation.
       clearRightClickFocus();
+      clearSelectionContext();
       if (selfUrl) {
         void context.ui.showModalDialog(selfUrl, 560, 680).catch(() => {});
       }
@@ -844,6 +853,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
           mergeAudioRequest(parsed.audio as AudioRequestConfig | undefined));
         toolState.activeLanguage = typeof parsed.language === "string" ? parsed.language : undefined;
         toolState.activeDeleteAuthorization = deleteAuthorizationFor(text);
+        toolState.activeGlobalIntent = hasGlobalIntent(text);
         toolState.phase = "thinking";
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT

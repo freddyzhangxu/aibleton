@@ -82,6 +82,8 @@ import { TOOLS } from "../tools/definitions.js";
 import { runTool } from "../tools/dispatcher.js";
 import { listenHintFor } from "../tools/listenhint.js";
 import { buildSongSnapshot } from "../tools/helpers.js";
+import { resolvedSelection } from "../setcontext.js";
+import { selectionGuard } from "../selectionguard.js";
 import {
   askConfirmation,
   COSTLY_TOOLS,
@@ -794,6 +796,18 @@ export async function callTool(
   input: Record<string, unknown>,
   yolo: boolean,
 ): Promise<string> {
+  // Prompt context is helpful but not a security boundary. Re-resolve the
+  // transient Live selection immediately before every mutation so an agent
+  // cannot accidentally write beyond the range/slots the user selected.
+  if (!READ_ONLY_TOOLS.has(name)) {
+    const refusal = selectionGuard(context, resolvedSelection(context), toolState.activeGlobalIntent, name, input);
+    if (refusal) {
+      const refused = { error: refusal };
+      actions.push({ tool: name, input, result: refused });
+      toolHooks.debugLog(context, `TOOL ${name} REFUSED: selection boundary`);
+      return JSON.stringify(refused);
+    }
+  }
   // Delete permission is never inferred from YOLO, tool history, or a prior
   // chat message. The dispatcher repeats this guard as defense in depth.
   if (isDeleteTool(name) && !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization)) {

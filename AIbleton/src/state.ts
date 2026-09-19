@@ -50,6 +50,9 @@ export const toolState = {
   activeLanguage: undefined as string | undefined,
   /** Kind-scoped delete permission derived from the CURRENT user message. */
   activeDeleteAuthorization: undefined as DeleteAuthorization | undefined,
+  /** The CURRENT user explicitly asked to operate on the entire Set. This is
+   * deliberately per-turn: it must never grant scope beyond this request. */
+  activeGlobalIntent: false,
   abortCtl: null as AbortController | null,
   /** Set by /api/stop: the running task aborts its in-flight request and exits. */
   stopRequested: false,

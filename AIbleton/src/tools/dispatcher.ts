@@ -45,6 +45,8 @@ import {
 import { enrichMusicStateWithAudio } from "../audiofiles.js";
 import { buildMusicState } from "../musicstate/builder.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
+import { resolvedSelection } from "../setcontext.js";
+import { selectionGuard } from "../selectionguard.js";
 import {
   applySwing,
   buildSongSnapshot,
@@ -196,7 +198,12 @@ export async function runTool(
 ): Promise<unknown> {
   const song = context.application.song;
   // runTool is also used by tests and could gain non-agent callers later.
-  // Keep the destructive SDK boundary protected even if runtime is bypassed.
+  // Keep destructive and selection boundaries protected even if runtime is
+  // bypassed by a future non-agent caller.
+  const selectionRefusal = selectionGuard(
+    context, resolvedSelection(context), toolState.activeGlobalIntent, name, input,
+  );
+  if (selectionRefusal) throw new Error(selectionRefusal);
   if (isDeleteTool(name) && !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization)) {
     return deleteAuthorizationError(name);
   }
