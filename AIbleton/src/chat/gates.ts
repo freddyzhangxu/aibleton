@@ -17,6 +17,7 @@ export const READ_ONLY_TOOLS = new Set([
   "update_memory",
   "get_device_parameters",
   "get_simpler_sample",
+  "get_drum_pad_sample",
   "get_track_mixer",
   "get_clip_notes",
   "get_audio_clip_warp",
