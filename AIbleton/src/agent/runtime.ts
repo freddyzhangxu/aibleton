@@ -88,6 +88,11 @@ import {
   READ_ONLY_TOOLS,
   verifyToolResult,
 } from "../chat/gates.js";
+import {
+  deleteAuthorizationError,
+  deleteToolIsAuthorized,
+  isDeleteTool,
+} from "../chat/deleteauth.js";
 import * as fs from "node:fs";
 import { friendlyToolError } from "../errors.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
@@ -789,6 +794,14 @@ export async function callTool(
   input: Record<string, unknown>,
   yolo: boolean,
 ): Promise<string> {
+  // Delete permission is never inferred from YOLO, tool history, or a prior
+  // chat message. The dispatcher repeats this guard as defense in depth.
+  if (isDeleteTool(name) && !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization)) {
+    const refused = deleteAuthorizationError(name);
+    actions.push({ tool: name, input, result: refused });
+    toolHooks.debugLog(context, `TOOL ${name} REFUSED: no explicit delete authorization`);
+    return JSON.stringify(refused);
+  }
   // Agent-loop step budget (agent/loop.ts): once AGENT_MAX_STEPS mutations
   // actually executed this turn, further mutating calls are refused BEFORE
   // running — and before the user is asked to confirm. The refusal never
@@ -813,7 +826,10 @@ export async function callTool(
     toolHooks.getAudioAutoRefine() &&
     (pendingGoal?.refinements ?? 0) > 0;
   const needsConfirm =
-    !READ_ONLY_TOOLS.has(name) && !refinePreAuthorized && (!yolo || COSTLY_TOOLS.has(name));
+    !READ_ONLY_TOOLS.has(name) &&
+    !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization) &&
+    !refinePreAuthorized &&
+    (!yolo || COSTLY_TOOLS.has(name));
   if (needsConfirm) {
     const allowed = await askConfirmation(name, input);
     if (!allowed) {
