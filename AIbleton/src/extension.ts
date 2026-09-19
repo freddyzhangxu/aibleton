@@ -1,4 +1,5 @@
-import { initialize, type ActivationContext } from "@ableton-extensions/sdk";
+import { initialize, type ActivationContext, type ContextMenuScope } from "@ableton-extensions/sdk";
+import { sharedContextMenuRegistrationManager } from "./menu-lifecycle.js";
 import { startServer } from "./server.js";
 import { setRightClickFocus, setSelectionContext } from "./setcontext.js";
 
@@ -45,7 +46,7 @@ export function activate(activation: ActivationContext) {
     "AudioTrack.ArrangementSelection",
     "MidiTrack.ArrangementSelection",
   ] as const;
-  for (const scope of scopes) {
-    context.ui.registerContextMenuAction(scope, "Open", "ai-assistant.open");
-  }
+  void sharedContextMenuRegistrationManager<ContextMenuScope<"1.0.0">>()
+    .replace(context.ui, scopes, "Open", "ai-assistant.open")
+    .catch((error) => console.error("AIbleton: context-menu registration failed:", error));
 }
