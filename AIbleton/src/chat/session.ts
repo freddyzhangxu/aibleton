@@ -7,13 +7,16 @@ import {
   writeHomeFile,
 } from "../paths.js";
 import type { Ctx } from "../state.js";
+import { turnGoalOutcome } from "../agent/turnoutcome.js";
+import { buildTurnReceipt, type ToolAction, type TurnReceipt } from "./receipt.js";
 
 // ---------- Chat sessions (server-side, persisted) ----------
 
 export interface HistoryMessage {
   role: "user" | "assistant";
   content: string;
-  actions?: { tool: string; input: unknown; result: unknown }[];
+  actions?: ToolAction[];
+  receipt?: TurnReceipt;
 }
 
 export interface ChatSession {
@@ -184,12 +187,13 @@ export function deleteSession(id: string): void {
 /** Shared tail of a completed chat: persist the assistant reply + tool actions. */
 export function finishChat(
   context: Ctx,
-  actions: { tool: string; input: unknown; result: unknown }[],
+  actions: ToolAction[],
   reply: string,
 ) {
   const session = currentSession();
   const cleanReply = stripEmoji(reply);
-  session.messages.push({ role: "assistant", content: cleanReply, actions });
+  const receipt = buildTurnReceipt(actions, turnGoalOutcome());
+  session.messages.push({ role: "assistant", content: cleanReply, actions, ...(receipt ? { receipt } : {}) });
   session.updatedAt = Date.now();
   saveStore(context);
   return { reply: cleanReply, actions };

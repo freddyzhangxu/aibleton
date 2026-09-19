@@ -25,3 +25,17 @@ test("finishChat stores and returns an Emoji-free assistant reply only", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("finishChat persists a receipt only when a successful Set mutation ran", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aibleton-session-test-"));
+  const context = { environment: { storageDirectory: dir } } as Ctx;
+  try {
+    createSession();
+    finishChat(context, [{ tool: "write_midi_clip", input: {}, result: {} }], "Done");
+    assert.deepEqual(currentSession().messages.at(-1)?.receipt?.tools, ["write_midi_clip"]);
+    finishChat(context, [{ tool: "analyze_song", input: {}, result: {} }], "Read only");
+    assert.equal(currentSession().messages.at(-1)?.receipt, undefined);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

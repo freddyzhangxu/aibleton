@@ -417,6 +417,30 @@
     }
     .hints b { color: var(--c-text); font-weight: 600; }
 
+    /* A structured, server-measured receipt for a turn that changed the Set.
+       It deliberately stays separate from model Markdown and raw tool traces. */
+    .receipt {
+      align-self: stretch;
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-border);
+      border-left: 3px solid var(--c-text-dim);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.5;
+      overflow: hidden;
+    }
+    .receipt.passed { border-left-color: #8fcf66; }
+    .receipt.unmet { border-left-color: #d6b45b; }
+    .receipt-head { display: flex; align-items: baseline; gap: 6px; color: var(--c-text); font-weight: 700; }
+    .receipt-status { color: var(--c-text-dim); font-weight: 500; }
+    .receipt.passed .receipt-status { color: #8fcf66; }
+    .receipt.unmet .receipt-status { color: #d6b45b; }
+    .receipt-row { display: flex; gap: 7px; margin-top: 5px; min-width: 0; color: var(--c-text-dim); }
+    .receipt-label { flex: none; color: var(--c-text); font-weight: 600; }
+    .receipt-value { min-width: 0; overflow-wrap: anywhere; }
+    .receipt-undo { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--c-border); color: var(--c-text-dim); }
+
     footer {
       display: flex;
       flex-direction: column;
@@ -860,6 +884,9 @@
         hintPlayBar: '▶ 从第 {a} 小节播放', hintPlayRange: '▶ 播放第 {a}–{b} 小节',
         hintPlaySession: '▶ 触发该场景试听',
         hintTracks: '轨道：{t}', hintSolo: '建议 Solo「{t}」', hintAB: '建议 A/B 对比',
+        receiptTitle: '任务回执', receiptPassed: '已达标', receiptUnmet: '未达标', receiptCompleted: '已执行',
+        receiptObjective: '目标', receiptChanges: '实际改动', receiptVerification: '系统校验', receiptListen: '试听',
+        receiptChangesCount: '{n} 项修改', receiptUndo: '不满意可在 Live 使用 Undo（{key}）',
         cfgLoaded: '已加载本机 {p} 配置', cfgKeySet: '{p} · 使用自定义 API Key',
         cfgMissing: '未找到 {p} 认证信息，请在设置中填写 API Key',
         apiKey: 'API Key', baseUrl: 'API 地址', model: '模型',
@@ -906,6 +933,9 @@
         hintPlayBar: '▶ Play from bar {a}', hintPlayRange: '▶ Play bars {a}–{b}',
         hintPlaySession: '▶ Trigger the scene to hear it',
         hintTracks: 'Track: {t}', hintSolo: 'Try soloing “{t}”', hintAB: 'Worth an A/B against the previous version',
+        receiptTitle: 'Task receipt', receiptPassed: 'Goal met', receiptUnmet: 'Goal unmet', receiptCompleted: 'Executed',
+        receiptObjective: 'Goal', receiptChanges: 'Changes', receiptVerification: 'System check', receiptListen: 'Listen',
+        receiptChangesCount: '{n} changes', receiptUndo: 'Not happy? Use Live Undo ({key})',
         cfgLoaded: 'Loaded local {p} config', cfgKeySet: '{p} · custom API Key',
         cfgMissing: 'No {p} credentials found — add an API Key in Settings',
         apiKey: 'API Key', baseUrl: 'Base URL', model: 'Model',
@@ -2093,10 +2123,18 @@
     // deterministic listen_hint to mutating tool results (what to play to
     // judge the change). One line per distinct hint, deduped.
     function addListenHints(actions) {
-      const lines = [];
+      const hints = [];
       for (const a of actions) {
         const h = a.result && typeof a.result === 'object' ? a.result.listen_hint : null;
-        if (!h || !Array.isArray(h.tracks) || !h.tracks.length) continue;
+        if (h) hints.push(h);
+      }
+      addHintLines(hints);
+    }
+
+    function hintLines(hints) {
+      const lines = [];
+      for (const h of hints || []) {
+        if (!h || !Array.isArray(h.tracks) || !h.tracks.length || !h.tracks.every(t => typeof t === 'string')) continue;
         const sep2 = (currentLang === 'zh' || currentLang === 'ja') ? '、' : ', ';
         const parts = [];
         if (typeof h.start_bar === 'number') {
@@ -2112,6 +2150,11 @@
         const line = parts.join(' · ');
         if (!lines.includes(line)) lines.push(line);
       }
+      return lines;
+    }
+
+    function addHintLines(hints) {
+      const lines = hintLines(hints);
       if (!lines.length) return;
       const div = document.createElement('div');
       div.className = 'hints';
@@ -2122,6 +2165,62 @@
       }
       log.appendChild(div);
       log.scrollTop = log.scrollHeight;
+    }
+
+    function receiptStatus(status) {
+      if (status === 'passed') return t('receiptPassed');
+      if (status === 'unmet') return t('receiptUnmet');
+      return t('receiptCompleted');
+    }
+
+    function receiptToolName(name) {
+      // Tool identifiers remain recognizable to power users, but become
+      // readable prose in the compact summary. The full trace remains above.
+      return String(name).replace(/_/g, ' ');
+    }
+
+    function addReceipt(receipt) {
+      if (!receipt || typeof receipt !== 'object') return;
+      const status = ['completed', 'passed', 'unmet'].includes(receipt.status) ? receipt.status : 'completed';
+      const tools = Array.isArray(receipt.tools) ? receipt.tools.filter(tool => typeof tool === 'string') : [];
+      if (!tools.length) return;
+      const card = document.createElement('section');
+      card.className = 'receipt ' + status;
+      const head = document.createElement('div');
+      head.className = 'receipt-head';
+      const title = document.createElement('span');
+      title.textContent = t('receiptTitle');
+      const state = document.createElement('span');
+      state.className = 'receipt-status';
+      state.textContent = '· ' + receiptStatus(status);
+      head.append(title, state);
+      card.appendChild(head);
+      const row = (label, value) => {
+        if (!value) return;
+        const el = document.createElement('div');
+        el.className = 'receipt-row';
+        const key = document.createElement('span');
+        key.className = 'receipt-label';
+        key.textContent = label;
+        const text = document.createElement('span');
+        text.className = 'receipt-value';
+        text.textContent = value;
+        el.append(key, text);
+        card.appendChild(el);
+      };
+      row(t('receiptObjective'), typeof receipt.objective === 'string' ? receipt.objective : '');
+      const shownTools = tools.slice(0, 4).map(receiptToolName);
+      if (tools.length > shownTools.length) shownTools.push('+' + (tools.length - shownTools.length));
+      row(t('receiptChanges'), t('receiptChangesCount').replace('{n}', tools.length) + ' · ' + shownTools.join(', '));
+      row(t('receiptVerification'), typeof receipt.verification === 'string' ? receipt.verification : '');
+      const listened = hintLines(Array.isArray(receipt.listenHints) ? receipt.listenHints : []);
+      if (listened.length) row(t('receiptListen'), listened.join(' · '));
+      const undo = document.createElement('div');
+      undo.className = 'receipt-undo';
+      const key = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent) ? '⌘Z' : 'Ctrl+Z';
+      undo.textContent = t('receiptUndo').replace('{key}', key);
+      card.appendChild(undo);
+      log.appendChild(card);
     }
 
     // Traffic-light buttons: post close_and_send to the Live host to dismiss the dialog.
@@ -2185,7 +2284,7 @@
     }
 
     function renderMessages(messages) {
-      log.querySelectorAll('.msg, .steps, .hints').forEach(el => el.remove());
+      log.querySelectorAll('.msg, .steps, .hints, .receipt').forEach(el => el.remove());
       if (!messages || !messages.length) {
         log.appendChild(welcome);
         return;
@@ -2195,6 +2294,7 @@
           addSteps(m.actions);
         }
         addMsg(m.role === 'user' ? 'user' : 'ai', m.content);
+        if (m.role === 'assistant') addReceipt(m.receipt);
       });
       scrollToBottom();
     }
