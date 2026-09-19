@@ -1,6 +1,6 @@
 import { initialize, type ActivationContext } from "@ableton-extensions/sdk";
 import { startServer } from "./server.js";
-import { setRightClickFocus } from "./setcontext.js";
+import { setRightClickFocus, setSelectionContext } from "./setcontext.js";
 
 export function activate(activation: ActivationContext) {
   const context = initialize(activation, "1.0.0");
@@ -22,7 +22,9 @@ export function activate(activation: ActivationContext) {
     // Context-menu scopes pass the clicked Live object's opaque Handle as the
     // first argument. Keep only that handle; setcontext.ts re-resolves it on
     // every chat turn so deleted objects cannot become stale prompt context.
-    setRightClickFocus(context, args[0]);
+    // Selection scopes pass a structured payload; object scopes pass a
+    // Handle. The context module validates both forms and clears stale state.
+    if (!setSelectionContext(context, args[0])) setRightClickFocus(context, args[0]);
     serverReady
       .then((url) => context.ui.showModalDialog(url, 460, 600))
       .catch(() => {});
@@ -37,6 +39,9 @@ export function activate(activation: ActivationContext) {
     "MidiClip",
     "AudioClip",
     "ClipSlot",
+    "ClipSlotSelection",
+    "AudioTrack.ArrangementSelection",
+    "MidiTrack.ArrangementSelection",
   ] as const;
   for (const scope of scopes) {
     context.ui.registerContextMenuAction(scope, "Open", "ai-assistant.open");

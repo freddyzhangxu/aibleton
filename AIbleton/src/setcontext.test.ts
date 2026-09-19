@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AudioClip, AudioTrack, ClipSlot, MidiClip, MidiTrack, Scene } from "@ableton-extensions/sdk";
 import type { Ctx } from "./state.js";
-import { clearRightClickFocus, setContextPrompt, setRightClickFocus, updateSetContext } from "./setcontext.js";
+import {
+  clearRightClickFocus,
+  clearSelectionContext,
+  resolvedSelection,
+  setContextPrompt,
+  setRightClickFocus,
+  setSelectionContext,
+  updateSetContext,
+} from "./setcontext.js";
 
 /** Minimal Ctx stub: a song with a document handle id, N tracks/scenes, tempo. */
 function ctx(handleId: bigint, opts?: { tracks?: number; scenes?: number; tempo?: number }): Ctx {
@@ -151,5 +159,57 @@ describe("setcontext", () => {
     updateSetContext(context);
     clearRightClickFocus();
     assert.doesNotMatch(setContextPrompt(), /Current right-click focus/);
+  });
+
+  it("renders a fresh Arrangement selection and clears it when the Set changes", () => {
+    const bass = midiTrack(51n, "Bass");
+    const drums = midiTrack(52n, "Drums");
+    const objects = new Map([[bass.handle.id, bass], [drums.handle.id, drums]]);
+    const context = {
+      application: { song: { handle: { id: 500n }, tempo: 128, tracks: [bass, drums], scenes: [] } },
+      getObjectFromHandle: (handle: { id: bigint }) => {
+        const object = objects.get(handle.id);
+        if (!object) throw new Error("deleted");
+        return object;
+      },
+    } as unknown as Ctx;
+    assert.equal(setSelectionContext(context, {
+      selected_lanes: [bass.handle, drums.handle], time_selection_start: 8, time_selection_end: 24,
+    }), true);
+    updateSetContext(context);
+    assert.deepEqual(resolvedSelection(context), {
+      kind: "arrangement",
+      tracks: [{ index: 0, name: "Bass" }, { index: 1, name: "Drums" }],
+      startBeat: 8,
+      endBeat: 24,
+    });
+    assert.match(setContextPrompt(), /Current Arrangement selection: tracks 0 “Bass”, 1 “Drums”, beats 8–24/);
+    updateSetContext({ ...context, application: { song: { ...context.application.song, handle: { id: 501n } } } } as Ctx);
+    assert.equal(resolvedSelection(context), null);
+    assert.doesNotMatch(setContextPrompt(), /Current Arrangement selection/);
+  });
+
+  it("renders selected Session slots and ignores malformed selection payloads", () => {
+    const clip = midiClip(61n);
+    const slot = clipSlot(62n, clip);
+    const track = midiTrack(63n, "Lead");
+    Object.defineProperty(track, "clipSlots", { value: [slot], configurable: true });
+    const context = {
+      application: { song: { handle: { id: 600n }, tempo: 120, tracks: [track], scenes: [{}] } },
+      getObjectFromHandle: (handle: { id: bigint }) => {
+        if (handle.id !== slot.handle.id) throw new Error("deleted");
+        return slot;
+      },
+    } as unknown as Ctx;
+    assert.equal(setSelectionContext(context, { selected_clip_slots: [slot.handle] }), true);
+    updateSetContext(context);
+    assert.deepEqual(resolvedSelection(context), {
+      kind: "session",
+      slots: [{ trackIndex: 0, trackName: "Lead", sceneIndex: 0, clipName: "Bass riff" }],
+    });
+    assert.match(setContextPrompt(), /Current Session selection: 0 “Lead” \/ scene 0 “Bass riff”/);
+    assert.equal(setSelectionContext(context, { selected_lanes: [], time_selection_start: 2, time_selection_end: 6 }), true);
+    assert.equal(resolvedSelection(context), null);
+    clearSelectionContext();
   });
 });
