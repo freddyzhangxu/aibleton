@@ -343,6 +343,18 @@ export const TOOLS = [
   },
   { name: "duplicate_track", description: "Duplicate a Track immediately after it. The copy keeps Live's default name.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC } }, required: ["track_index"] } },
   {
+    name: "delete_track",
+    description: "Permanently remove one regular track from the Set. Call ONLY when the CURRENT user message explicitly asks to delete a track; broad cleanup wording is not authorization. Live Undo can restore it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "0-based regular-track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+      },
+      required: ["track_index"],
+    },
+  },
+  {
     name: "create_audio_track",
     description: "Create a new audio track, optionally with a name.",
     input_schema: {
@@ -481,6 +493,20 @@ export const TOOLS = [
         device_name: { type: "string" },
       },
       required: ["device_name"],
+    },
+  },
+  {
+    name: "delete_device",
+    description: "Remove one built-in device from a regular track. Call ONLY when the CURRENT user message explicitly asks to delete a device; Live Undo can restore it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "0-based regular-track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        device_index: { type: "number", description: "0-based device index on that track" },
+        device_name: { type: "string", description: "Device name (alternative to device_index)" },
+      },
+      required: ["track_index"],
     },
   },
   {
@@ -734,6 +760,32 @@ export const TOOLS = [
     },
   },
   {
+    name: "delete_arrangement_clip",
+    description: "Delete one Arrangement View clip from a regular track. Call ONLY when the CURRENT user message explicitly asks to delete an arrangement clip; Live Undo can restore it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "0-based regular-track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        clip_index: { type: "number", description: "0-based arrangement-clip index on that track" },
+      },
+      required: ["track_index", "clip_index"],
+    },
+  },
+  {
+    name: "delete_session_clip",
+    description: "Delete the clip in one Session View slot. Call ONLY when the CURRENT user message explicitly asks to delete a Session clip; Live Undo can restore it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "0-based regular-track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        scene_index: { type: "number", description: "0-based Session scene / slot index" },
+      },
+      required: ["track_index", "scene_index"],
+    },
+  },
+  {
     name: "set_clip_notes",
     description: "Replace all notes of an existing arrangement MIDI clip. Same note format as write_midi_clip.",
     input_schema: {
@@ -779,6 +831,15 @@ export const TOOLS = [
     },
   },
   { name: "duplicate_scene", description: "Duplicate a Scene immediately after it. The copy keeps Live's default name.", input_schema: { type: "object", properties: { index: { type: "number" } }, required: ["index"] } },
+  {
+    name: "delete_scene",
+    description: "Delete one Session View scene. Call ONLY when the CURRENT user message explicitly asks to delete a scene; Live Undo can restore it.",
+    input_schema: {
+      type: "object",
+      properties: { scene_index: { type: "number", description: "0-based scene index" } },
+      required: ["scene_index"],
+    },
+  },
   { name: "create_cue_point", description: "Create a named Cue Point at a 1-based arrangement bar.", input_schema: { type: "object", properties: { bar: { type: "number" }, name: { type: "string" } }, required: ["bar", "name"] } },
   { name: "rename_cue_point", description: "Rename a Cue Point by its current zero-based index.", input_schema: { type: "object", properties: { index: { type: "number" }, name: { type: "string" } }, required: ["index", "name"] } },
   { name: "delete_cue_point", description: "Delete a Cue Point by its current zero-based index.", input_schema: { type: "object", properties: { index: { type: "number" } }, required: ["index"] } },

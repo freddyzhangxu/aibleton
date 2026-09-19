@@ -62,6 +62,7 @@ import {
 } from "./helpers.js";
 import { arrangeSong } from "./arrange.js";
 import { analyzeRenderedTrack } from "./rendered.js";
+import { deleteAuthorizationError, deleteToolIsAuthorized, isDeleteTool } from "../chat/deleteauth.js";
 
 // ---------- Factory drum kits (Drum Essentials pack) ----------
 
@@ -189,6 +190,11 @@ export async function runTool(
   input: Record<string, unknown>,
 ): Promise<unknown> {
   const song = context.application.song;
+  // runTool is also used by tests and could gain non-agent callers later.
+  // Keep the destructive SDK boundary protected even if runtime is bypassed.
+  if (isDeleteTool(name) && !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization)) {
+    return deleteAuthorizationError(name);
+  }
 
   switch (name) {
     case "get_song_overview": {
@@ -290,6 +296,16 @@ export async function runTool(
       const ref = resolveTrack(context, input, "track_index");
       const track = await context.withinTransaction(() => song.duplicateTrack(ref.track));
       return { duplicated: ref.track.name, created: track.name, track_index: song.tracks.indexOf(track) };
+    }
+    case "delete_track": {
+      const ref = resolveTrack(context, input, "track_index");
+      const deleted = { name: ref.track.name, track_index: ref.index };
+      await context.withinTransaction(() => song.deleteTrack(ref.track));
+      return {
+        deleted: "track",
+        ...deleted,
+        undo: "已删除；如需恢复，请在 Live 中执行 Undo（⌘Z / Ctrl+Z）。",
+      };
     }
     case "create_move_track": {
       const channel = Math.min(16, Math.max(1, Math.round(Number(input.channel) || 1)));
@@ -432,6 +448,19 @@ export async function runTool(
       );
       return trackResult(ref, { inserted: device.name, into: track.name });
     }
+    case "delete_device": {
+      const ref = resolveTrack(context, input, "track_index");
+      const device = deviceAt(context, ref.index, deviceRefFrom(input));
+      const deviceIndex = ref.track.devices.indexOf(device);
+      const name = device.name;
+      await context.withinTransaction(() => ref.track.deleteDevice(device));
+      return trackResult(ref, {
+        deleted: "device",
+        device: name,
+        device_index: deviceIndex,
+        undo: "已删除；如需恢复，请在 Live 中执行 Undo（⌘Z / Ctrl+Z）。",
+      });
+    }
     case "create_scene": {
       const index = typeof input.index === "number" ? input.index : -1;
       const scene = await context.withinTransaction(() => song.createScene(index));
@@ -444,6 +473,19 @@ export async function runTool(
       if (!Number.isInteger(index) || !scene) throw new Error("场景索引无效");
       const copy = await context.withinTransaction(() => song.duplicateScene(scene));
       return { duplicated: scene.name, created: copy.name, index: song.scenes.indexOf(copy) };
+    }
+    case "delete_scene": {
+      const index = Number(input.scene_index);
+      const scene = song.scenes[index];
+      if (!Number.isInteger(index) || !scene) throw new Error("场景索引无效");
+      const name = scene.name;
+      await context.withinTransaction(() => song.deleteScene(scene));
+      return {
+        deleted: "scene",
+        name,
+        scene_index: index,
+        undo: "已删除；如需恢复，请在 Live 中执行 Undo（⌘Z / Ctrl+Z）。",
+      };
     }
     case "create_cue_point": {
       const bar = Number(input.bar);
@@ -797,6 +839,35 @@ export async function runTool(
       clip.notes = notes;
       if (input.name) clip.name = String(input.name);
       return trackResult(ref, { clip: clip.name, length, noteCount: notes.length, swing: Number(input.swing ?? 0) });
+    }
+    case "delete_arrangement_clip": {
+      const ref = resolveTrack(context, input, "track_index");
+      const clipIndex = Number(input.clip_index);
+      const clip = ref.track.arrangementClips[clipIndex];
+      if (!Number.isInteger(clipIndex) || !clip) throw new Error("编排区 Clip 索引无效");
+      const name = clip.name;
+      await context.withinTransaction(() => ref.track.deleteClip(clip));
+      return trackResult(ref, {
+        deleted: "arrangement_clip",
+        clip: name,
+        clip_index: clipIndex,
+        undo: "已删除；如需恢复，请在 Live 中执行 Undo（⌘Z / Ctrl+Z）。",
+      });
+    }
+    case "delete_session_clip": {
+      const ref = resolveTrack(context, input, "track_index");
+      const sceneIndex = Number(input.scene_index);
+      const slot = ref.track.clipSlots[sceneIndex];
+      if (!Number.isInteger(sceneIndex) || !slot) throw new Error("Session 场景索引无效");
+      if (!slot.clip) throw new Error("该 Session Clip 槽为空，未执行删除");
+      const name = slot.clip.name;
+      await context.withinTransaction(() => slot.deleteClip());
+      return trackResult(ref, {
+        deleted: "session_clip",
+        clip: name,
+        scene_index: sceneIndex,
+        undo: "已删除；如需恢复，请在 Live 中执行 Undo（⌘Z / Ctrl+Z）。",
+      });
     }
     case "get_clip_notes": {
       const ref = resolveTrack(context, input, "track_index");

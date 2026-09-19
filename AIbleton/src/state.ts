@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@ableton-extensions/sdk";
 import type { AudioGenConfig } from "./audiogen.js";
+import type { DeleteAuthorization } from "./chat/deleteauth.js";
 import type { LocalConfig, Provider } from "./config/local.js";
 import type { SampleEntry } from "./samplemeta.js";
 
@@ -47,6 +48,8 @@ export const toolState = {
   /** UI language of the running chat task — feeds the web tools' search locale
    * (same per-request lifetime as activeAudioConfig; busy = one task at a time). */
   activeLanguage: undefined as string | undefined,
+  /** Kind-scoped delete permission derived from the CURRENT user message. */
+  activeDeleteAuthorization: undefined as DeleteAuthorization | undefined,
   abortCtl: null as AbortController | null,
   /** Set by /api/stop: the running task aborts its in-flight request and exits. */
   stopRequested: false,

@@ -37,6 +37,7 @@ import {
   switchSession,
 } from "./chat/session.js";
 import { answerConfirmation, getPendingConfirm } from "./chat/gates.js";
+import { deleteAuthorizationFor } from "./chat/deleteauth.js";
 import { resolveConfig, type Attachment, type ChatRequest } from "./chat/config.js";
 import { resetTurnState } from "./agent/runtime.js";
 import { clearRightClickFocus, updateSetContext } from "./setcontext.js";
@@ -826,6 +827,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         toolState.activeAudioConfig = resolveAudioConfig(
           mergeAudioRequest(parsed.audio as AudioRequestConfig | undefined));
         toolState.activeLanguage = typeof parsed.language === "string" ? parsed.language : undefined;
+        toolState.activeDeleteAuthorization = deleteAuthorizationFor(text);
         toolState.phase = "thinking";
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT
@@ -849,6 +851,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             busy = false;
             toolState.abortCtl = null;
             toolState.activeLanguage = undefined;
+            toolState.activeDeleteAuthorization = undefined;
             toolState.phase = null;
             // Never leave a confirmation dangling past its task's lifetime.
             answerConfirmation(false);
