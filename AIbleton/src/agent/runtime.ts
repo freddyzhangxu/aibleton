@@ -769,6 +769,7 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
 const TOOL_PHASES: Record<string, string> = {
   generate_audio: "generating",
   analyze_song: "analyzing",
+  analyze_rendered_track: "rendering",
   move_analyze_set: "analyzing",
   set_goal: "planning",
   set_plan: "planning",

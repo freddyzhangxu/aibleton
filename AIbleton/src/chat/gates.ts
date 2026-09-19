@@ -11,10 +11,12 @@ import { toolHooks, toolState, type Ctx } from "../state.js";
 export const READ_ONLY_TOOLS = new Set([
   "get_song_overview",
   "analyze_song",
+  "analyze_rendered_track",
   "set_goal",
   "set_plan",
   "update_memory",
   "get_device_parameters",
+  "get_track_mixer",
   "get_clip_notes",
   "search_samples",
   "web_search",

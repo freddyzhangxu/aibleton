@@ -110,6 +110,21 @@ export const TOOLS = [
     },
   },
   {
+    name: "analyze_rendered_track",
+    description:
+      "Render one Audio Track's arrangement range through Live, then measure the rendered pre-FX audio (RMS, peak, crest, loudness approximation, dynamic range, spectral centroid, transients and 6-band balance). Use when the user explicitly asks about a track's arranged audio rather than its source file. This is read-only and may take time. Pre-FX means it reflects clip timing/content but NOT the track device chain or master processing. Pass start_bar and end_bar together for a precise inclusive range; omit both to render from the track's earliest to latest arrangement Audio Clip.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "Audio Track index, 0-based" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        start_bar: { type: "number", description: "Optional inclusive start bar (1-based; requires end_bar)" },
+        end_bar: { type: "number", description: "Optional inclusive end bar (1-based; requires start_bar)" },
+      },
+      required: ["track_index"],
+    },
+  },
+  {
     name: "set_goal",
     description:
       "Declare the user's current task as a goal with MACHINE-CHECKABLE success criteria — call it FIRST, " +
@@ -248,7 +263,7 @@ export const TOOLS = [
   {
     name: "arrange_song",
     description:
-      "Build or rebuild the arrangement in ONE call from a placement plan. Each placement copies a source clip — an arrangement clip via clip_index, or a session clip via scene_index — onto ITS OWN track at start_bar for length_bars. Looping sources tile their loop region to fill the length; one-shots play once and leave silence. The whole plan is validated BEFORE anything changes (bad references and same-track overlaps abort with zero writes) and executed as a single undo step. MIDI clips are baked note-by-note (tiled/trimmed); audio clips reference the same file (warp markers, fades and automation are NOT carried over). Sources stay untouched. Use analyze_song's clip map for source coordinates. Optional clear_range_bars wipes ALL tracks' clips in that inclusive bar range first — only for rebuilds. dry_run validates and reports the resolved plan without touching the Set. Cannot move clips across tracks or delete individual clips.",
+      "Build or rebuild the arrangement in ONE call from a placement plan. Each placement copies a source clip — an arrangement clip via clip_index, or a session clip via scene_index — onto ITS OWN track at start_bar for length_bars. Looping sources tile their loop region to fill the length; one-shots play once and leave silence. The whole plan is validated BEFORE anything changes (bad references and same-track overlaps abort with zero writes). Once execution starts, SDK operations commit step by step; if a later one fails, earlier completed changes remain and can be undone step by step in Live. MIDI clips are baked note-by-note (tiled/trimmed); audio clips reference the same file (warp markers, fades and automation are NOT carried over). Sources stay untouched. Use analyze_song's clip map for source coordinates. Optional clear_range_bars wipes ALL tracks' clips in that inclusive bar range first — only for rebuilds. dry_run validates and reports the resolved plan without touching the Set. Cannot move clips across tracks or delete individual clips.",
     input_schema: {
       type: "object",
       properties: {
@@ -326,6 +341,7 @@ export const TOOLS = [
       properties: { name: { type: "string" } },
     },
   },
+  { name: "duplicate_track", description: "Duplicate a Track immediately after it. The copy keeps Live's default name.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC } }, required: ["track_index"] } },
   {
     name: "create_audio_track",
     description: "Create a new audio track, optionally with a name.",
@@ -734,7 +750,7 @@ export const TOOLS = [
   {
     name: "set_track_mixer",
     description:
-      "Set a track's mixer settings: volume (0–1, where 0.85 ≈ 0 dB) and/or pan (-1 = full left, 0 = center, 1 = full right).",
+      "Set a track's mixer settings: volume, pan, and/or sends to Return Tracks. Send index 0 is Return Track 0 / Send A, index 1 is Send B.",
     input_schema: {
       type: "object",
       properties: {
@@ -742,8 +758,14 @@ export const TOOLS = [
         track_name: { type: "string", description: TRACK_NAME_DESC },
         volume: { type: "number" },
         pan: { type: "number" },
+        sends: { type: "array", maxItems: 12, items: { type: "object", properties: { index: { type: "number" }, value: { type: "number" } }, required: ["index", "value"] } },
       },
     },
+  },
+  {
+    name: "get_track_mixer",
+    description: "Read a track's current volume, pan, and sends. Send index 0 maps to Return Track 0 / Send A. Call before changing mixer or send levels when current values matter.",
+    input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC } }, required: ["track_index"] },
   },
   {
     name: "create_scene",
@@ -756,6 +778,10 @@ export const TOOLS = [
       },
     },
   },
+  { name: "duplicate_scene", description: "Duplicate a Scene immediately after it. The copy keeps Live's default name.", input_schema: { type: "object", properties: { index: { type: "number" } }, required: ["index"] } },
+  { name: "create_cue_point", description: "Create a named Cue Point at a 1-based arrangement bar.", input_schema: { type: "object", properties: { bar: { type: "number" }, name: { type: "string" } }, required: ["bar", "name"] } },
+  { name: "rename_cue_point", description: "Rename a Cue Point by its current zero-based index.", input_schema: { type: "object", properties: { index: { type: "number" }, name: { type: "string" } }, required: ["index", "name"] } },
+  { name: "delete_cue_point", description: "Delete a Cue Point by its current zero-based index.", input_schema: { type: "object", properties: { index: { type: "number" } }, required: ["index"] } },
   {
     name: "rename_scene",
     description: "Rename a scene by its 0-based index.",

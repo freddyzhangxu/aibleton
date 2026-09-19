@@ -56,10 +56,12 @@ import {
   resolveTrack,
   setParamValue,
   toBpm,
+  toNum,
   toStrArr,
   trackResult,
 } from "./helpers.js";
 import { arrangeSong } from "./arrange.js";
+import { analyzeRenderedTrack } from "./rendered.js";
 
 // ---------- Factory drum kits (Drum Essentials pack) ----------
 
@@ -228,6 +230,9 @@ export async function runTool(
         audioRun,
       );
     }
+    case "analyze_rendered_track": {
+      return analyzeRenderedTrack(context, input);
+    }
     case "set_goal": {
       return toolHooks.handleSetGoal(context, input);
     }
@@ -280,6 +285,11 @@ export async function runTool(
       const track = await context.withinTransaction(() => song.createAudioTrack());
       if (input.name) track.name = String(input.name);
       return { created: track.name, type: "Audio" };
+    }
+    case "duplicate_track": {
+      const ref = resolveTrack(context, input, "track_index");
+      const track = await context.withinTransaction(() => song.duplicateTrack(ref.track));
+      return { duplicated: ref.track.name, created: track.name, track_index: song.tracks.indexOf(track) };
     }
     case "create_move_track": {
       const channel = Math.min(16, Math.max(1, Math.round(Number(input.channel) || 1)));
@@ -428,6 +438,38 @@ export async function runTool(
       if (input.name) scene.name = String(input.name);
       return { created: scene.name };
     }
+    case "duplicate_scene": {
+      const index = Number(input.index);
+      const scene = song.scenes[index];
+      if (!Number.isInteger(index) || !scene) throw new Error("场景索引无效");
+      const copy = await context.withinTransaction(() => song.duplicateScene(scene));
+      return { duplicated: scene.name, created: copy.name, index: song.scenes.indexOf(copy) };
+    }
+    case "create_cue_point": {
+      const bar = Number(input.bar);
+      if (!Number.isInteger(bar) || bar < 1) throw new Error("bar 必须是从 1 开始的整数");
+      const s0 = song.scenes[0];
+      const beats = (toNum(s0?.signatureNumerator) || 4) * 4 / (toNum(s0?.signatureDenominator) || 4);
+      const cue = await context.withinTransaction(() => song.createCuePoint((bar - 1) * beats));
+      cue.name = String(input.name ?? "").trim();
+      return { created: cue.name, bar };
+    }
+    case "rename_cue_point": {
+      const index = Number(input.index);
+      const cue = song.cuePoints[index];
+      if (!Number.isInteger(index) || !cue) throw new Error("Cue Point 索引无效");
+      const oldName = cue.name;
+      cue.name = String(input.name ?? "").trim();
+      return { renamed: oldName, to: cue.name, index };
+    }
+    case "delete_cue_point": {
+      const index = Number(input.index);
+      const cue = song.cuePoints[index];
+      if (!Number.isInteger(index) || !cue) throw new Error("Cue Point 索引无效");
+      const name = cue.name;
+      await context.withinTransaction(() => song.deleteCuePoint(cue));
+      return { deleted: name, index };
+    }
     case "get_device_parameters": {
       const tref = resolveTrack(context, input, "track_index");
       const device = deviceAt(context, tref.index, deviceRefFrom(input));
@@ -510,7 +552,34 @@ export async function runTool(
       if (typeof input.pan !== "undefined") {
         out.pan = await setParamValue(track.mixer.panning, Number(input.pan));
       }
+      if (input.sends !== undefined) {
+        if (!Array.isArray(input.sends) || input.sends.length > 12) throw new Error("sends 必须是最多 12 项的数组");
+        const returns = song.returnTracks;
+        out.sends = await Promise.all(input.sends.map(async (raw) => {
+          const spec = raw as Record<string, unknown>;
+          const index = Number(spec.index);
+          if (!Number.isInteger(index) || index < 0 || index >= track.mixer.sends.length) {
+            throw new Error(`Send 索引 ${String(spec.index)} 无效；该轨道共有 ${track.mixer.sends.length} 个 Send（0 起计）`);
+          }
+          return { index, return_track: returns[index]?.name ?? `Send ${index}`, value: await setParamValue(track.mixer.sends[index], Number(spec.value)) };
+        }));
+      }
       return trackResult(ref, out);
+    }
+    case "get_track_mixer": {
+      const ref = resolveTrack(context, input, "track_index");
+      const returns = song.returnTracks;
+      const [volume, pan, ...sendValues] = await Promise.all([
+        ref.track.mixer.volume.getValue(),
+        ref.track.mixer.panning.getValue(),
+        ...ref.track.mixer.sends.slice(0, 12).map((send) => send.getValue()),
+      ]);
+      return trackResult(ref, {
+        track: ref.track.name,
+        volume,
+        pan,
+        sends: sendValues.map((value, index) => ({ index, return_track: returns[index]?.name ?? `Send ${index}`, value })),
+      });
     }
     case "load_drum_kit": {
       const ref = resolveTrack(context, input, "track_index");
