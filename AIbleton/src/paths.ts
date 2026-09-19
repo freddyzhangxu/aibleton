@@ -5,6 +5,7 @@
  *   - Ableton library locations (Core Library / Factory Packs / User Library)
  *   - sandbox-surviving fs primitives
  *   - persistent chat-store fallback location
+ *   - per-extension temp directory resolution (SDK tempDirectory + fallback)
  *   - system proxy detection (scutil / reg query)
  *
  * Windows note: the child-process escapes now have win32 counterparts built
@@ -638,6 +639,40 @@ export function storeFallbackPath(): string {
     return path.join(appData, "AIbleton", "chats.json");
   }
   return path.join(os.homedir(), "Library", "Application Support", "AIbleton", "chats.json");
+}
+
+// ---------- Per-extension temp directory ----------
+
+/**
+ * Scratch space for files that need not survive a Live restart.
+ *
+ * The SDK's environment.tempDirectory is per-extension and inside the
+ * sandbox's granted scope, so plain fs works there — but beta hosts may
+ * leave it undefined. Fallback: os.tmpdir()/AIbleton, created through
+ * mkdirOutsideSandbox because the installed host's --allow-fs-write does
+ * not cover the system temp either. Both branches mkdir best-effort;
+ * callers must still tolerate write failures.
+ *
+ * Takes a structural environment type so paths.ts stays free of SDK imports.
+ */
+export function tempDir(environment: { tempDirectory?: string }): string {
+  const sdkDir = environment.tempDirectory;
+  if (typeof sdkDir === "string" && sdkDir.trim()) {
+    try {
+      fs.mkdirSync(sdkDir, { recursive: true });
+    } catch {
+      // Not creatable in-process — the eventual write fails the same way and
+      // the caller's error path reports it.
+    }
+    return sdkDir;
+  }
+  const fallback = path.join(os.tmpdir(), "AIbleton");
+  try {
+    mkdirOutsideSandbox(fallback);
+  } catch {
+    // Same contract as above.
+  }
+  return fallback;
 }
 
 // ---------- System proxy detection ----------
