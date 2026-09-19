@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AudioClip, AudioTrack, ClipSlot, MidiClip, MidiTrack, Scene } from "@ableton-extensions/sdk";
+import { AudioClip, AudioTrack, ClipSlot, DrumRack, MidiClip, MidiTrack, Scene, Simpler } from "@ableton-extensions/sdk";
 import type { Ctx } from "./state.js";
 import {
   clearRightClickFocus,
@@ -63,6 +63,16 @@ function clipSlot(id: bigint, clip: MidiClip<"1.0.0">): ClipSlot<"1.0.0"> {
   return live(ClipSlot.prototype, { handle: { id }, clip });
 }
 
+function drumRack(id: bigint): DrumRack<"1.0.0"> {
+  return live(DrumRack.prototype, {
+    handle: { id }, name: "Kit", chains: [{ receivingNote: 36 }, { receivingNote: 38 }, { receivingNote: 42 }],
+  });
+}
+
+function simpler(id: bigint): Simpler<"1.0.0"> {
+  return live(Simpler.prototype, { handle: { id }, name: "Bass Simpler", sample: { filePath: "/Samples/bass.wav" } });
+}
+
 /** Creates just enough of Live's object graph for focus resolution. */
 function focusCtx(target: object & { handle: { id: bigint } }, setId: bigint): Ctx {
   let tracks: object[] = [];
@@ -75,6 +85,9 @@ function focusCtx(target: object & { handle: { id: bigint } }, setId: bigint): C
     const track = target instanceof AudioClip ? audioTrack(90n) : midiTrack(90n);
     if (target instanceof ClipSlot) {
       Object.defineProperty(track, "clipSlots", { value: [target], configurable: true });
+    } else if (target instanceof DrumRack || target instanceof Simpler) {
+      Object.defineProperty(track, "devices", { value: [target], configurable: true });
+      Object.defineProperty(target, "parent", { value: track, configurable: true });
     } else {
       Object.defineProperty(track, "arrangementClips", { value: [target], configurable: true });
     }
@@ -123,6 +136,8 @@ describe("setcontext", () => {
       { target: clipSlot(13n, slotClip), expected: /ClipSlot on track 0 “Bass”, Session scene 0/ },
       { target: midiClip(15n), expected: /MIDI clip “Bass riff”.*starts at beat 8, lasts 4 beats, 1 notes/ },
       { target: audioClip(16n), expected: /audio clip “Vocal take”.*source Vocal\.wav/ },
+      { target: drumRack(17n), expected: /Drum Rack “Kit” on track 0 “Bass”, 3 pads, pad notes: 36, 38, 42/ },
+      { target: simpler(18n), expected: /Simpler “Bass Simpler” on track 0 “Bass”, source bass\.wav/ },
     ];
 
     for (const [index, item] of cases.entries()) {

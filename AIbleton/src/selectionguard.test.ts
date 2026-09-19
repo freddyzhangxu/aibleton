@@ -73,4 +73,13 @@ describe("selectionGuard", () => {
       track_index: 1, clip_index: 0, warped: true,
     }) ?? "", /目标轨道 1/);
   });
+
+  it("keeps Drum Rack pad-device deletion inside the selected track", () => {
+    assert.equal(selectionGuard(context, arrangement, false, "delete_drum_pad_device", {
+      track_index: 0, pad_note: 36, device_index: 1,
+    }), null);
+    assert.match(selectionGuard(context, arrangement, false, "delete_drum_pad_device", {
+      track_index: 1, pad_note: 36, device_index: 1,
+    }) ?? "", /目标轨道 1/);
+  });
 });

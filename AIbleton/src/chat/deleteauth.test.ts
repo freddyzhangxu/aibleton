@@ -30,4 +30,5 @@ test("recognizes arrangement and session clip requests separately", () => {
 
 test("recognizes the Chinese generic device noun", () => {
   assert.equal(deleteToolIsAuthorized("delete_device", deleteAuthorizationFor("删除这个设备")), true);
+  assert.equal(deleteToolIsAuthorized("delete_drum_pad_device", deleteAuthorizationFor("删除这个设备")), true);
 });

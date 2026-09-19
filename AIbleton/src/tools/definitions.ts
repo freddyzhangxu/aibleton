@@ -609,6 +609,7 @@ export const TOOLS = [
   { name: "set_drum_pad_mixer", description: "Set one Drum Rack pad chain's volume, pan and/or sends. Values are clamped to Live's parameter range.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, volume: { type: "number" }, pan: { type: "number" }, sends: { type: "array", items: { type: "object" } } }, required: ["track_index", "pad_note"] } },
   { name: "insert_drum_pad_device", description: "Append a built-in Live device to one Drum Rack pad's chain. Third-party plug-ins are unsupported.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_name: { type: "string" } }, required: ["track_index", "pad_note", "device_name"] } },
   { name: "duplicate_drum_pad_device", description: "Duplicate a device on one Drum Rack pad chain immediately after itself.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_index: { type: "number" }, device_name: { type: "string" } }, required: ["track_index", "pad_note"] } },
+  { name: "delete_drum_pad_device", description: "Remove one device from a Drum Rack pad chain. Call ONLY when the CURRENT user message explicitly asks to delete a device; Live Undo can restore it.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_index: { type: "number" }, device_name: { type: "string" } }, required: ["track_index", "pad_note"] } },
   {
     name: "search_samples",
     description:
@@ -671,6 +672,20 @@ export const TOOLS = [
         file_path: { type: "string", description: "Full path from search_samples" },
       },
       required: ["file_path"],
+    },
+  },
+  {
+    name: "get_simpler_sample",
+    description: "Read the sample currently loaded in a Simpler on a track. If device_index and device_name are omitted, reads the first Simpler. This is read-only.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        device_index: { type: "number", description: "Optional Simpler index in the track device chain" },
+        device_name: { type: "string", description: "Optional Simpler name (alternative to device_index)" },
+      },
+      required: ["track_index"],
     },
   },
   {

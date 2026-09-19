@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { DrumRack } from "@ableton-extensions/sdk";
 import { deleteAuthorizationFor } from "../chat/deleteauth.js";
 import { toolState, type Ctx } from "../state.js";
 import { runTool } from "./dispatcher.js";
@@ -64,4 +65,56 @@ test("dispatcher rejects unapproved deletion before resolving a target", async (
   const result = await runTool(context, "delete_track", { track_index: 0 });
   assert.equal((result as { delete_authorization_required?: boolean }).delete_authorization_required, true);
   assert.match((result as { error: string }).error, /删除未执行/);
+});
+
+test("delete_drum_pad_device deletes the resolved chain device under device authorization", async () => {
+  const calls: string[] = [];
+  const padDevice = { name: "Reverb" };
+  const chain = {
+    receivingNote: 38,
+    devices: [padDevice],
+    deleteDevice: async (device: unknown) => { assert.equal(device, padDevice); calls.push("pad_device"); },
+  };
+  const rack = Object.create(DrumRack.prototype) as DrumRack<"1.0.0">;
+  Object.defineProperties(rack, {
+    name: { value: "Kit", configurable: true },
+    chains: { value: [chain], configurable: true },
+  });
+  const track = { name: "Drums", devices: [rack] };
+  const context = {
+    application: { song: { tracks: [track], scenes: [] } },
+    withinTransaction: <T>(fn: () => T) => fn(),
+  } as unknown as Ctx;
+  toolState.activeDeleteAuthorization = deleteAuthorizationFor("删除这个设备");
+  try {
+    const result = await runTool(context, "delete_drum_pad_device", { track_index: 0, pad_note: 38, device_index: 0 });
+    assert.deepEqual(calls, ["pad_device"]);
+    assert.deepEqual(result, {
+      deleted: "drum_pad_device", device: "Reverb", device_index: 0, rack: "Kit", pad_note: 38,
+      undo: "已删除；如需恢复，请在 Live 中执行 Undo（⌘Z / Ctrl+Z）。", track_index: 0,
+    });
+  } finally {
+    toolState.activeDeleteAuthorization = undefined;
+  }
+});
+
+test("duplicate_drum_pad_device resolves pad_note before duplicating", async () => {
+  const padDevice = { name: "Reverb" };
+  const chain = {
+    receivingNote: 38,
+    devices: [padDevice],
+    duplicateDevice: async (device: unknown) => { assert.equal(device, padDevice); return { name: "Reverb 2" }; },
+    mixer: { volume: { getValue: async () => 0 }, panning: { getValue: async () => 0 }, sends: [] },
+  };
+  const rack = Object.create(DrumRack.prototype) as DrumRack<"1.0.0">;
+  Object.defineProperties(rack, {
+    name: { value: "Kit", configurable: true },
+    chains: { value: [chain], configurable: true },
+  });
+  const context = {
+    application: { song: { tracks: [{ name: "Drums", devices: [rack] }], scenes: [] } },
+    withinTransaction: <T>(fn: () => T) => fn(),
+  } as unknown as Ctx;
+  const result = await runTool(context, "duplicate_drum_pad_device", { track_index: 0, pad_note: 38, device_index: 0 });
+  assert.equal((result as { created: string }).created, "Reverb 2");
 });

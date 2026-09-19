@@ -39,6 +39,8 @@ export function activate(activation: ActivationContext) {
     "MidiClip",
     "AudioClip",
     "ClipSlot",
+    "DrumRack",
+    "Simpler",
     "ClipSlotSelection",
     "AudioTrack.ArrangementSelection",
     "MidiTrack.ArrangementSelection",
