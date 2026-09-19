@@ -67,4 +67,10 @@ describe("selectionGuard", () => {
       track_index: 0, take_lane_index: 0, start_beat: 14, duration_beats: 4,
     }) ?? "", /目标时间范围/);
   });
+
+  it("keeps Warp edits inside the selected Arrangement clip", () => {
+    assert.match(selectionGuard(context, arrangement, false, "set_audio_clip_warp", {
+      track_index: 1, clip_index: 0, warped: true,
+    }) ?? "", /目标轨道 1/);
+  });
 });

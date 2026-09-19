@@ -18,6 +18,7 @@ export const READ_ONLY_TOOLS = new Set([
   "get_device_parameters",
   "get_track_mixer",
   "get_clip_notes",
+  "get_audio_clip_warp",
   "search_samples",
   "web_search",
   "web_fetch",
