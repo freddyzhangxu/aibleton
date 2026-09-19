@@ -54,6 +54,7 @@ import {
   deviceRefFrom,
   gridLabel,
   midiTrackAt,
+  matchByName,
   paramAt,
   parseNotes,
   resolveTrack,
@@ -639,6 +640,38 @@ export async function runTool(
         pan,
         sends: sendValues.map((value, index) => ({ index, return_track: returns[index]?.name ?? `Send ${index}`, value })),
       });
+    }
+    case "get_return_track_mixer":
+    case "set_return_track_mixer": {
+      const index = Number(input.return_index);
+      const track = song.returnTracks[index];
+      if (!Number.isInteger(index) || !track) throw new Error(`Return Track 序号 ${String(input.return_index)} 无效`);
+      if (name === "set_return_track_mixer") {
+        if (input.volume !== undefined) await setParamValue(track.mixer.volume, Number(input.volume));
+        if (input.pan !== undefined) await setParamValue(track.mixer.panning, Number(input.pan));
+      }
+      const [volume, pan, ...sends] = await Promise.all([track.mixer.volume.getValue(), track.mixer.panning.getValue(), ...track.mixer.sends.map((send) => send.getValue())]);
+      return { return_index: index, track: track.name, volume, pan, sends };
+    }
+    case "get_master_chain": {
+      const master = song.mainTrack;
+      const [volume, pan] = await Promise.all([master.mixer.volume.getValue(), master.mixer.panning.getValue()]);
+      return { track: master.name, volume, pan, devices: master.devices.map((device, index) => ({ index, name: device.name })) };
+    }
+    case "get_master_device_parameters":
+    case "set_master_device_parameter": {
+      const master = song.mainTrack;
+      const device = typeof input.device_name === "string" && input.device_name.trim()
+        ? matchByName(master.devices, input.device_name, "Master 设备")
+        : master.devices[Number(input.device_index)];
+      if (!device) throw new Error("Master 设备序号无效，或请提供 device_name");
+      if (name === "set_master_device_parameter") {
+        if (!toolState.activeMasterIntent) throw new Error("Master 参数修改需要用户在本轮明确说“调 Master / 母带 / mastering”");
+        const applied = await applyDeviceParam(device, String(input.parameter ?? ""), String(input.value ?? ""));
+        return { track: master.name, device: device.name, ...applied };
+      }
+      const parameters = await Promise.all(device.parameters.map(async (param, index) => ({ index, name: param.name, value: await param.getValue(), min: param.min, max: param.max, default: toNum(param.defaultValue) })));
+      return { track: master.name, device: device.name, parameters };
     }
     case "load_drum_kit": {
       const ref = resolveTrack(context, input, "track_index");

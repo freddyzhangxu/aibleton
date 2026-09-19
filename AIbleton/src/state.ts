@@ -53,6 +53,8 @@ export const toolState = {
   /** The CURRENT user explicitly asked to operate on the entire Set. This is
    * deliberately per-turn: it must never grant scope beyond this request. */
   activeGlobalIntent: false,
+  /** Master writes require an explicit current-turn mastering intent. */
+  activeMasterIntent: false,
   abortCtl: null as AbortController | null,
   /** Set by /api/stop: the running task aborts its in-flight request and exits. */
   stopRequested: false,
