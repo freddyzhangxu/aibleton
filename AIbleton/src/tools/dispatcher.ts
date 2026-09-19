@@ -50,11 +50,13 @@ import {
   buildSongSnapshot,
   deviceAt,
   deviceRefFrom,
+  gridLabel,
   midiTrackAt,
   paramAt,
   parseNotes,
   resolveTrack,
   setParamValue,
+  snapNotesToGrid,
   toBpm,
   toNum,
   toStrArr,
@@ -845,12 +847,23 @@ export async function runTool(
       const length = Number(input.length_beats ?? 16);
       if (!(length > 0)) throw new Error("length_beats 必须大于 0");
       const clip = await context.withinTransaction(() => track.createMidiClip(start, length));
-      const notes = applySwing(parseNotes(input.notes, length), Number(input.swing ?? 0)).filter(
-        (n) => n.startTime < length,
-      );
+      // Snap before swing so baked swing offsets survive; grid read live from the song.
+      const gridQ = toNum(song.gridQuantization);
+      const gridT = Boolean(song.gridIsTriplet);
+      const snap = input.snap_to_grid !== false;
+      let notes = parseNotes(input.notes, length);
+      if (snap) notes = snapNotesToGrid(notes, gridQ, gridT);
+      notes = applySwing(notes, Number(input.swing ?? 0)).filter((n) => n.startTime < length);
       clip.notes = notes;
       if (input.name) clip.name = String(input.name);
-      return trackResult(ref, { clip: clip.name, start, length, noteCount: notes.length, swing: Number(input.swing ?? 0) });
+      return trackResult(ref, {
+        clip: clip.name,
+        start,
+        length,
+        noteCount: notes.length,
+        swing: Number(input.swing ?? 0),
+        ...(snap ? { snapped_to_grid: gridLabel(gridQ, gridT) } : {}),
+      });
     }
     case "write_session_clip": {
       const ref = resolveTrack(context, input, "track_index");
@@ -861,12 +874,21 @@ export async function runTool(
       if (slot.clip) throw new Error("该 clip 槽已有 clip，请先删除或换一个槽位");
       const length = Number(input.length_beats ?? 16);
       const clip = await context.withinTransaction(() => slot.createMidiClip(length));
-      const notes = applySwing(parseNotes(input.notes, length), Number(input.swing ?? 0)).filter(
-        (n) => n.startTime < length,
-      );
+      const gridQ = toNum(song.gridQuantization);
+      const gridT = Boolean(song.gridIsTriplet);
+      const snap = input.snap_to_grid !== false;
+      let notes = parseNotes(input.notes, length);
+      if (snap) notes = snapNotesToGrid(notes, gridQ, gridT);
+      notes = applySwing(notes, Number(input.swing ?? 0)).filter((n) => n.startTime < length);
       clip.notes = notes;
       if (input.name) clip.name = String(input.name);
-      return trackResult(ref, { clip: clip.name, length, noteCount: notes.length, swing: Number(input.swing ?? 0) });
+      return trackResult(ref, {
+        clip: clip.name,
+        length,
+        noteCount: notes.length,
+        swing: Number(input.swing ?? 0),
+        ...(snap ? { snapped_to_grid: gridLabel(gridQ, gridT) } : {}),
+      });
     }
     case "delete_arrangement_clip": {
       const ref = resolveTrack(context, input, "track_index");
@@ -921,13 +943,18 @@ export async function runTool(
       const clip = track.arrangementClips[Number(input.clip_index)];
       if (!clip) throw new Error("clip 序号无效");
       if (!(clip instanceof MidiClip)) throw new Error("该 clip 不是 MIDI clip");
-      const notes = parseNotes(input.notes, clip.duration);
+      const gridQ = toNum(song.gridQuantization);
+      const gridT = Boolean(song.gridIsTriplet);
+      const snap = input.snap_to_grid !== false;
+      let notes = parseNotes(input.notes, clip.duration);
+      if (snap) notes = snapNotesToGrid(notes, gridQ, gridT);
       clip.notes = notes;
       return trackResult(ref, {
         clip: clip.name,
         noteCount: notes.length,
         start: Number(clip.startTime),
         length: Number(clip.duration),
+        ...(snap ? { snapped_to_grid: gridLabel(gridQ, gridT) } : {}),
       });
     }
     case "rename_scene": {

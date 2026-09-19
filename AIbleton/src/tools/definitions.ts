@@ -710,6 +710,11 @@ export const TOOLS = [
           description:
             "Swing amount 0–100, baked into the note timing (delays + softens offbeat 16th notes). 0=straight, 30=light MPC-style, 60=pronounced, 100=full triplet swing. The SDK cannot assign Live groove files, so swing must be baked in here.",
         },
+        snap_to_grid: {
+          type: "boolean",
+          description:
+            "Snap note starts to the song's CURRENT arrangement grid (default true), so written MIDI lines up with the grid the user sees in Live. Applied BEFORE swing, so swing still works. Set false ONLY for deliberately off-grid/humanized timing, or for triplet patterns while the song grid is straight.",
+        },
         notes: {
           type: "array",
           items: {
@@ -742,6 +747,10 @@ export const TOOLS = [
         swing: {
           type: "number",
           description: "Swing amount 0–100, baked into note timing (see write_midi_clip)",
+        },
+        snap_to_grid: {
+          type: "boolean",
+          description: "Snap note starts to the song's current grid, default true (see write_midi_clip)",
         },
         notes: { type: "array", items: { type: "object" } },
       },
@@ -796,6 +805,10 @@ export const TOOLS = [
         track_index: { type: "number" },
         track_name: { type: "string", description: TRACK_NAME_DESC },
         clip_index: { type: "number" },
+        snap_to_grid: {
+          type: "boolean",
+          description: "Snap note starts to the song's current grid, default true (see write_midi_clip)",
+        },
         notes: { type: "array", items: { type: "object" } },
       },
       required: ["clip_index", "notes"],
