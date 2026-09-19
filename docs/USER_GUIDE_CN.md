@@ -260,7 +260,7 @@ AIbleton 对 Move 有两条独立工作流：**USB-C MIDI 编排** 与 **Wi‑Fi
 2. **有保护项地描述**：`不要改 kick / tempo / key` 比“别改太多”更可靠。
 3. **根据操作选保护方式**：Arrangement 重排时关闭 YOLO 并要求 dry run；其他操作没有 dry run，应改用小范围、逐步确认和先备份。样本覆盖、Move 上传与外部服务生成还要确认文件名、目标目录和成本。
 4. **每次关键改动都试听**：工具验证“值是否写入”，不能代替你的审美判断。
-5. **善用 Live Undo**：`arrange_song` 的整个 placement plan 是一个 Live transaction，通常一次 Undo 即可撤销整个重排。
+5. **善用 Live Undo**：`arrange_song` 在执行前会完整校验；一旦开始执行则按 SDK 规则逐步提交。若后续步骤失败，之前已完成的修改会保留，可在 Live 中逐步 Undo 回退。
 6. **不盲目重试**：若 AI 说操作执行了但验证没有命中，先让它重新读取实际状态；反复执行可能造成重复 clips 或 notes。
 7. **控制生成成本**：先用短时长和明确 prompt；确认满意的方向后再提高时长或开启自动迭代。
 

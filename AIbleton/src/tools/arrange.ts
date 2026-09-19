@@ -33,7 +33,8 @@ interface ResolvedPlacement {
 /**
  * Compiles a placement plan into arrangement clips. Everything is resolved
  * and validated (references, overlaps) BEFORE any mutation, so a bad plan
- * fails with zero writes; execution is one transaction = one undo step.
+ * fails with zero writes. Execution then follows the SDK's individual
+ * transactions; a later failure leaves earlier completed mutations intact.
  * Source clips are read into plain data up front — clear_range_bars may
  * delete them, and SDK objects throw once their Live object is gone.
  */
@@ -273,45 +274,48 @@ export async function arrangeSong(context: Ctx, input: Record<string, unknown>):
     };
   }
 
-  // ---- Phase 3: execute — one transaction, one undo step ----
-  await context.withinTransaction(async () => {
-    if (clear) {
-      for (const t of song.tracks) {
-        await t.clearClipsInRange(clear.startBeat, clear.endBeat);
-      }
+  // ---- Phase 3: execute ----
+  // The SDK requires a synchronous withinTransaction callback. Clip creation
+  // resolves its handle asynchronously, and notes/name/color depend on that
+  // handle, so wrapping this sequence in an async transaction is invalid.
+  // Each SDK mutation therefore owns its legal transaction. If a later call
+  // fails, earlier completed mutations deliberately remain for Live Undo.
+  if (clear) {
+    for (const t of song.tracks) {
+      await t.clearClipsInRange(clear.startBeat, clear.endBeat);
     }
-    for (const r of resolved) {
-      if (r.kind === "midi") {
-        const track = r.ref.track;
-        if (!(track instanceof MidiTrack)) {
-          throw new Error(`轨道 ${r.ref.index}（${track.name}）不是 MIDI 轨道`);
-        }
-        const clip = await track.createMidiClip(r.startBeat, r.lenBeats);
-        clip.notes = r.notes;
-        clip.name = r.name ?? r.srcName;
-        if (r.color) clip.color = r.color;
-        if (r.muted) clip.muted = true;
-      } else {
-        const track = r.ref.track;
-        if (!(track instanceof AudioTrack)) {
-          throw new Error(`轨道 ${r.ref.index}（${track.name}）不是音频轨道`);
-        }
-        // isWarped + loopSettings always travel together (SDK requires
-        // isWarped whenever loopSettings is given); both are read from the
-        // source clip, so the pair is always consistent.
-        const clip = await track.createAudioClip({
-          filePath: r.filePath as string,
-          startTime: r.startBeat,
-          duration: r.lenBeats,
-          isWarped: r.isWarped ?? false,
-          loopSettings: r.loopSettings,
-        });
-        clip.name = r.name ?? r.srcName;
-        if (r.color) clip.color = r.color;
-        if (r.muted) clip.muted = true;
+  }
+  for (const r of resolved) {
+    if (r.kind === "midi") {
+      const track = r.ref.track;
+      if (!(track instanceof MidiTrack)) {
+        throw new Error(`轨道 ${r.ref.index}（${track.name}）不是 MIDI 轨道`);
       }
+      const clip = await track.createMidiClip(r.startBeat, r.lenBeats);
+      clip.notes = r.notes;
+      clip.name = r.name ?? r.srcName;
+      if (r.color) clip.color = r.color;
+      if (r.muted) clip.muted = true;
+    } else {
+      const track = r.ref.track;
+      if (!(track instanceof AudioTrack)) {
+        throw new Error(`轨道 ${r.ref.index}（${track.name}）不是音频轨道`);
+      }
+      // isWarped + loopSettings always travel together (SDK requires
+      // isWarped whenever loopSettings is given); both are read from the
+      // source clip, so the pair is always consistent.
+      const clip = await track.createAudioClip({
+        filePath: r.filePath as string,
+        startTime: r.startBeat,
+        duration: r.lenBeats,
+        isWarped: r.isWarped ?? false,
+        loopSettings: r.loopSettings,
+      });
+      clip.name = r.name ?? r.srcName;
+      if (r.color) clip.color = r.color;
+      if (r.muted) clip.muted = true;
     }
-  });
+  }
 
   return {
     arranged: true,
@@ -319,6 +323,6 @@ export async function arrangeSong(context: Ctx, input: Record<string, unknown>):
     ...(clearInfo ? { cleared: clearInfo } : {}),
     placements: planOut,
     clips_created: resolved.length,
-    undo: "整个计划是一个事务——在 Live 里按一次 ⌘Z 即可全部撤销",
+    undo: "操作按 SDK 规则分步提交；如需撤销，请在 Live 中按 ⌘Z 逐步回退已完成修改",
   };
 }

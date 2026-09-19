@@ -39,7 +39,7 @@ import {
 import { answerConfirmation, getPendingConfirm } from "./chat/gates.js";
 import { resolveConfig, type Attachment, type ChatRequest } from "./chat/config.js";
 import { resetTurnState } from "./agent/runtime.js";
-import { updateSetContext } from "./setcontext.js";
+import { clearRightClickFocus, updateSetContext } from "./setcontext.js";
 import { chatAnthropic } from "./chat/providers/anthropic.js";
 import { chatOpenAI, ensureCodexAuth } from "./chat/providers/openai.js";
 import { chatCustom } from "./chat/providers/custom.js";
@@ -392,6 +392,9 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     };
 
     if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
+      // Direct browser navigation is a fresh, non-context-menu entry point.
+      // Do not let it inherit a target from an earlier right-click dialog.
+      clearRightClickFocus();
       send(200, chatInterface.replaceAll("__APP_VERSION__", APP_VERSION), "text/html");
       return;
     }
@@ -678,6 +681,9 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       return;
     }
     if (req.method === "GET" && req.url === "/api/open") {
+      // A regular browser/hotkey open has no clicked Live object, so it must
+      // not inherit a target from a previous context-menu invocation.
+      clearRightClickFocus();
       if (selfUrl) {
         void context.ui.showModalDialog(selfUrl, 560, 680).catch(() => {});
       }
