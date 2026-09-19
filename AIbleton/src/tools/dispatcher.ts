@@ -68,6 +68,7 @@ import { arrangeSong } from "./arrange.js";
 import { analyzeRenderedTrack } from "./rendered.js";
 import { presentTakeLanes, takeLaneAt } from "./take-lanes.js";
 import { parseWarpMode, presentWarp, resolveAudioClip } from "./warp.js";
+import { chainDeviceAt, drumPadAt, drumRackAt, presentPad, presentPads, setParamValue as setChainParam } from "./drum-rack.js";
 import { deleteAuthorizationError, deleteToolIsAuthorized, isDeleteTool } from "../chat/deleteauth.js";
 
 // ---------- Factory drum kits (Drum Essentials pack) ----------
@@ -684,6 +685,32 @@ export async function runTool(
       };
       const pads = await context.withinTransaction(build);
       return trackResult(ref, { track: track.name, kit: style || "808", pads });
+    }
+    case "list_drum_rack_pads": {
+      const ref = resolveTrack(context, input, "track_index");
+      return trackResult(ref, { track: ref.track.name, racks: await presentPads(ref.track) });
+    }
+    case "get_drum_pad_mixer": {
+      const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input.pad_note);
+      return trackResult(ref, await presentPad(rack, chain));
+    }
+    case "set_drum_pad_mixer": {
+      const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input.pad_note);
+      if (input.volume === undefined && input.pan === undefined && input.sends === undefined) throw new Error("请至少提供 volume、pan 或 sends");
+      if (input.volume !== undefined) await setChainParam(chain.mixer.volume, Number(input.volume));
+      if (input.pan !== undefined) await setChainParam(chain.mixer.panning, Number(input.pan));
+      if (Array.isArray(input.sends)) await Promise.all(input.sends.map((raw) => { const x = raw as Record<string, unknown>; const i = Number(x.index); if (!Number.isInteger(i) || !chain.mixer.sends[i]) throw new Error("pad Send 索引无效"); return setChainParam(chain.mixer.sends[i], Number(x.value)); }));
+      return trackResult(ref, await presentPad(rack, chain));
+    }
+    case "insert_drum_pad_device": {
+      const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input.pad_note);
+      const device = await context.withinTransaction(() => chain.insertDevice(String(input.device_name), chain.devices.length));
+      return trackResult(ref, { ...(await presentPad(rack, chain)), inserted: device.name });
+    }
+    case "duplicate_drum_pad_device": {
+      const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input); const device = chainDeviceAt(chain, input);
+      const copy = await context.withinTransaction(() => chain.duplicateDevice(device));
+      return trackResult(ref, { ...(await presentPad(rack, chain)), duplicated: device.name, created: copy.name });
     }
     case "search_samples": {
       const q = String(input.query ?? "").trim();
