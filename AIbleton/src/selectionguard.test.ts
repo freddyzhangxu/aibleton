@@ -58,4 +58,13 @@ describe("selectionGuard", () => {
       track_index: 1, scene_index: 1, length_beats: 4,
     }) ?? "", /目标 Session 槽/);
   });
+
+  it("applies the Arrangement range boundary to Take Lane candidates", () => {
+    assert.equal(selectionGuard(context, arrangement, false, "write_take_midi_clip", {
+      track_index: 0, take_lane_index: 0, start_beat: 8, length_beats: 8,
+    }), null);
+    assert.match(selectionGuard(context, arrangement, false, "import_take_audio_clip", {
+      track_index: 0, take_lane_index: 0, start_beat: 14, duration_beats: 4,
+    }) ?? "", /目标时间范围/);
+  });
 });

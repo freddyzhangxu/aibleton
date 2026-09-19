@@ -25,6 +25,7 @@ const MUTATING_TOOLS = new Set([
   "move_pair", "move_upload_sample", "rename_track", "set_track_state",
   "insert_device", "delete_device", "set_device_parameter", "set_device_parameters",
   "set_track_mixer", "load_drum_kit", "import_audio_clip", "load_sample",
+  "create_take_lane", "write_take_midi_clip", "import_take_audio_clip",
   "generate_audio", "write_midi_clip", "write_session_clip",
   "delete_arrangement_clip", "delete_session_clip", "set_clip_notes",
   "create_scene", "duplicate_scene", "delete_scene", "rename_scene",
@@ -191,7 +192,7 @@ export function selectionGuard(
   }
   const trackError = checkTrack(selection, trackIndex);
   if (trackError) return trackError;
-  if (["write_midi_clip", "import_audio_clip"].includes(name) && input.scene_index === undefined) {
+  if (["write_midi_clip", "import_audio_clip", "write_take_midi_clip", "import_take_audio_clip"].includes(name) && input.scene_index === undefined) {
     return checkArrangementRange(context, selection, input);
   }
   return null;
