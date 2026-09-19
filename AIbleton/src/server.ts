@@ -58,6 +58,9 @@ import { errMessage } from "./errors.js";
 function hasGlobalIntent(text: string): boolean {
   return /(?:整首歌|整曲|全曲|全局|整个项目|整个工程|whole\s+(?:song|track|set)|entire\s+(?:song|track|set)|full\s+(?:song|track|set)|globally|across\s+the\s+(?:song|set))/i.test(text);
 }
+function hasMasterIntent(text: string): boolean {
+  return /(?:调(?:整)?\s*master|母带|总线|master(?:ing|\s+bus)?)/i.test(text);
+}
 
 // ---------- Local sample library search ----------
 
@@ -854,6 +857,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         toolState.activeLanguage = typeof parsed.language === "string" ? parsed.language : undefined;
         toolState.activeDeleteAuthorization = deleteAuthorizationFor(text);
         toolState.activeGlobalIntent = hasGlobalIntent(text);
+        toolState.activeMasterIntent = hasMasterIntent(text);
         toolState.phase = "thinking";
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT

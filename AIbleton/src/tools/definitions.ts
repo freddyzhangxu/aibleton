@@ -944,6 +944,11 @@ export const TOOLS = [
     description: "Read a track's current volume, pan, and sends. Send index 0 maps to Return Track 0 / Send A. Call before changing mixer or send levels when current values matter.",
     input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC } }, required: ["track_index"] },
   },
+  { name: "get_return_track_mixer", description: "Read a Return Track mixer by zero-based return_index.", input_schema: { type: "object", properties: { return_index: { type: "number" } }, required: ["return_index"] } },
+  { name: "set_return_track_mixer", description: "Set a Return Track's volume and/or pan by zero-based return_index.", input_schema: { type: "object", properties: { return_index: { type: "number" }, volume: { type: "number" }, pan: { type: "number" } }, required: ["return_index"] } },
+  { name: "get_master_chain", description: "Read Master mixer values and its device chain. Always inspect before proposing a Master change.", input_schema: { type: "object", properties: {} } },
+  { name: "get_master_device_parameters", description: "Read parameters of an existing Master device by device_index or device_name.", input_schema: { type: "object", properties: { device_index: { type: "number" }, device_name: { type: "string" } } } },
+  { name: "set_master_device_parameter", description: "Set one existing Master device parameter. Call only when the CURRENT user explicitly asks to adjust Master/mastering.", input_schema: { type: "object", properties: { device_index: { type: "number" }, device_name: { type: "string" }, parameter: { type: "string" }, value: { type: "string" } }, required: ["parameter", "value"] } },
   {
     name: "create_scene",
     description: "Create a new scene, optionally named. Appended at the end unless index is given.",
