@@ -2,6 +2,7 @@ import * as path from "node:path";
 import {
   AudioClip,
   DrumRack,
+  GridQuantization,
   MidiClip,
   MidiTrack,
   type Clip,
@@ -270,6 +271,67 @@ export function applySwing(notes: NoteDescription[], swingPct: number): NoteDesc
     }
     return n;
   });
+}
+
+/** Straight-grid step size in beats for each GridQuantization value. */
+const GRID_STEP_BEATS: Record<number, number> = {
+  [GridQuantization.EightBars]: 32,
+  [GridQuantization.FourBars]: 16,
+  [GridQuantization.TwoBars]: 8,
+  [GridQuantization.Bar]: 4,
+  [GridQuantization.Half]: 2,
+  [GridQuantization.Quarter]: 1,
+  [GridQuantization.Eighth]: 0.5,
+  [GridQuantization.Sixteenth]: 0.25,
+  [GridQuantization.ThirtySecond]: 0.125,
+};
+
+const GRID_STEP_LABELS: Record<number, string> = {
+  [GridQuantization.EightBars]: "8 bars",
+  [GridQuantization.FourBars]: "4 bars",
+  [GridQuantization.TwoBars]: "2 bars",
+  [GridQuantization.Bar]: "1 bar",
+  [GridQuantization.Half]: "1/2",
+  [GridQuantization.Quarter]: "1/4",
+  [GridQuantization.Eighth]: "1/8",
+  [GridQuantization.Sixteenth]: "1/16",
+  [GridQuantization.ThirtySecond]: "1/32",
+};
+
+/**
+ * Grid step in beats for the song's current grid (song.gridQuantization +
+ * song.gridIsTriplet), or null when the grid is off / unrecognized. The
+ * triplet factor only applies to note-value grids (1/2 and finer) — Live's
+ * grid menu offers no bar triplets.
+ */
+export function gridStepBeats(gridQuantization: number, gridIsTriplet: boolean): number | null {
+  const q = Math.trunc(Number(gridQuantization));
+  const straight = GRID_STEP_BEATS[q];
+  if (!straight) return null;
+  return gridIsTriplet && q >= GridQuantization.Half ? (straight * 2) / 3 : straight;
+}
+
+/** Human-readable grid label ("1/8T", "1 bar"), or "off" when there is no grid. */
+export function gridLabel(gridQuantization: number, gridIsTriplet: boolean): string {
+  const q = Math.trunc(Number(gridQuantization));
+  const label = GRID_STEP_LABELS[q];
+  if (!label) return "off";
+  return gridIsTriplet && q >= GridQuantization.Half ? `${label}T` : label;
+}
+
+/**
+ * Snap note start times to the song grid so written MIDI follows what the
+ * user sees in Live. Durations are preserved — only placement follows the
+ * grid. Apply BEFORE applySwing so baked swing offsets survive.
+ */
+export function snapNotesToGrid(
+  notes: NoteDescription[],
+  gridQuantization: number,
+  gridIsTriplet: boolean,
+): NoteDescription[] {
+  const step = gridStepBeats(gridQuantization, gridIsTriplet);
+  if (!step) return notes;
+  return notes.map((n) => ({ ...n, startTime: Math.round(n.startTime / step) * step }));
 }
 
 /** Normalize an unknown value into a non-empty string array, or undefined. */
