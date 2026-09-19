@@ -159,7 +159,10 @@ async function applyDeviceParam(
 ): Promise<{ parameter: string; value: string | number }> {
   const param = paramAt(device, /^-?\d+$/.test(rawParam) ? Number(rawParam) : rawParam);
   let value: number;
-  if (/^-?\d+(\.\d+)?$/.test(rawValue)) {
+  if (rawValue.toLowerCase() === "default") {
+    // DeviceParameter.defaultValue — the factory default in the param's own units.
+    value = toNum(param.defaultValue);
+  } else if (/^-?\d+(\.\d+)?$/.test(rawValue)) {
     value = Number(rawValue);
   } else {
     const q = rawValue.toLowerCase();
@@ -528,6 +531,7 @@ export async function runTool(
             value,
             min: p.min,
             max: p.max,
+            default: toNum(p.defaultValue),
             ...(p.isQuantized && p.valueItems.length
               ? { items: p.valueItems.map((v) => v.name) }
               : {}),
@@ -850,7 +854,7 @@ export async function runTool(
       // Snap before swing so baked swing offsets survive; grid read live from the song.
       const gridQ = toNum(song.gridQuantization);
       const gridT = Boolean(song.gridIsTriplet);
-      const snap = input.snap_to_grid !== false;
+      const snap = input.snap_to_grid === true;
       let notes = parseNotes(input.notes, length);
       if (snap) notes = snapNotesToGrid(notes, gridQ, gridT);
       notes = applySwing(notes, Number(input.swing ?? 0)).filter((n) => n.startTime < length);
@@ -876,7 +880,7 @@ export async function runTool(
       const clip = await context.withinTransaction(() => slot.createMidiClip(length));
       const gridQ = toNum(song.gridQuantization);
       const gridT = Boolean(song.gridIsTriplet);
-      const snap = input.snap_to_grid !== false;
+      const snap = input.snap_to_grid === true;
       let notes = parseNotes(input.notes, length);
       if (snap) notes = snapNotesToGrid(notes, gridQ, gridT);
       notes = applySwing(notes, Number(input.swing ?? 0)).filter((n) => n.startTime < length);
@@ -945,7 +949,7 @@ export async function runTool(
       if (!(clip instanceof MidiClip)) throw new Error("该 clip 不是 MIDI clip");
       const gridQ = toNum(song.gridQuantization);
       const gridT = Boolean(song.gridIsTriplet);
-      const snap = input.snap_to_grid !== false;
+      const snap = input.snap_to_grid === true;
       let notes = parseNotes(input.notes, clip.duration);
       if (snap) notes = snapNotesToGrid(notes, gridQ, gridT);
       clip.notes = notes;

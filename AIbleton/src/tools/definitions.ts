@@ -527,7 +527,7 @@ export const TOOLS = [
   {
     name: "set_device_parameter",
     description:
-      'Set one parameter of a device (Operator, Auto Filter, …). "parameter" accepts an exact name, a partial name (e.g. "Frequency" or "freq"), or a numeric index from get_device_parameters. "value" is a number in the device\'s own units (Hz, dB, semitones, 0–1 for macros…) — it is clamped to the parameter\'s range. For enum parameters (isQuantized with items), pass the option name as a string instead.',
+      'Set one parameter of a device (Operator, Auto Filter, …). "parameter" accepts an exact name, a partial name (e.g. "Frequency" or "freq"), or a numeric index from get_device_parameters. "value" is a number in the device\'s own units (Hz, dB, semitones, 0–1 for macros…) — it is clamped to the parameter\'s range. For enum parameters (isQuantized with items), pass the option name as a string instead. Pass "default" as the value to reset the parameter to its factory default.',
     input_schema: {
       type: "object",
       properties: {
@@ -550,7 +550,7 @@ export const TOOLS = [
   {
     name: "set_device_parameters",
     description:
-      'Set MULTIPLE parameters of one device in a single call — strongly preferred over repeated set_device_parameter for sound design (one call instead of many). Each item follows the same rules as set_device_parameter: "parameter" is an exact/partial name or numeric index, "value" a number as a string or an enum option name. Sets run in parallel; per-parameter failures are reported without aborting the rest.',
+      'Set MULTIPLE parameters of one device in a single call — strongly preferred over repeated set_device_parameter for sound design (one call instead of many). Each item follows the same rules as set_device_parameter: "parameter" is an exact/partial name or numeric index, "value" a number as a string, an enum option name, or "default" to reset that parameter to its factory default (mix resets and sets freely). Sets run in parallel; per-parameter failures are reported without aborting the rest.',
     input_schema: {
       type: "object",
       properties: {
@@ -713,7 +713,7 @@ export const TOOLS = [
         snap_to_grid: {
           type: "boolean",
           description:
-            "Snap note starts to the song's CURRENT arrangement grid (default true), so written MIDI lines up with the grid the user sees in Live. Applied BEFORE swing, so swing still works. Set false ONLY for deliberately off-grid/humanized timing, or for triplet patterns while the song grid is straight.",
+            "Snap note starts to the song's CURRENT arrangement grid (default false). Use ONLY when the user asks to align notes to the grid, AND the grid is at least as fine as the note spacing (e.g. 8th-note pattern with a 1/8 or 1/16 grid) — snapping to a COARSER grid than the note spacing collapses the pattern onto grid lines and destroys it. Applied BEFORE swing, so swing still works. Leave false for triplet patterns on a straight grid and for humanized/off-grid timing.",
         },
         notes: {
           type: "array",
@@ -750,7 +750,7 @@ export const TOOLS = [
         },
         snap_to_grid: {
           type: "boolean",
-          description: "Snap note starts to the song's current grid, default true (see write_midi_clip)",
+          description: "Snap note starts to the song's current grid, default false (see write_midi_clip — coarse grids destroy fine patterns)",
         },
         notes: { type: "array", items: { type: "object" } },
       },
@@ -807,7 +807,7 @@ export const TOOLS = [
         clip_index: { type: "number" },
         snap_to_grid: {
           type: "boolean",
-          description: "Snap note starts to the song's current grid, default true (see write_midi_clip)",
+          description: "Snap note starts to the song's current grid, default false (see write_midi_clip — coarse grids destroy fine patterns)",
         },
         notes: { type: "array", items: { type: "object" } },
       },
