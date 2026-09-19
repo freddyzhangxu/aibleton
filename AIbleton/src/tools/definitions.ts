@@ -734,6 +734,38 @@ export const TOOLS = [
     },
   },
   {
+    name: "get_audio_clip_warp",
+    description:
+      "Read an existing Audio Clip's Warp state, algorithm and read-only warp markers. Target exactly one source: clip_index for an arrangement clip, or scene_index for a Session slot.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "0-based regular-track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        clip_index: { type: "number", description: "0-based arrangement Audio Clip index" },
+        scene_index: { type: "number", description: "0-based Session slot index" },
+      },
+      required: ["track_index"],
+    },
+  },
+  {
+    name: "set_audio_clip_warp",
+    description:
+      "Change an existing Audio Clip's Warp on/off state and/or algorithm. Target exactly one source: clip_index for arrangement, or scene_index for Session. Setting warp_mode automatically enables Warping. Marker editing is not supported by the SDK.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "0-based regular-track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        clip_index: { type: "number", description: "0-based arrangement Audio Clip index" },
+        scene_index: { type: "number", description: "0-based Session slot index" },
+        warped: { type: "boolean", description: "Enable or disable Warping" },
+        warp_mode: { type: "string", enum: ["beats", "tones", "texture", "repitch", "complex", "complex_pro"] },
+      },
+      required: ["track_index"],
+    },
+  },
+  {
     name: "generate_audio",
     description:
       "Generate NEW audio with an AI music model (Stable Audio / ElevenLabs / MiniMax — whichever is configured in Settings) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Pass importTo to place the result onto an audio track's arrangement (or a Session View slot via importTo.scene_index) in the same atomic call (preferred for loops/stems); without it, follow up with import_audio_clip (arrangement or Session) or load_sample (one-shots into a Simpler). Every generation is recorded in the generation registry (generation_id in the result) so gen_* goal criteria can judge the artifact.",

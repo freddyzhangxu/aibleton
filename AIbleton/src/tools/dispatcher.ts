@@ -67,6 +67,7 @@ import {
 import { arrangeSong } from "./arrange.js";
 import { analyzeRenderedTrack } from "./rendered.js";
 import { presentTakeLanes, takeLaneAt } from "./take-lanes.js";
+import { parseWarpMode, presentWarp, resolveAudioClip } from "./warp.js";
 import { deleteAuthorizationError, deleteToolIsAuthorized, isDeleteTool } from "../chat/deleteauth.js";
 
 // ---------- Factory drum kits (Drum Essentials pack) ----------
@@ -831,6 +832,27 @@ export async function runTool(
         start_beat: start,
         ...(length !== undefined ? { length_beats: length } : {}),
       });
+    }
+    case "get_audio_clip_warp": {
+      return presentWarp(resolveAudioClip(context, input));
+    }
+    case "set_audio_clip_warp": {
+      const resolved = resolveAudioClip(context, input);
+      const hasWarped = typeof input.warped === "boolean";
+      const hasMode = input.warp_mode !== undefined;
+      if (!hasWarped && !hasMode) throw new Error("请提供 warped 和/或 warp_mode");
+      if (hasMode && input.warped === false) {
+        throw new Error("设置 warp_mode 时不能同时将 warped 设为 false；模式需要启用 Warping");
+      }
+      if (hasMode) {
+        // Live only applies a mode to a warped clip. Make this explicit rather
+        // than accepting a mode request that silently has no audible effect.
+        resolved.clip.warping = true;
+        resolved.clip.warpMode = parseWarpMode(input.warp_mode);
+      } else {
+        resolved.clip.warping = input.warped as boolean;
+      }
+      return presentWarp(resolved);
     }
     case "generate_audio": {
       const cfg = toolState.activeAudioConfig;
