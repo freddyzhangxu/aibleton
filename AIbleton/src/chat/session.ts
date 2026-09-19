@@ -30,6 +30,26 @@ let currentId: string | null = null;
 /** Set when the SDK storage dir turns out to be missing/unwritable. */
 let storeFileOverride: string | null = null;
 
+/** Removes complete Unicode Emoji sequences from an assistant reply. */
+export function stripEmoji(text: string): string {
+  return text.replace(
+    /(?:\p{Extended_Pictographic}(?:\uFE0E|\uFE0F)?(?:\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0E|\uFE0F)?(?:\p{Emoji_Modifier})?)*|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3|\p{Emoji_Modifier})/gu,
+    "",
+  );
+}
+
+function sanitizeAssistantMessages(messages: HistoryMessage[]): { messages: HistoryMessage[]; changed: boolean } {
+  let changed = false;
+  const clean = messages.map((message) => {
+    if (message.role !== "assistant" || typeof message.content !== "string") return message;
+    const content = stripEmoji(message.content);
+    if (content === message.content) return message;
+    changed = true;
+    return { ...message, content };
+  });
+  return { messages: clean, changed };
+}
+
 export function storeFilePath(context: Ctx): string {
   if (storeFileOverride) return storeFileOverride;
   const dir = context.environment.storageDirectory;
@@ -58,6 +78,7 @@ export function currentSession(): ChatSession {
 export function loadStore(context: Ctx) {
   const candidates = [...new Set([storeFilePath(context), storeFallbackPath()])];
   let loadedFrom: string | null = null;
+  let migratedEmoji = false;
   for (const file of candidates) {
     try {
       const raw = readHomeFile(file);
@@ -69,7 +90,11 @@ export function loadStore(context: Ctx) {
       if (Array.isArray(data.sessions)) {
         sessions = data.sessions.filter(
           (s) => s && typeof s.id === "string" && Array.isArray(s.messages),
-        );
+        ).map((session) => {
+          const cleaned = sanitizeAssistantMessages(session.messages);
+          if (cleaned.changed) migratedEmoji = true;
+          return cleaned.changed ? { ...session, messages: cleaned.messages } : session;
+        });
         currentId = typeof data.currentId === "string" ? data.currentId : (sessions[0]?.id ?? null);
         loadedFrom = file;
         break;
@@ -87,10 +112,13 @@ export function loadStore(context: Ctx) {
         const legacy = JSON.parse(legacyRaw) as unknown;
         if (Array.isArray(legacy) && legacy.length) {
           const session = createSession();
-          session.messages = legacy.filter(
+          const imported = legacy.filter(
             (m): m is HistoryMessage =>
               !!m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string",
           );
+          const cleaned = sanitizeAssistantMessages(imported);
+          session.messages = cleaned.messages;
+          if (cleaned.changed) migratedEmoji = true;
           const first = session.messages.find((m) => m.role === "user");
           session.title = first ? first.content.slice(0, 24) : "导入的对话";
           break;
@@ -100,6 +128,9 @@ export function loadStore(context: Ctx) {
       }
     }
   }
+  // Old assistant messages must not reappear in the UI or provider history
+  // with Emoji after the rule is introduced. Persist this one-time migration.
+  if (migratedEmoji) saveStore(context);
   console.log(`[ai-assistant] 会话存储: ${loadedFrom ?? storeFilePath(context)}`);
 }
 
@@ -157,10 +188,11 @@ export function finishChat(
   reply: string,
 ) {
   const session = currentSession();
-  session.messages.push({ role: "assistant", content: reply, actions });
+  const cleanReply = stripEmoji(reply);
+  session.messages.push({ role: "assistant", content: cleanReply, actions });
   session.updatedAt = Date.now();
   saveStore(context);
-  return { reply, actions };
+  return { reply: cleanReply, actions };
 }
 
 /** Cap a tool-result payload the same way for live calls and history replay. */
