@@ -656,6 +656,71 @@ export const TOOLS = [
     },
   },
   {
+    name: "list_take_lanes",
+    description:
+      "List a track's non-destructive Take Lanes and their candidate arrangement clips. A lane holding a candidate is not evidence that Live is currently auditioning it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "0-based regular-track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+      },
+      required: ["track_index"],
+    },
+  },
+  {
+    name: "create_take_lane",
+    description:
+      "Append a named Take Lane to a track for a non-destructive candidate version. Use before write_take_midi_clip or import_take_audio_clip; never overwrite the main arrangement clip when the user asks for alternatives.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "0-based regular-track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        name: { type: "string", description: "Candidate label, e.g. 'Bass Alternative A'" },
+      },
+      required: ["track_index"],
+    },
+  },
+  {
+    name: "write_take_midi_clip",
+    description:
+      "Create a MIDI candidate clip in an existing Take Lane without touching arrangement clips. Same notes, swing and snap_to_grid format as write_midi_clip. Use list_take_lanes first to obtain take_lane_index.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "0-based MIDI-track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        take_lane_index: { type: "number", description: "0-based Take Lane index from list_take_lanes" },
+        start_beat: { type: "number", description: "Arrangement position in beats (default 0)" },
+        length_beats: { type: "number", description: "Clip length in beats (default 16)" },
+        name: { type: "string", description: "Candidate clip name" },
+        swing: { type: "number", description: "0–100 baked MIDI swing, same as write_midi_clip" },
+        snap_to_grid: { type: "boolean", description: "Snap note starts to Live's current grid before swing" },
+        notes: { type: "array", items: { type: "object" }, description: "Same note format as write_midi_clip" },
+      },
+      required: ["track_index", "take_lane_index", "notes"],
+    },
+  },
+  {
+    name: "import_take_audio_clip",
+    description:
+      "Import an audio candidate into an existing Take Lane on an Audio Track without touching arrangement clips. The source is copied into the Live project first. Use list_take_lanes first to obtain take_lane_index.",
+    input_schema: {
+      type: "object",
+      properties: {
+        track_index: { type: "number", description: "0-based Audio-track index" },
+        track_name: { type: "string", description: TRACK_NAME_DESC },
+        take_lane_index: { type: "number", description: "0-based Take Lane index from list_take_lanes" },
+        file_path: { type: "string", description: "Absolute local audio-file path" },
+        start_beat: { type: "number", description: "Arrangement position in beats (default 0)" },
+        duration_beats: { type: "number", description: "Optional candidate clip length in beats" },
+        warped: { type: "boolean", description: "Enable warping (default: Live's auto-warp setting)" },
+      },
+      required: ["track_index", "take_lane_index", "file_path"],
+    },
+  },
+  {
     name: "generate_audio",
     description:
       "Generate NEW audio with an AI music model (Stable Audio / ElevenLabs / MiniMax — whichever is configured in Settings) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Pass importTo to place the result onto an audio track's arrangement (or a Session View slot via importTo.scene_index) in the same atomic call (preferred for loops/stems); without it, follow up with import_audio_clip (arrangement or Session) or load_sample (one-shots into a Simpler). Every generation is recorded in the generation registry (generation_id in the result) so gen_* goal criteria can judge the artifact.",

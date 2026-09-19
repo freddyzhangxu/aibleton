@@ -66,6 +66,7 @@ import {
 } from "./helpers.js";
 import { arrangeSong } from "./arrange.js";
 import { analyzeRenderedTrack } from "./rendered.js";
+import { presentTakeLanes, takeLaneAt } from "./take-lanes.js";
 import { deleteAuthorizationError, deleteToolIsAuthorized, isDeleteTool } from "../chat/deleteauth.js";
 
 // ---------- Factory drum kits (Drum Essentials pack) ----------
@@ -221,6 +222,7 @@ export async function runTool(
           solo: t.solo,
           arm: t.arm,
           arrangementClips: t.arrangementClips.length,
+          takeLanes: t.takeLanes?.length ?? 0,
           devices: t.devices.map((d) => d.name),
         })),
         returnTracks: song.returnTracks.map((t) => t.name),
@@ -753,6 +755,82 @@ export async function runTool(
       }
       await simpler.replaceSample(managed);
       return trackResult(ref, { track: track.name, device: "Simpler", file: managed });
+    }
+    case "list_take_lanes": {
+      const ref = resolveTrack(context, input, "track_index");
+      return trackResult(ref, { track: ref.track.name, take_lanes: presentTakeLanes(ref.track) });
+    }
+    case "create_take_lane": {
+      const ref = resolveTrack(context, input, "track_index");
+      const lane = await context.withinTransaction(() => ref.track.createTakeLane());
+      if (typeof input.name === "string" && input.name.trim()) lane.name = input.name.trim();
+      return trackResult(ref, {
+        track: ref.track.name,
+        take_lane_index: ref.track.takeLanes.indexOf(lane),
+        take_lane: lane.name,
+      });
+    }
+    case "write_take_midi_clip": {
+      const ref = resolveTrack(context, input, "track_index");
+      const track = ref.track;
+      if (!(track instanceof MidiTrack)) {
+        throw new Error(`轨道 ${ref.index}（${track.name}）不是 MIDI 轨道，不能在 Take Lane 写入 MIDI`);
+      }
+      const lane = takeLaneAt(track, input.take_lane_index);
+      const start = Number(input.start_beat ?? 0);
+      const length = Number(input.length_beats ?? 16);
+      if (!(length > 0)) throw new Error("length_beats 必须大于 0");
+      const clip = await context.withinTransaction(() => lane.createMidiClip(start, length));
+      const gridQ = toNum(song.gridQuantization);
+      const gridT = Boolean(song.gridIsTriplet);
+      const snap = input.snap_to_grid === true;
+      let notes = parseNotes(input.notes, length);
+      if (snap) notes = snapNotesToGrid(notes, gridQ, gridT);
+      notes = applySwing(notes, Number(input.swing ?? 0)).filter((note) => note.startTime < length);
+      clip.notes = notes;
+      if (typeof input.name === "string" && input.name.trim()) clip.name = input.name.trim();
+      return trackResult(ref, {
+        track: track.name,
+        take_lane_index: track.takeLanes.indexOf(lane),
+        take_lane: lane.name,
+        clip: clip.name,
+        start_beat: start,
+        length_beats: length,
+        noteCount: notes.length,
+        swing: Number(input.swing ?? 0),
+        ...(snap ? { snapped_to_grid: gridLabel(gridQ, gridT) } : {}),
+      });
+    }
+    case "import_take_audio_clip": {
+      const ref = resolveTrack(context, input, "track_index");
+      const track = ref.track;
+      if (!(track instanceof AudioTrack)) {
+        throw new Error(`轨道 ${ref.index}（${track.name}）不是音频轨道，不能在 Take Lane 导入音频`);
+      }
+      const filePath = String(input.file_path ?? "");
+      if (!pathExists(filePath)) {
+        throw new Error(`找不到文件: ${filePath} — 用 search_samples 搜索可用样本，或检查路径拼写`);
+      }
+      const lane = takeLaneAt(track, input.take_lane_index);
+      const start = Number(input.start_beat ?? 0);
+      const length = typeof input.duration_beats === "number" ? input.duration_beats : undefined;
+      if (length !== undefined && !(length > 0)) throw new Error("duration_beats 必须大于 0");
+      const managed = await context.resources.importIntoProject(filePath);
+      const clip = await context.withinTransaction(() => lane.createAudioClip({
+        filePath: managed,
+        startTime: start,
+        ...(length !== undefined ? { duration: length } : {}),
+        ...(typeof input.warped === "boolean" ? { isWarped: input.warped } : {}),
+      }));
+      return trackResult(ref, {
+        track: track.name,
+        take_lane_index: track.takeLanes.indexOf(lane),
+        take_lane: lane.name,
+        clip: clip.name,
+        file: managed,
+        start_beat: start,
+        ...(length !== undefined ? { length_beats: length } : {}),
+      });
     }
     case "generate_audio": {
       const cfg = toolState.activeAudioConfig;
