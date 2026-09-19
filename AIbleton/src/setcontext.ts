@@ -4,9 +4,11 @@ import {
   Clip,
   ClipSlot,
   DataModelObject,
+  DrumRack,
   MidiClip,
   MidiTrack,
   Scene,
+  Simpler,
   TakeLane,
   type Handle,
   type Track,
@@ -168,6 +170,23 @@ function describeFocus(context: Ctx): string | null {
         : `empty ClipSlot on track ${trackIndex} “${track.name}”, Session scene ${sceneIndex}`;
     }
     return null;
+  }
+
+  if (object instanceof DrumRack) {
+    const owner = trackForObject(context, object);
+    const location = owner ? trackLocation(context, owner) : null;
+    const where = location ? ` on track ${location.index} “${location.name}”` : "";
+    const notes = object.chains.slice(0, 8).map((chain) => Number(chain.receivingNote));
+    const listed = notes.length ? `, pad notes: ${notes.join(", ")}${object.chains.length > notes.length ? ", …" : ""}` : "";
+    return `Drum Rack “${object.name}”${where}, ${object.chains.length} pads${listed}`;
+  }
+
+  if (object instanceof Simpler) {
+    const owner = trackForObject(context, object);
+    const location = owner ? trackLocation(context, owner) : null;
+    const where = location ? ` on track ${location.index} “${location.name}”` : "";
+    const sample = object.sample;
+    return `Simpler “${object.name}”${where}, ${sample ? `source ${shortFileName(sample.filePath)}` : "no sample loaded"}`;
   }
 
   if (object instanceof MidiClip || object instanceof AudioClip) return describeClip(context, object);

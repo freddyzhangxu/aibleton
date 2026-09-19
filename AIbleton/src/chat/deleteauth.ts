@@ -14,6 +14,7 @@ export const DELETE_TOOL_KINDS: Readonly<Record<string, DeleteKind>> = {
   delete_track: "track",
   delete_scene: "scene",
   delete_device: "device",
+  delete_drum_pad_device: "device",
   delete_arrangement_clip: "arrangement_clip",
   delete_session_clip: "session_clip",
 };

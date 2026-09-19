@@ -741,9 +741,23 @@ export async function runTool(
       return trackResult(ref, { ...(await presentPad(rack, chain)), inserted: device.name });
     }
     case "duplicate_drum_pad_device": {
-      const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input); const device = chainDeviceAt(chain, input);
+      const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input.pad_note); const device = chainDeviceAt(chain, input);
       const copy = await context.withinTransaction(() => chain.duplicateDevice(device));
       return trackResult(ref, { ...(await presentPad(rack, chain)), duplicated: device.name, created: copy.name });
+    }
+    case "delete_drum_pad_device": {
+      const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input.pad_note); const device = chainDeviceAt(chain, input);
+      const deviceIndex = chain.devices.indexOf(device);
+      const deviceName = device.name;
+      await context.withinTransaction(() => chain.deleteDevice(device));
+      return trackResult(ref, {
+        deleted: "drum_pad_device",
+        device: deviceName,
+        device_index: deviceIndex,
+        rack: rack.name,
+        pad_note: toNum(chain.receivingNote),
+        undo: "已删除；如需恢复，请在 Live 中执行 Undo（⌘Z / Ctrl+Z）。",
+      });
     }
     case "search_samples": {
       const q = String(input.query ?? "").trim();
@@ -816,6 +830,24 @@ export async function runTool(
       }
       await simpler.replaceSample(managed);
       return trackResult(ref, { track: track.name, device: "Simpler", file: managed });
+    }
+    case "get_simpler_sample": {
+      const ref = resolveTrack(context, input, "track_index");
+      const hasDeviceRef =
+        (typeof input.device_name === "string" && input.device_name.trim()) ||
+        typeof input.device_index === "number";
+      const candidate = hasDeviceRef
+        ? deviceAt(context, ref.index, deviceRefFrom(input))
+        : ref.track.devices.find((device): device is Simpler<"1.0.0"> => device instanceof Simpler);
+      if (!candidate) throw new Error(`轨道「${ref.track.name}」没有 Simpler；先用 load_sample 加载采样，或插入 Simpler`);
+      if (!(candidate instanceof Simpler)) throw new Error(`设备「${candidate.name}」不是 Simpler`);
+      const sample = candidate.sample;
+      return trackResult(ref, {
+        device: candidate.name,
+        device_index: ref.track.devices.indexOf(candidate),
+        loaded: sample !== null,
+        ...(sample ? { file: sample.filePath, file_name: path.basename(sample.filePath) } : {}),
+      });
     }
     case "list_take_lanes": {
       const ref = resolveTrack(context, input, "track_index");
