@@ -82,4 +82,13 @@ describe("selectionGuard", () => {
       track_index: 1, pad_note: 36, device_index: 1,
     }) ?? "", /目标轨道 1/);
   });
+
+  it("keeps Drum Rack pad sample replacement inside the selected track", () => {
+    assert.equal(selectionGuard(context, arrangement, false, "replace_drum_pad_sample", {
+      track_index: 0, pad_note: 36, file_path: "/tmp/kick.wav",
+    }), null);
+    assert.match(selectionGuard(context, arrangement, false, "replace_drum_pad_sample", {
+      track_index: 1, pad_note: 36, file_path: "/tmp/kick.wav",
+    }) ?? "", /目标轨道 1/);
+  });
 });

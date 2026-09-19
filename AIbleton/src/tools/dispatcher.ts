@@ -759,6 +759,58 @@ export async function runTool(
         undo: "已删除；如需恢复，请在 Live 中执行 Undo（⌘Z / Ctrl+Z）。",
       });
     }
+    case "get_drum_pad_sample": {
+      const ref = resolveTrack(context, input, "track_index");
+      const rack = drumRackAt(ref.track, input);
+      const chain = drumPadAt(rack, input.pad_note);
+      const simplers = chain.devices.flatMap((device, deviceIndex) => {
+        if (!(device instanceof Simpler)) return [];
+        const sample = device.sample;
+        return [{
+          device: device.name,
+          device_index: deviceIndex,
+          loaded: sample !== null,
+          ...(sample ? { file: sample.filePath, file_name: path.basename(sample.filePath) } : {}),
+        }];
+      });
+      return trackResult(ref, { rack: rack.name, pad_note: toNum(chain.receivingNote), simplers });
+    }
+    case "replace_drum_pad_sample": {
+      const ref = resolveTrack(context, input, "track_index");
+      const rack = drumRackAt(ref.track, input);
+      const chain = drumPadAt(rack, input.pad_note);
+      const filePath = String(input.file_path ?? "");
+      if (!pathExists(filePath)) {
+        throw new Error(`找不到文件: ${filePath} — 用 search_samples 按关键词搜索可用样本，或检查路径拼写`);
+      }
+      const hasDeviceRef =
+        (typeof input.device_name === "string" && input.device_name.trim()) ||
+        typeof input.device_index === "number";
+      let simpler: Simpler<"1.0.0"> | undefined;
+      if (hasDeviceRef) {
+        const candidate = chainDeviceAt(chain, input);
+        if (!(candidate instanceof Simpler)) throw new Error(`pad 设备「${candidate.name}」不是 Simpler`);
+        simpler = candidate;
+      } else {
+        simpler = chain.devices.find((device): device is Simpler<"1.0.0"> => device instanceof Simpler);
+      }
+      const managed = await context.resources.importIntoProject(filePath);
+      let inserted = false;
+      if (!simpler) {
+        simpler = (await context.withinTransaction(() => chain.insertDevice("Simpler", 0))) as Simpler<"1.0.0">;
+        inserted = true;
+      }
+      await context.withinTransaction(() => simpler.replaceSample(managed));
+      return trackResult(ref, {
+        rack: rack.name,
+        pad_note: toNum(chain.receivingNote),
+        device: simpler.name,
+        device_index: inserted ? 0 : chain.devices.indexOf(simpler),
+        file: managed,
+        file_name: path.basename(managed),
+        inserted_simpler: inserted,
+      });
+    }
     case "search_samples": {
       const q = String(input.query ?? "").trim();
       if (!q) throw new Error("query 不能为空");
