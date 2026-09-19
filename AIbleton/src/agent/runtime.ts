@@ -99,6 +99,7 @@ import * as fs from "node:fs";
 import { friendlyToolError } from "../errors.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
 import { truncateResult } from "../chat/session.js";
+import { clearTurnGoalOutcome, setTurnGoalOutcome } from "./turnoutcome.js";
 
 // ---------- Goal/Intent layer (goal/) ----------
 //
@@ -577,6 +578,18 @@ function goalMetNote(ev: GoalEvaluation, language?: string): string {
   return `${head}${passed || "—"}${tail}`;
 }
 
+function goalOutcomeSummary(ev: GoalEvaluation, met: boolean): string | undefined {
+  if (met) {
+    const passed = ev.checks
+      .filter((c) => c.passed)
+      .map((c) => `${c.id}${c.actual ? ` = ${c.actual}` : ""}`)
+      .join("；");
+    return passed || undefined;
+  }
+  const issues = [...ev.constraintIssues, ...ev.criteriaIssues].join("；");
+  return issues || undefined;
+}
+
 const GOAL_UNMET_NOTE: Record<string, string> = {
   zh: `\n\n⚠️ 目标校验未通过（系统已重试 ${AGENT_MAX_RETRIES} 次）：`,
   en: `\n\n⚠️ Goal check failed (retried ${AGENT_MAX_RETRIES}× by the server): `,
@@ -697,6 +710,12 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
     };
     const action = gateAction(ev.met, held.retries, left, refine);
     if (action === "pass") {
+      const verification = goalOutcomeSummary(ev, true);
+      setTurnGoalOutcome({
+        status: "passed",
+        objective: held.goal.objective,
+        ...(verification ? { verification } : {}),
+      });
       pendingGoal = null;
       pendingPlan = null;
       toolHooks.debugLog(
@@ -718,6 +737,12 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
           : ""),
     );
     if (action === "stop") {
+      const verification = goalOutcomeSummary(ev, false);
+      setTurnGoalOutcome({
+        status: "unmet",
+        objective: held.goal.objective,
+        ...(verification ? { verification } : {}),
+      });
       pendingGoal = null;
       pendingPlan = null;
       return {
@@ -896,6 +921,7 @@ export async function callTool(
 /** Reset the per-turn goal/plan/mutation bookkeeping — called by chat() at
  * the start of every user turn so a stale goal never gates a new request. */
 export function resetTurnState(): void {
+  clearTurnGoalOutcome();
   pendingGoal = null;
   pendingPlan = null;
   mutationsThisTurn = 0;
