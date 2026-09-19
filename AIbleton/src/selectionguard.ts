@@ -28,6 +28,7 @@ const MUTATING_TOOLS = new Set([
   "create_take_lane", "write_take_midi_clip", "import_take_audio_clip",
   "set_audio_clip_warp",
   "set_drum_pad_mixer", "insert_drum_pad_device", "duplicate_drum_pad_device", "delete_drum_pad_device", "replace_drum_pad_sample",
+  "set_drum_pad_device_parameter", "set_drum_pad_device_parameters",
   "generate_audio", "write_midi_clip", "write_session_clip",
   "delete_arrangement_clip", "delete_session_clip", "set_clip_notes",
   "create_scene", "duplicate_scene", "delete_scene", "rename_scene",
