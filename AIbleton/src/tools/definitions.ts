@@ -626,15 +626,16 @@ export const TOOLS = [
   {
     name: "import_audio_clip",
     description:
-      "Import an audio file (from search_samples) into an AUDIO track's arrangement at a beat position — for loops, stems, one-shots. The file is copied into the Live project first, so it stays managed by Live.",
+      "Import an audio file (from search_samples) into an AUDIO track — into the arrangement at a beat position (default), or into a Session View slot when scene_index is given (for live-triggered loops; the slot must be empty). The file is copied into the Live project first, so it stays managed by Live.",
     input_schema: {
       type: "object",
       properties: {
         track_index: { type: "number" },
         track_name: { type: "string", description: TRACK_NAME_DESC },
         file_path: { type: "string", description: "Full path from search_samples" },
-        start_beat: { type: "number", description: "Arrangement position in beats (default 0)" },
-        duration_beats: { type: "number", description: "Optional clip length in beats" },
+        scene_index: { type: "number", description: "Optional Session scene — drops the clip into that empty slot instead of the arrangement" },
+        start_beat: { type: "number", description: "Arrangement position in beats (default 0); ignored when scene_index is set" },
+        duration_beats: { type: "number", description: "Optional clip length in beats (arrangement only)" },
         warped: { type: "boolean", description: "Enable warping (default: Live's auto-warp setting)" },
       },
       required: ["file_path"],
@@ -657,7 +658,7 @@ export const TOOLS = [
   {
     name: "generate_audio",
     description:
-      "Generate NEW audio with an AI music model (Stable Audio / ElevenLabs / MiniMax — whichever is configured in Settings) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Pass importTo to place the result onto an audio track's arrangement in the same atomic call (preferred for loops/stems); without it, follow up with import_audio_clip (arrangement) or load_sample (one-shots into a Simpler). Every generation is recorded in the generation registry (generation_id in the result) so gen_* goal criteria can judge the artifact.",
+      "Generate NEW audio with an AI music model (Stable Audio / ElevenLabs / MiniMax — whichever is configured in Settings) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Pass importTo to place the result onto an audio track's arrangement (or a Session View slot via importTo.scene_index) in the same atomic call (preferred for loops/stems); without it, follow up with import_audio_clip (arrangement or Session) or load_sample (one-shots into a Simpler). Every generation is recorded in the generation registry (generation_id in the result) so gen_* goal criteria can judge the artifact.",
     input_schema: {
       type: "object",
       properties: {
@@ -678,12 +679,13 @@ export const TOOLS = [
         importTo: {
           type: "object",
           description:
-            "Optional: import the generated file straight onto an audio track's arrangement in the same call (one atomic generate→import, no separate import_audio_clip needed). Omit to only save the file.",
+            "Optional: import the generated file straight onto an audio track in the same call (one atomic generate→import, no separate import_audio_clip needed). Targets the arrangement by default; pass scene_index to drop it into that empty Session View slot instead. Omit importTo entirely to only save the file.",
           properties: {
             track_index: { type: "number", description: "0-based audio track index" },
             track_name: { type: "string", description: TRACK_NAME_DESC },
-            start_beat: { type: "number", description: "Arrangement position (default 0)" },
-            duration_beats: { type: "number", description: "Clip length in beats (default: file's natural length)" },
+            scene_index: { type: "number", description: "Optional Session scene — drops the clip into that empty slot instead of the arrangement" },
+            start_beat: { type: "number", description: "Arrangement position (default 0); ignored when scene_index is set" },
+            duration_beats: { type: "number", description: "Clip length in beats (default: file's natural length; arrangement only)" },
             warped: { type: "boolean", description: "Warp the clip to the Set tempo (default: Live's default)" },
           },
         },
