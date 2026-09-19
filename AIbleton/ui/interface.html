@@ -421,6 +421,9 @@
        It deliberately stays separate from model Markdown and raw tool traces. */
     .receipt {
       align-self: stretch;
+      /* Like .steps and .hints, a receipt must keep its intrinsic height;
+         #log is the scroll container, not a place to vertically squash it. */
+      flex: 0 0 auto;
       background: var(--c-input-bg);
       border: 1px solid var(--c-border);
       border-left: 3px solid var(--c-text-dim);
