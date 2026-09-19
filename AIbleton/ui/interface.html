@@ -1161,6 +1161,17 @@
     let currentLang = localStorage.getItem('ai.lang') || 'en';
     if (!I18N[currentLang]) currentLang = 'en';
     const t = (k) => I18N[currentLang][k] ?? I18N.en[k] ?? k;
+    // Generic progress messages rotate only while the server has no more
+    // specific phase to report. Each keeps the original background-task note.
+    const THINKING_VARIANTS = {
+      zh: ['推敲中…（可关闭窗口，任务在后台继续）', '琢磨中…（可关闭窗口，任务在后台继续）'],
+      en: ['Pondering… (you can close this window; the task continues in the background)', 'Considering… (you can close this window; the task continues in the background)'],
+      de: ['Überlegt… (Fenster kann geschlossen werden, die Aufgabe läuft im Hintergrund weiter)', 'Erwägt… (Fenster kann geschlossen werden, die Aufgabe läuft im Hintergrund weiter)'],
+      fr: ['Réflexion en cours… (vous pouvez fermer la fenêtre, la tâche continue en arrière-plan)', 'Examen en cours… (vous pouvez fermer la fenêtre, la tâche continue en arrière-plan)'],
+      ja: ['検討中…（ウィンドウを閉じてもタスクはバックグラウンドで続行）', '整理中…（ウィンドウを閉じてもタスクはバックグラウンドで続行）'],
+      es: ['Considerando… (puedes cerrar la ventana; la tarea continúa en segundo plano)', 'Evaluando… (puedes cerrar la ventana; la tarea continúa en segundo plano)'],
+      it: ['Riflettendo… (puoi chiudere la finestra; l’attività continua in background)', 'Valutando… (puoi chiudere la finestra; l’attività continua in background)'],
+    };
 
     // ---------- AI providers ----------
     const PROVIDERS = {
@@ -1777,6 +1788,7 @@
       for (const p of Object.keys(connBadges)) renderConnBadge(p);
       renderConnOut('chat');
       renderConnOut('audio');
+      if (thinkingEl && isGenericThinking(thinkingPhase)) renderThinkingLabel();
     }
 
     // Conversation history lives on the extension server (persisted to disk),
@@ -2098,6 +2110,9 @@
     // lifetime: closing the dialog does not stop them. While a task runs we
     // poll /api/status; any (re)opened window picks the task up.
     let thinkingEl = null;
+    let thinkingPhase;
+    let thinkingVariantIndex = 0;
+    let thinkingTimer = null;
 
     // Busy = a task is running server-side: the send button becomes a stop
     // button (VSCode style); clicking it asks the server to abort the task.
@@ -2109,21 +2124,60 @@
     // phase = coarse server-side stage key (thinking/reading/analyzing/
     // generating/applying/planning/searching) — long tasks show WHAT is
     // happening, not just that the task is still alive.
+    function isGenericThinking(phase) {
+      const key = 'phase_' + phase;
+      return !phase || phase === 'thinking' || !I18N.en[key];
+    }
+
     function thinkingLabel(phase) {
       const key = 'phase_' + phase;
-      return (phase && I18N.en[key]) ? t(key) : t('thinking');
+      return isGenericThinking(phase) ? genericThinkingLabel() : t(key);
+    }
+
+    function genericThinkingLabel() {
+      const variants = [t('thinking'), ...(THINKING_VARIANTS[currentLang] ?? THINKING_VARIANTS.en)];
+      return variants[thinkingVariantIndex % variants.length];
+    }
+
+    function renderThinkingLabel() {
+      if (thinkingEl) thinkingEl.textContent = thinkingLabel(thinkingPhase);
+    }
+
+    function clearThinkingTimer() {
+      if (thinkingTimer !== null) clearInterval(thinkingTimer);
+      thinkingTimer = null;
+    }
+
+    function startThinkingTimer() {
+      if (thinkingTimer !== null) return;
+      thinkingTimer = setInterval(() => {
+        thinkingVariantIndex++;
+        if (thinkingEl && isGenericThinking(thinkingPhase)) renderThinkingLabel();
+      }, 5000);
     }
 
     function setThinking(on, phase) {
       if (on) {
-        const label = thinkingLabel(phase);
-        if (!thinkingEl) thinkingEl = addMsg('thinking', label);
-        else if (thinkingEl.textContent !== label) thinkingEl.textContent = label;
-      } else if (thinkingEl) {
-        thinkingEl.remove();
-        thinkingEl = null;
+        const wasGeneric = isGenericThinking(thinkingPhase);
+        thinkingPhase = phase;
+        const generic = isGenericThinking(phase);
+        if (!generic && wasGeneric) thinkingVariantIndex = 0;
+        if (!thinkingEl) thinkingEl = addMsg('thinking', thinkingLabel(phase));
+        else renderThinkingLabel();
+        if (generic) startThinkingTimer();
+        else clearThinkingTimer();
+      } else {
+        clearThinkingTimer();
+        thinkingPhase = undefined;
+        thinkingVariantIndex = 0;
+        if (thinkingEl) {
+          thinkingEl.remove();
+          thinkingEl = null;
+        }
       }
     }
+
+    window.addEventListener('beforeunload', clearThinkingTimer);
 
     async function pollStatus() {
       const s = await fetch('/api/status').then(r => r.json()).catch(() => null);
