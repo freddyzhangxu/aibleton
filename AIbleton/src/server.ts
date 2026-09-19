@@ -271,6 +271,17 @@ function saveManualConfigs(): void {
 
 type Ctx = ExtensionContext<"1.0.0">;
 
+/** Live's own UI language ("EN" → "en") beats the webview's localStorage
+ * pick: it's always present and always matches what the user sees, while
+ * webview localStorage is not guaranteed to persist. The client-sent value
+ * stays as fallback for non-Live clients (plain browser). */
+function liveLanguage(context: Ctx): string | undefined {
+  const raw = context.environment.language;
+  if (raw == null) return undefined;
+  const code = String(raw).toLowerCase();
+  return /^[a-z]{2}$/.test(code) ? code : undefined;
+}
+
 // Wire the late-bound hooks tools/* call back into server-owned state.
 // Function declarations hoist, so this top-level assignment sees them all.
 toolHooks.debugLog = debugLog;
@@ -790,6 +801,11 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
           send(409, JSON.stringify({ error: "上一个任务还在进行中，请稍候" }));
           return;
         }
+        // Live's UI language is authoritative for reply language, error
+        // messages and web-search locale; overwrite before `parsed` fans out
+        // to toolState.activeLanguage and the chat providers' req.language.
+        const live = liveLanguage(context);
+        if (live) parsed.language = live;
         const session = currentSession();
         // Text attachments fold into the stored message (so history keeps their
         // content); images leave a marker — the base64 itself only rides this
