@@ -604,6 +604,11 @@ export const TOOLS = [
       },
     },
   },
+  { name: "list_drum_rack_pads", description: "List Drum Rack pads on a track: receiving MIDI note, chain devices, volume, pan and sends.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC } }, required: ["track_index"] } },
+  { name: "get_drum_pad_mixer", description: "Read one Drum Rack pad chain's devices, volume, pan and sends. rack_index defaults to 0.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number", description: "MIDI receiving note, e.g. 36 kick, 38 snare" } }, required: ["track_index", "pad_note"] } },
+  { name: "set_drum_pad_mixer", description: "Set one Drum Rack pad chain's volume, pan and/or sends. Values are clamped to Live's parameter range.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, volume: { type: "number" }, pan: { type: "number" }, sends: { type: "array", items: { type: "object" } } }, required: ["track_index", "pad_note"] } },
+  { name: "insert_drum_pad_device", description: "Append a built-in Live device to one Drum Rack pad's chain. Third-party plug-ins are unsupported.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_name: { type: "string" } }, required: ["track_index", "pad_note", "device_name"] } },
+  { name: "duplicate_drum_pad_device", description: "Duplicate a device on one Drum Rack pad chain immediately after itself.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_index: { type: "number" }, device_name: { type: "string" } }, required: ["track_index", "pad_note"] } },
   {
     name: "search_samples",
     description:
