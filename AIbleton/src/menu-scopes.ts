@@ -14,5 +14,4 @@ export const MENU_SCOPES = [
   "ClipSlot",
   "DrumRack",
   "Simpler",
-  "ClipSlotSelection",
 ] as const satisfies readonly ContextMenuScope<"1.0.0">[];
