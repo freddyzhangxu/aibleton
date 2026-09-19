@@ -189,6 +189,34 @@ async function applyDeviceParam(
   return { parameter: param.name, value: display };
 }
 
+async function presentDeviceParameters(device: Device<"1.0.0">, rawFilter: unknown): Promise<Record<string, unknown>> {
+  const filter = typeof rawFilter === "string" ? rawFilter.toLowerCase() : "";
+  const all = await Promise.all(
+    device.parameters.map(async (param, index) => {
+      if (filter && !param.name.toLowerCase().includes(filter)) return null;
+      const value = await param.getValue();
+      return {
+        index,
+        name: param.name,
+        value,
+        min: param.min,
+        max: param.max,
+        default: toNum(param.defaultValue),
+        ...(param.isQuantized && param.valueItems.length ? { items: param.valueItems.map((item) => item.name) } : {}),
+      };
+    }),
+  );
+  let parameters = all.filter((param) => param !== null);
+  const cap = filter ? 120 : 40;
+  const truncated = parameters.length > cap;
+  if (truncated) parameters = parameters.slice(0, cap);
+  return {
+    parameterCount: device.parameters.length,
+    ...(truncated ? { note: `仅返回前 ${cap} 个参数。请用 filter 按名称精确查询（如 "freq"、"reso"、"coarse"、"lfo"）` } : {}),
+    parameters,
+  };
+}
+
 function requireMovePaired(): void {
   if (!toolState.moveSettings.token) {
     throw new Error("Move 尚未配对 — 先调用 move_pair（不带 code）获取屏幕上的配对码。");
@@ -532,39 +560,9 @@ export async function runTool(
     case "get_device_parameters": {
       const tref = resolveTrack(context, input, "track_index");
       const device = deviceAt(context, tref.index, deviceRefFrom(input));
-      const filter = typeof input.filter === "string" ? input.filter.toLowerCase() : "";
-      const all = await Promise.all(
-        device.parameters.map(async (p, i) => {
-          if (filter && !p.name.toLowerCase().includes(filter)) return null;
-          const value = await p.getValue();
-          return {
-            index: i,
-            name: p.name,
-            value,
-            min: p.min,
-            max: p.max,
-            default: toNum(p.defaultValue),
-            ...(p.isQuantized && p.valueItems.length
-              ? { items: p.valueItems.map((v) => v.name) }
-              : {}),
-          };
-        }),
-      );
-      let params = all.filter((p) => p !== null);
-      // Keep tool results small: huge payloads get rejected by some API gateways.
-      const cap = filter ? 120 : 40;
-      let truncated = false;
-      if (params.length > cap) {
-        params = params.slice(0, cap);
-        truncated = true;
-      }
       return trackResult(tref, {
         device: device.name,
-        parameterCount: device.parameters.length,
-        ...(truncated
-          ? { note: `仅返回前 ${cap} 个参数。请用 filter 按名称精确查询（如 "freq"、"reso"、"coarse"、"lfo"）` }
-          : {}),
-        parameters: params,
+        ...(await presentDeviceParameters(device, input.filter)),
       });
     }
     case "set_device_parameter": {
@@ -757,6 +755,45 @@ export async function runTool(
         rack: rack.name,
         pad_note: toNum(chain.receivingNote),
         undo: "已删除；如需恢复，请在 Live 中执行 Undo（⌘Z / Ctrl+Z）。",
+      });
+    }
+    case "get_drum_pad_device_parameters": {
+      const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input.pad_note); const device = chainDeviceAt(chain, input);
+      return trackResult(ref, {
+        rack: rack.name,
+        pad_note: toNum(chain.receivingNote),
+        device: device.name,
+        device_index: chain.devices.indexOf(device),
+        ...(await presentDeviceParameters(device, input.filter)),
+      });
+    }
+    case "set_drum_pad_device_parameter": {
+      const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input.pad_note); const device = chainDeviceAt(chain, input);
+      const applied = await applyDeviceParam(device, String(input.parameter ?? "").trim(), String(input.value ?? "").trim());
+      return trackResult(ref, { rack: rack.name, pad_note: toNum(chain.receivingNote), device: device.name, device_index: chain.devices.indexOf(device), ...applied });
+    }
+    case "set_drum_pad_device_parameters": {
+      const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input.pad_note); const device = chainDeviceAt(chain, input);
+      const items = (Array.isArray(input.params) ? input.params : []).slice(0, 24);
+      if (!items.length) throw new Error("params 不能为空（[{parameter, value}, …]）");
+      const results = await Promise.all(items.map(async (item) => {
+        const rawParam = String((item as Record<string, unknown>)?.parameter ?? "").trim();
+        const rawValue = String((item as Record<string, unknown>)?.value ?? "").trim();
+        try {
+          return { ok: true as const, ...(await applyDeviceParam(device, rawParam, rawValue)) };
+        } catch (error) {
+          return { ok: false as const, parameter: rawParam || "?", error: (error as Error).message };
+        }
+      }));
+      const applied = results.filter((result) => result.ok).map(({ ok: _, ...rest }) => rest);
+      const failed = results.filter((result) => !result.ok).map(({ ok: _, ...rest }) => rest);
+      return trackResult(ref, {
+        rack: rack.name,
+        pad_note: toNum(chain.receivingNote),
+        device: device.name,
+        device_index: chain.devices.indexOf(device),
+        applied,
+        ...(failed.length ? { failed } : {}),
       });
     }
     case "get_drum_pad_sample": {
