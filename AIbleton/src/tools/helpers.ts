@@ -167,6 +167,9 @@ export function snapshotClip(c: Clip<"1.0.0">, start: number | null): SnapshotCl
         duration: toNum(n.duration),
         velocity: toNum(n.velocity ?? 100, 100),
         muted: !!n.muted,
+        ...(n.probability !== undefined ? { probability: toNum(n.probability) } : {}),
+        ...(n.velocityDeviation !== undefined ? { velocityDeviation: toNum(n.velocityDeviation) } : {}),
+        ...(n.releaseVelocity !== undefined ? { releaseVelocity: toNum(n.releaseVelocity) } : {}),
       })),
     };
   }
@@ -240,11 +243,29 @@ export function parseNotes(raw: unknown, clipLength: number): NoteDescription[] 
     if (!(startTime >= 0) || !(duration > 0)) {
       throw new Error(`音符 start=${String(note.start)} / duration=${String(note.duration)} 无效`);
     }
+    const optionalNumber = (key: string, min: number, max: number): number | undefined => {
+      if (note[key] === undefined) return undefined;
+      const value = Number(note[key]);
+      if (!Number.isFinite(value) || value < min || value > max) {
+        throw new Error(`音符 ${key}=${String(note[key])} 无效（应为 ${min}–${max}）`);
+      }
+      return value;
+    };
+    const probability = optionalNumber("probability", 0, 1);
+    const velocityDeviation = optionalNumber("velocity_deviation", -127, 127);
+    const releaseVelocity = optionalNumber("release_velocity", 0, 127);
+    if (note.muted !== undefined && typeof note.muted !== "boolean") {
+      throw new Error(`音符 muted=${String(note.muted)} 无效（应为 true 或 false）`);
+    }
     return {
       pitch,
       startTime,
       duration,
       velocity: Math.min(127, Math.max(1, velocity)),
+      ...(probability !== undefined ? { probability } : {}),
+      ...(velocityDeviation !== undefined ? { velocityDeviation } : {}),
+      ...(releaseVelocity !== undefined ? { releaseVelocity } : {}),
+      ...(note.muted !== undefined ? { muted: note.muted } : {}),
     };
   });
   return notes.filter((n) => n.startTime < clipLength);

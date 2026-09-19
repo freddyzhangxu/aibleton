@@ -1023,6 +1023,10 @@ export async function runTool(
           start: n.startTime,
           duration: n.duration,
           velocity: n.velocity,
+          ...(n.probability !== undefined ? { probability: n.probability } : {}),
+          ...(n.velocityDeviation !== undefined ? { velocity_deviation: n.velocityDeviation } : {}),
+          ...(n.releaseVelocity !== undefined ? { release_velocity: n.releaseVelocity } : {}),
+          ...(n.muted !== undefined ? { muted: n.muted } : {}),
         })),
       });
     }

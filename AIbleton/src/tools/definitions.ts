@@ -9,6 +9,19 @@ export const TRACK_NAME_DESC =
   "Track name as listed by get_song_overview. Always pass it together with the index: " +
   "the pair is verified and the track is re-resolved by name if the index has shifted since.";
 
+/** Optional Live-native per-note expression fields. Kept in one shared schema
+ * so every MIDI-writing route speaks the same input language. */
+const MIDI_NOTE_PROPERTIES = {
+  pitch: { type: "number" },
+  start: { type: "number", description: "Note start in beats, relative to clip start" },
+  duration: { type: "number", description: "Note length in beats (default 0.25)" },
+  velocity: { type: "number", description: "1–127 (default 100)" },
+  probability: { type: "number", description: "Optional playback probability, 0–1" },
+  velocity_deviation: { type: "number", description: "Optional Live velocity deviation, -127–127" },
+  release_velocity: { type: "number", description: "Optional MIDI note-off velocity, 0–127" },
+  muted: { type: "boolean", description: "Optional mute flag; preserved in the clip as an alternate note" },
+};
+
 /** Flat parameter bag for goal criteria — one schema for every kind keeps it
  * emittable for weak models (no per-kind nesting); the kind-specific required
  * params are enforced server-side in goal/types.ts's normalizeGoal. */
@@ -697,7 +710,7 @@ export const TOOLS = [
         name: { type: "string", description: "Candidate clip name" },
         swing: { type: "number", description: "0–100 baked MIDI swing, same as write_midi_clip" },
         snap_to_grid: { type: "boolean", description: "Snap note starts to Live's current grid before swing" },
-        notes: { type: "array", items: { type: "object" }, description: "Same note format as write_midi_clip" },
+        notes: { type: "array", items: { type: "object", properties: MIDI_NOTE_PROPERTIES, required: ["pitch", "start"] }, description: "Same note format as write_midi_clip" },
       },
       required: ["track_index", "take_lane_index", "notes"],
     },
@@ -784,12 +797,7 @@ export const TOOLS = [
           type: "array",
           items: {
             type: "object",
-            properties: {
-              pitch: { type: "number" },
-              start: { type: "number", description: "Note start in beats, relative to clip start" },
-              duration: { type: "number", description: "Note length in beats (default 0.25)" },
-              velocity: { type: "number", description: "1–127 (default 100)" },
-            },
+            properties: MIDI_NOTE_PROPERTIES,
             required: ["pitch", "start"],
           },
         },
@@ -817,7 +825,7 @@ export const TOOLS = [
           type: "boolean",
           description: "Snap note starts to the song's current grid, default false (see write_midi_clip — coarse grids destroy fine patterns)",
         },
-        notes: { type: "array", items: { type: "object" } },
+        notes: { type: "array", items: { type: "object", properties: MIDI_NOTE_PROPERTIES, required: ["pitch", "start"] } },
       },
       required: ["scene_index", "notes"],
     },
@@ -874,7 +882,7 @@ export const TOOLS = [
           type: "boolean",
           description: "Snap note starts to the song's current grid, default false (see write_midi_clip — coarse grids destroy fine patterns)",
         },
-        notes: { type: "array", items: { type: "object" } },
+        notes: { type: "array", items: { type: "object", properties: MIDI_NOTE_PROPERTIES, required: ["pitch", "start"] } },
       },
       required: ["clip_index", "notes"],
     },
