@@ -328,6 +328,15 @@
       white-space: pre;
     }
     .msg.ai .md-code code { background: transparent; padding: 0; }
+    .msg.ai .md-table-wrap { max-width: 100%; overflow-x: auto; }
+    .msg.ai .md-table { border-collapse: collapse; min-width: 100%; width: max-content; }
+    .msg.ai .md-table th, .msg.ai .md-table td {
+      border: 1px solid var(--c-border);
+      padding: 4px 7px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .msg.ai .md-table th { background: var(--c-input-bg); color: var(--c-text); font-weight: 700; }
     .msg.ai a { color: var(--c-accent); text-decoration: underline; }
     .msg.ai a:hover { color: hsl(31, 100%, 78%); }
     .msg.error { align-self: stretch; background: hsl(0, 60%, 25%); color: #fff; }
@@ -1862,11 +1871,50 @@
       }
     }
 
-    function isMarkdownBlockStart(line) {
+    function splitMarkdownTableRow(line) {
+      const trimmed = line.trim();
+      if (!trimmed.includes('|')) return null;
+      const hasLeadingPipe = trimmed.startsWith('|');
+      const hasTrailingPipe = trimmed.endsWith('|') && !trimmed.endsWith('\\|');
+      const body = trimmed.slice(hasLeadingPipe ? 1 : 0, hasTrailingPipe ? -1 : undefined);
+      const cells = [];
+      let cell = '';
+      for (let i = 0; i < body.length; i++) {
+        const char = body[i];
+        if (char === '\\' && body[i + 1] === '|') {
+          cell += '|';
+          i++;
+        } else if (char === '|') {
+          cells.push(cell.trim());
+          cell = '';
+        } else {
+          cell += char;
+        }
+      }
+      cells.push(cell.trim());
+      return cells.length >= 2 ? cells : null;
+    }
+
+    function markdownTableInfo(headerLine, dividerLine) {
+      if (typeof dividerLine !== 'string') return null;
+      const header = splitMarkdownTableRow(headerLine);
+      const divider = splitMarkdownTableRow(dividerLine);
+      if (!header || !divider || header.length !== divider.length) return null;
+      const alignments = divider.map((cell) => {
+        if (!/^:?-+:?$/.test(cell)) return null;
+        return cell.startsWith(':') && cell.endsWith(':') ? 'center'
+          : cell.endsWith(':') ? 'right'
+            : cell.startsWith(':') ? 'left'
+              : '';
+      });
+      return alignments.some((alignment) => alignment === null) ? null : { header, alignments };
+    }
+
+    function isMarkdownBlockStart(line, nextLine) {
       return /^```/.test(line) || /^(#{1,3})\s+/.test(line) ||
         /^(?:[-+*]|\d+\.)\s+/.test(line) || /^>\s?/.test(line) ||
         /^(?:\*\s*){3,}$/.test(line) || /^(?:-\s*){3,}$/.test(line) ||
-        /^(?:_\s*){3,}$/.test(line);
+        /^(?:_\s*){3,}$/.test(line) || !!markdownTableInfo(line, nextLine);
     }
 
     function renderMarkdown(text, target) {
@@ -1875,6 +1923,54 @@
       while (i < lines.length) {
         const line = lines[i];
         if (!line.trim()) { i++; continue; }
+
+        let tableInfo = markdownTableInfo(line, lines[i + 1]);
+        const tableRows = [];
+        let tableEnd = i + 2;
+        if (tableInfo) {
+          while (tableEnd < lines.length) {
+            const cells = splitMarkdownTableRow(lines[tableEnd]);
+            if (!cells) break;
+            if (cells.length !== tableInfo.header.length) {
+              tableInfo = null;
+              tableRows.length = 0;
+              break;
+            }
+            tableRows.push(cells);
+            tableEnd++;
+          }
+        }
+        if (tableInfo) {
+          const wrap = document.createElement('div');
+          wrap.className = 'md-block md-table-wrap';
+          const table = document.createElement('table');
+          table.className = 'md-table';
+          const head = document.createElement('thead');
+          const headRow = document.createElement('tr');
+          tableInfo.header.forEach((content, column) => {
+            const cell = document.createElement('th');
+            if (tableInfo.alignments[column]) cell.style.textAlign = tableInfo.alignments[column];
+            appendInlineMarkdown(cell, content);
+            headRow.appendChild(cell);
+          });
+          head.appendChild(headRow);
+          const body = document.createElement('tbody');
+          for (const cells of tableRows) {
+            const row = document.createElement('tr');
+            cells.forEach((content, column) => {
+              const cell = document.createElement('td');
+              if (tableInfo.alignments[column]) cell.style.textAlign = tableInfo.alignments[column];
+              appendInlineMarkdown(cell, content);
+              row.appendChild(cell);
+            });
+            body.appendChild(row);
+          }
+          i = tableEnd; // consume the header, divider, and compatible rows
+          table.append(head, body);
+          wrap.appendChild(table);
+          target.appendChild(wrap);
+          continue;
+        }
 
         const fence = line.match(/^```\s*([^`]*)\s*$/);
         if (fence) {
@@ -1941,7 +2037,7 @@
 
         const paragraphLines = [line];
         i++;
-        while (i < lines.length && lines[i].trim() && !isMarkdownBlockStart(lines[i])) paragraphLines.push(lines[i++]);
+        while (i < lines.length && lines[i].trim() && !isMarkdownBlockStart(lines[i], lines[i + 1])) paragraphLines.push(lines[i++]);
         const p = document.createElement('p');
         p.className = 'md-block';
         appendInlineMarkdown(p, paragraphLines.join('\n'));
