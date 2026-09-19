@@ -1,5 +1,6 @@
 import { initialize, type ActivationContext, type ContextMenuScope } from "@ableton-extensions/sdk";
 import { sharedContextMenuRegistrationManager } from "./menu-lifecycle.js";
+import { MENU_SCOPES } from "./menu-scopes.js";
 import { startServer } from "./server.js";
 import { setRightClickFocus, setSelectionContext } from "./setcontext.js";
 
@@ -31,22 +32,10 @@ export function activate(activation: ActivationContext) {
       .catch(() => {});
   });
 
-  // Beta 1 of the SDK only exposes context menus, so the dialog is triggered
-  // by right-clicking tracks / scenes / clips.
-  const scopes = [
-    "MidiTrack",
-    "AudioTrack",
-    "Scene",
-    "MidiClip",
-    "AudioClip",
-    "ClipSlot",
-    "DrumRack",
-    "Simpler",
-    "ClipSlotSelection",
-    "AudioTrack.ArrangementSelection",
-    "MidiTrack.ArrangementSelection",
-  ] as const;
+  // Beta 1 only exposes context menus. MENU_SCOPES intentionally excludes
+  // ArrangementSelection: that scope overlaps a direct Arrangement Clip and
+  // Live would render two identical Open actions.
   void sharedContextMenuRegistrationManager<ContextMenuScope<"1.0.0">>()
-    .replace(context.ui, scopes, "Open", "ai-assistant.open")
+    .replace(context.ui, MENU_SCOPES, "Open", "ai-assistant.open")
     .catch((error) => console.error("AIbleton: context-menu registration failed:", error));
 }
