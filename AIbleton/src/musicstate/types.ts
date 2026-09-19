@@ -27,6 +27,9 @@ export interface SnapshotNote {
   duration: number; // beats
   velocity: number; // builder defaults to 100
   muted?: boolean;
+  probability?: number;
+  velocityDeviation?: number;
+  releaseVelocity?: number;
 }
 
 export interface SnapshotClip {
