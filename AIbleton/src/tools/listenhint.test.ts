@@ -102,6 +102,18 @@ describe("listenHintFor", () => {
     assert.equal(h?.suggest_ab, true);
   });
 
+  it("session audio imports: no arrangement bar range", () => {
+    const imp = listenHintFor(ctx(), "import_audio_clip", { scene_index: 2, start_beat: 32 }, {
+      track: "Bass",
+      track_index: 0,
+    });
+    assert.deepEqual(imp, { tracks: ["Bass"], suggest_solo: "Bass" });
+    const gen = listenHintFor(ctx(), "generate_audio", { importTo: { scene_index: 2, start_beat: 32 } }, {
+      imported: { track: "Bass", track_index: 0, scene_index: 2 },
+    });
+    assert.deepEqual(gen, { tracks: ["Bass"], suggest_solo: "Bass" });
+  });
+
   it("returns undefined for read-only / silent tools", () => {
     for (const name of ["get_song_overview", "analyze_song", "set_tempo", "rename_track", "set_track_state"]) {
       assert.equal(listenHintFor(ctx(), name, {}, { track_index: 0 }), undefined, name);

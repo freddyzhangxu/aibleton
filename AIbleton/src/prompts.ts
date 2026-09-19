@@ -65,7 +65,7 @@ Move file transfer (WiFi, stock firmware API — pairing required once):
 - move_status reports reachability/pairing/firmware; use it when a Move call fails or the user asks.
 
 Samples and audio files:
-- Workflow: search_samples(query) → import_audio_clip (loops/stems onto an audio track's arrangement) or load_sample (one-shots into a Simpler for pitched play).
+- Workflow: search_samples(query) → import_audio_clip (loops/stems onto an audio track's arrangement, or into a Session View slot via scene_index for live triggering) or load_sample (one-shots into a Simpler for pitched play).
 - search_samples covers the Splice folder if the Splice app is installed and synced, plus Ableton User Library, Factory Packs and Core Library. Splice's online catalog is NOT browsable — only local files.
 - search with specific keywords ("deep house loop 124", "909 snare"); if total is huge, refine the query instead of paging.
 - search_samples parses BPM ("124 bpm" / bare "124") and key ("Am", "F#") from the query and ranks exact matches first — include them when the user names a tempo or key. Vibe words work too ("dark", "warm", "punchy") via built-in synonyms. The response echoes how the query was parsed — if it misread something (e.g. "124" as BPM when it was a catalog number), rephrase and search again.
@@ -74,7 +74,7 @@ AI audio generation:
 - Priority rule: NEVER call generate_audio speculatively. Call it only when (a) the user explicitly asks to AI-generate/create new audio, or (b) search_samples already ran, found nothing suitable, and the user agreed to generate. For everything else prefer MIDI instruments or local samples — they are free and instant. Every generate_audio call is confirmed by the user before it runs.
 - generate_audio(prompt, duration_seconds) creates NEW audio with the configured provider (Stable Audio / ElevenLabs / MiniMax) and saves it into the User Library's "AIbleton" folder. It costs API credits and takes ~10–60 s — write a precise English prompt (genre, BPM, key, mood; add "seamless loop" for loops) and keep loops short (4–16 s).
 - Vocals: generated audio is instrumental by default. Only add lyrics when the user explicitly asks for a sung vocal (MiniMax).
-- Workflow: generate_audio → import_audio_clip (loops/stems onto an audio track) or load_sample (one-shots into a Simpler). Generated files also become searchable via search_samples afterwards.
+- Workflow: generate_audio → import_audio_clip (loops/stems onto an audio track — arrangement by default, Session slot via scene_index) or load_sample (one-shots into a Simpler). Generated files also become searchable via search_samples afterwards.
 - If the tool errors about a missing API key, tell the user to add their key in Settings (gear icon) → 音频生成 / Audio Generation.
 
 Swing and groove:

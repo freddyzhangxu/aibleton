@@ -699,6 +699,20 @@ export async function runTool(
       if (!pathExists(filePath)) {
         throw new Error(`找不到文件: ${filePath} — 用 search_samples 按关键词搜索可用样本，或检查路径拼写`);
       }
+      if (typeof input.scene_index === "number") {
+        const sceneIndex = Number(input.scene_index);
+        const slot = track.clipSlots[sceneIndex];
+        if (!Number.isInteger(sceneIndex) || !slot) throw new Error(`场景序号 ${sceneIndex} 无效`);
+        if (slot.clip) throw new Error("该 clip 槽已有 clip，请先删除或换一个槽位");
+        const managed = await context.resources.importIntoProject(filePath);
+        const clip = await context.withinTransaction(() =>
+          slot.createAudioClip({
+            filePath: managed,
+            ...(typeof input.warped === "boolean" ? { isWarped: input.warped } : {}),
+          }),
+        );
+        return trackResult(ref, { clip: clip.name, scene_index: sceneIndex, file: managed });
+      }
       const managed = await context.resources.importIntoProject(filePath);
       const clip = await context.withinTransaction(() =>
         track.createAudioClip({
@@ -781,15 +795,29 @@ export async function runTool(
             throw new Error(`轨道 ${ref.index}（${track.name}）不是音频轨道，先用 create_audio_track 建一条`);
           }
           const managed = await context.resources.importIntoProject(file);
-          const clip = await context.withinTransaction(() =>
-            track.createAudioClip({
-              filePath: managed,
-              startTime: Number(spec.start_beat ?? 0),
-              ...(typeof spec.duration_beats === "number" ? { duration: spec.duration_beats } : {}),
-              ...(typeof spec.warped === "boolean" ? { isWarped: spec.warped } : {}),
-            }),
-          );
-          imported = { track: track.name, track_index: ref.index, clip: clip.name };
+          if (typeof spec.scene_index === "number") {
+            const sceneIndex = Number(spec.scene_index);
+            const slot = track.clipSlots[sceneIndex];
+            if (!Number.isInteger(sceneIndex) || !slot) throw new Error(`场景序号 ${sceneIndex} 无效`);
+            if (slot.clip) throw new Error("该 clip 槽已有 clip，请先删除或换一个槽位");
+            const clip = await context.withinTransaction(() =>
+              slot.createAudioClip({
+                filePath: managed,
+                ...(typeof spec.warped === "boolean" ? { isWarped: spec.warped } : {}),
+              }),
+            );
+            imported = { track: track.name, track_index: ref.index, scene_index: sceneIndex, clip: clip.name };
+          } else {
+            const clip = await context.withinTransaction(() =>
+              track.createAudioClip({
+                filePath: managed,
+                startTime: Number(spec.start_beat ?? 0),
+                ...(typeof spec.duration_beats === "number" ? { duration: spec.duration_beats } : {}),
+                ...(typeof spec.warped === "boolean" ? { isWarped: spec.warped } : {}),
+              }),
+            );
+            imported = { track: track.name, track_index: ref.index, clip: clip.name };
+          }
         } catch (e) {
           importError = e instanceof Error ? e.message : String(e);
         }

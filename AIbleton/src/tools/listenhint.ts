@@ -88,7 +88,10 @@ export function listenHintFor(
       return finish(one(result), {}); // session slot — no arrangement bar
     case "import_audio_clip":
       return finish(one(result), {
-        ...bars(toNum(input.start_beat), toNum(input.duration_beats)),
+        // Session slot — no arrangement bar
+        ...(typeof input.scene_index === "number"
+          ? {}
+          : bars(toNum(input.start_beat), toNum(input.duration_beats))),
         ...(hadPriorClips(context, result.track_index) ? { suggest_ab: true } : {}),
       });
     case "generate_audio": {
@@ -96,7 +99,9 @@ export function listenHintFor(
       if (!imported) return undefined; // file only, nothing in the Set yet
       const spec = (input.importTo ?? {}) as Record<string, unknown>;
       return finish(one(imported), {
-        ...bars(toNum(spec.start_beat), toNum(spec.duration_beats)),
+        ...(typeof spec.scene_index === "number"
+          ? {}
+          : bars(toNum(spec.start_beat), toNum(spec.duration_beats))),
         ...(hadPriorClips(context, imported.track_index) ? { suggest_ab: true } : {}),
       });
     }
