@@ -292,6 +292,44 @@
     /* AI replies stretch full width so wrapped lines end at the same right
        edge as the (right-aligned) user bubbles — the wrap columns line up. */
     .msg.ai { align-self: stretch; max-width: none; background: var(--c-panel); border: 1px solid var(--c-border); }
+    /* Model replies are parsed into a deliberately small, safe Markdown
+       subset. All model text is still inserted as text nodes; these styles
+       only format the allowlisted DOM elements that the renderer creates. */
+    .msg.ai .md-block { white-space: normal; }
+    .msg.ai .md-block + .md-block { margin-top: 8px; }
+    .msg.ai .md-heading { color: var(--c-text); font-weight: 700; line-height: 1.3; }
+    .msg.ai h1.md-heading { font-size: 16px; }
+    .msg.ai h2.md-heading { font-size: 14px; }
+    .msg.ai h3.md-heading { font-size: 12px; }
+    .msg.ai .md-list { padding-left: 20px; }
+    .msg.ai .md-list li + li { margin-top: 3px; }
+    .msg.ai .md-quote {
+      border-left: 2px solid var(--c-accent);
+      color: var(--c-text-dim);
+      margin-left: 0;
+      padding-left: 9px;
+    }
+    .msg.ai .md-rule { border: 0; border-top: 1px solid var(--c-border); margin: 10px 0; }
+    .msg.ai code {
+      background: var(--c-input-bg);
+      border-radius: 3px;
+      color: hsl(0, 0%, 88%);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+      padding: 1px 4px;
+    }
+    .msg.ai .md-code {
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-border);
+      border-radius: 5px;
+      max-height: 260px;
+      overflow: auto;
+      padding: 8px;
+      white-space: pre;
+    }
+    .msg.ai .md-code code { background: transparent; padding: 0; }
+    .msg.ai a { color: var(--c-accent); text-decoration: underline; }
+    .msg.ai a:hover { color: hsl(31, 100%, 78%); }
     .msg.error { align-self: stretch; background: hsl(0, 60%, 25%); color: #fff; }
     .msg.thinking { align-self: flex-start; color: var(--c-text-dim); font-style: italic; }
     /* Tool-call log for one assistant reply, collapsed into a single summary
@@ -1743,10 +1781,167 @@
 
     // Conversation history lives on the extension server (persisted to disk),
     // so it survives closing/reopening this window or using a browser instead.
+    //
+    // Model output must never be assigned to innerHTML. This small renderer
+    // recognizes the Markdown models commonly return and creates only an
+    // allowlisted set of DOM elements; every unrecognized fragment remains a
+    // text node. That keeps stored chat history just as safe as fresh replies.
+    const SAFE_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+
+    function appendText(target, text) {
+      target.appendChild(document.createTextNode(text));
+    }
+
+    function appendTextWithBreaks(target, text) {
+      String(text).split('\n').forEach((line, i) => {
+        if (i) target.appendChild(document.createElement('br'));
+        appendText(target, line);
+      });
+    }
+
+    function appendInlineMarkdown(target, source, depth = 0) {
+      const text = String(source ?? '');
+      // A bounded recursion depth handles normal nesting (for example bold
+      // text containing inline code) without letting adversarial input grow a
+      // deep call stack.
+      if (depth >= 8) { appendTextWithBreaks(target, text); return; }
+
+      const token = /(`([^`\n]+)`)|(\[([^\]\n]+)\]\(([^()\s]+)\))|(\*\*([^\n]+?)\*\*)|(~~([^\n]+?)~~)|(__([^\n]+?)__)|(\*([^*\n]+?)\*)|(_([^_\n]+?)_)/g;
+      let pos = 0;
+      let match;
+      while ((match = token.exec(text))) {
+        if (match.index > pos) appendTextWithBreaks(target, text.slice(pos, match.index));
+
+        if (match[2] !== undefined) {
+          const code = document.createElement('code');
+          code.textContent = match[2];
+          target.appendChild(code);
+        } else if (match[4] !== undefined) {
+          const href = match[5];
+          let url;
+          try { url = new URL(href); } catch { url = null; }
+          if (url && SAFE_LINK_PROTOCOLS.has(url.protocol)) {
+            const link = document.createElement('a');
+            link.href = url.href;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            appendInlineMarkdown(link, match[4], depth + 1);
+            target.appendChild(link);
+          } else {
+            appendTextWithBreaks(target, match[0]);
+          }
+        } else {
+          const tag = match[7] !== undefined || match[11] !== undefined
+            ? 'strong'
+            : match[9] !== undefined
+              ? 'del'
+              : 'em';
+          const content = match[7] ?? match[9] ?? match[11] ?? match[13] ?? match[15];
+          const el = document.createElement(tag);
+          appendInlineMarkdown(el, content, depth + 1);
+          target.appendChild(el);
+        }
+        pos = token.lastIndex;
+      }
+      if (pos < text.length) {
+        // Markdown line breaks inside a paragraph remain visible without
+        // relying on inherited white-space: pre-wrap.
+        appendTextWithBreaks(target, text.slice(pos));
+      }
+    }
+
+    function isMarkdownBlockStart(line) {
+      return /^```/.test(line) || /^(#{1,3})\s+/.test(line) ||
+        /^(?:[-+*]|\d+\.)\s+/.test(line) || /^>\s?/.test(line) ||
+        /^(?:\*\s*){3,}$/.test(line) || /^(?:-\s*){3,}$/.test(line) ||
+        /^(?:_\s*){3,}$/.test(line);
+    }
+
+    function renderMarkdown(text, target) {
+      const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+      let i = 0;
+      while (i < lines.length) {
+        const line = lines[i];
+        if (!line.trim()) { i++; continue; }
+
+        const fence = line.match(/^```\s*([^`]*)\s*$/);
+        if (fence) {
+          const codeLines = [];
+          i++;
+          while (i < lines.length && !/^```\s*$/.test(lines[i])) codeLines.push(lines[i++]);
+          if (i < lines.length) i++; // consume a closing fence when present
+          const pre = document.createElement('pre');
+          pre.className = 'md-block md-code';
+          const code = document.createElement('code');
+          if (fence[1]) code.dataset.language = fence[1];
+          code.textContent = codeLines.join('\n');
+          pre.appendChild(code);
+          target.appendChild(pre);
+          continue;
+        }
+
+        const heading = line.match(/^(#{1,3})\s+(.+?)\s*#*\s*$/);
+        if (heading) {
+          const el = document.createElement('h' + heading[1].length);
+          el.className = 'md-block md-heading';
+          appendInlineMarkdown(el, heading[2]);
+          target.appendChild(el);
+          i++;
+          continue;
+        }
+
+        if (/^(?:\*\s*){3,}$/.test(line) || /^(?:-\s*){3,}$/.test(line) || /^(?:_\s*){3,}$/.test(line)) {
+          const rule = document.createElement('hr');
+          rule.className = 'md-block md-rule';
+          target.appendChild(rule);
+          i++;
+          continue;
+        }
+
+        if (/^>\s?/.test(line)) {
+          const quoteLines = [];
+          while (i < lines.length && /^>\s?/.test(lines[i])) quoteLines.push(lines[i++].replace(/^>\s?/, ''));
+          const quote = document.createElement('blockquote');
+          quote.className = 'md-block md-quote';
+          appendInlineMarkdown(quote, quoteLines.join('\n'));
+          target.appendChild(quote);
+          continue;
+        }
+
+        const list = line.match(/^(?:([-+*])|(\d+)\.)\s+(.+)$/);
+        if (list) {
+          const ordered = list[2] !== undefined;
+          const el = document.createElement(ordered ? 'ol' : 'ul');
+          el.className = 'md-block md-list';
+          if (ordered) el.start = Number(list[2]);
+          const itemPattern = ordered ? /^\d+\.\s+(.+)$/ : /^[-+*]\s+(.+)$/;
+          while (i < lines.length) {
+            const item = lines[i].match(itemPattern);
+            if (!item) break;
+            const li = document.createElement('li');
+            appendInlineMarkdown(li, item[1]);
+            el.appendChild(li);
+            i++;
+          }
+          target.appendChild(el);
+          continue;
+        }
+
+        const paragraphLines = [line];
+        i++;
+        while (i < lines.length && lines[i].trim() && !isMarkdownBlockStart(lines[i])) paragraphLines.push(lines[i++]);
+        const p = document.createElement('p');
+        p.className = 'md-block';
+        appendInlineMarkdown(p, paragraphLines.join('\n'));
+        target.appendChild(p);
+      }
+    }
+
     function addMsg(cls, text) {
       const div = document.createElement('div');
       div.className = 'msg ' + cls;
-      div.textContent = text;
+      if (cls === 'ai') renderMarkdown(text, div);
+      else div.textContent = text;
       log.appendChild(div);
       log.scrollTop = log.scrollHeight;
       return div;
