@@ -32,4 +32,5 @@ install-test/
 
 # 发布物（走 GitHub Releases，不入库）
 AIbletonBar/**/*.zip
+AIbleton/*.ablx
 .claude/
