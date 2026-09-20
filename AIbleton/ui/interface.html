@@ -896,6 +896,7 @@
         receiptChangesCount: '{n} 项修改', receiptUndo: '不满意可在 Live 使用 Undo（{key}）',
         listenPrefix: '试听：', listenScene: '触发 Scene', listenBar: '从第 {a} 小节播放',
         listenRange: '从第 {a}–{b} 小节播放', listenOr: '或', listenSolo: '建议 Solo', listenAB: '建议 A/B 对比',
+        listenClauseSep: '；', listenSoloTracks: '建议 Solo {tracks}', listenWithAB: '，并做 A/B 对比', listenTrackOr: ' 或 ',
         cfgLoaded: '已加载本机 {p} 配置', cfgKeySet: '{p} · 使用自定义 API Key',
         cfgMissing: '未找到 {p} 认证信息，请在设置中填写 API Key',
         apiKey: 'API Key', baseUrl: 'API 地址', model: '模型',
@@ -947,6 +948,7 @@
         receiptChangesCount: '{n} changes', receiptUndo: 'Not happy? Use Live Undo ({key})',
         listenPrefix: 'Listen: ', listenScene: 'trigger the scene', listenBar: 'play from bar {a}',
         listenRange: 'play bars {a}–{b}', listenOr: 'or', listenSolo: 'try soloing', listenAB: 'try an A/B',
+        listenClauseSep: '; ', listenSoloTracks: 'try soloing {tracks}', listenWithAB: ', then try an A/B', listenTrackOr: ' or ',
         cfgLoaded: 'Loaded local {p} config', cfgKeySet: '{p} · custom API Key',
         cfgMissing: 'No {p} credentials found — add an API Key in Settings',
         apiKey: 'API Key', baseUrl: 'Base URL', model: 'Model',
@@ -2132,41 +2134,42 @@
       log.appendChild(det);
     }
 
-    // The server persists deterministic listening hints on the receipt. Group
-    // them by track so Scene/range/Solo suggestions become one useful sentence.
+    // The server persists deterministic listening hints on the receipt. Fold
+    // the entire task into one compact sentence, not one sentence per track.
     function compactListenSummary(hints) {
-      const groups = new Map();
+      const task = { scene: false, start: undefined, end: undefined, tracks: [], soloTracks: [], ab: false };
       for (const h of hints || []) {
         if (!h || !Array.isArray(h.tracks) || !h.tracks.length || !h.tracks.every(t => typeof t === 'string')) continue;
         for (const track of [...new Set(h.tracks)]) {
-          const group = groups.get(track) ?? { scene: false, start: undefined, end: undefined, solo: false, ab: false };
+          if (!task.tracks.includes(track)) task.tracks.push(track);
           if (typeof h.start_bar === 'number') {
-            group.start = group.start === undefined ? h.start_bar : Math.min(group.start, h.start_bar);
+            task.start = task.start === undefined ? h.start_bar : Math.min(task.start, h.start_bar);
             const end = typeof h.end_bar === 'number' ? h.end_bar : h.start_bar;
-            group.end = group.end === undefined ? end : Math.max(group.end, end);
+            task.end = task.end === undefined ? end : Math.max(task.end, end);
           } else {
-            group.scene = true;
+            task.scene = true;
           }
-          if (h.suggest_solo === track) group.solo = true;
-          if (h.suggest_ab) group.ab = true;
-          groups.set(track, group);
+          if (h.suggest_solo === track && !task.soloTracks.includes(track)) task.soloTracks.push(track);
+          if (h.suggest_ab) task.ab = true;
         }
       }
-      return [...groups].map(([track, group]) => {
-        const ways = [];
-        if (group.scene) ways.push(t('listenScene'));
-        if (group.start !== undefined) {
-          ways.push(group.end && group.end !== group.start
-            ? t('listenRange').replace('{a}', group.start).replace('{b}', group.end)
-            : t('listenBar').replace('{a}', group.start));
-        }
-        const advice = [];
-        if (group.solo) advice.push(t('listenSolo'));
-        if (group.ab) advice.push(t('listenAB'));
-        const joiner = (currentLang === 'zh' || currentLang === 'ja') ? t('listenOr') : ' ' + t('listenOr') + ' ';
-        return t('listenPrefix') + (ways.join(joiner) || t('hintTracks').replace('{t}', track)) +
-          (ways.length ? ' ' + track : '') + (advice.length ? '（' + advice.join('，') + '）' : '');
-      });
+      if (!task.tracks.length) return [];
+      const ways = [];
+      if (task.scene) ways.push(t('listenScene'));
+      if (task.start !== undefined) {
+        ways.push(task.end && task.end !== task.start
+          ? t('listenRange').replace('{a}', task.start).replace('{b}', task.end)
+          : t('listenBar').replace('{a}', task.start));
+      }
+      const joiner = (currentLang === 'zh' || currentLang === 'ja') ? t('listenOr') : ' ' + t('listenOr') + ' ';
+      const parts = [t('listenPrefix') + (ways.join(joiner) || t('hintTracks').replace('{t}', task.tracks.join(', ')))];
+      if (task.soloTracks.length) {
+        parts.push(t('listenSoloTracks').replace('{tracks}', task.soloTracks.join(t('listenTrackOr'))));
+        if (task.ab) parts[parts.length - 1] += t('listenWithAB');
+      } else if (task.ab) {
+        parts.push(t('listenAB'));
+      }
+      return [parts.join(t('listenClauseSep'))];
     }
 
     function receiptStatus(status) {
