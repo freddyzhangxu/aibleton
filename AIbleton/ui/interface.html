@@ -420,7 +420,8 @@
     /* A structured, server-measured receipt for a turn that changed the Set.
        It deliberately stays separate from model Markdown and raw tool traces. */
     .receipt {
-      align-self: stretch;
+      align-self: flex-start;
+      max-width: 92%;
       /* Like .steps and .hints, a receipt must keep its intrinsic height;
          #log is the scroll container, not a place to vertically squash it. */
       flex: 0 0 auto;
@@ -428,17 +429,32 @@
       border: 1px solid var(--c-border);
       border-left: 3px solid var(--c-text-dim);
       border-radius: 6px;
-      padding: 8px 10px;
       font-size: 11px;
       line-height: 1.5;
       overflow: hidden;
     }
     .receipt.passed { border-left-color: #8fcf66; }
     .receipt.unmet { border-left-color: #d6b45b; }
-    .receipt-head { display: flex; align-items: baseline; gap: 6px; color: var(--c-text); font-weight: 700; }
+    .receipt summary {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 8px;
+      cursor: pointer;
+      list-style: none;
+      white-space: nowrap;
+      overflow: hidden;
+      user-select: none;
+      color: var(--c-text);
+      font-weight: 700;
+    }
+    .receipt summary::-webkit-details-marker { display: none; }
+    .receipt summary:hover { color: var(--c-text); }
+    .receipt .chev { flex: none; font-size: 8px; transition: transform 0.12s; }
+    .receipt[open] .chev { transform: rotate(90deg); }
+    .receipt .sum { overflow: hidden; text-overflow: ellipsis; }
     .receipt-status { color: var(--c-text-dim); font-weight: 500; }
     .receipt.passed .receipt-status { color: #8fcf66; }
     .receipt.unmet .receipt-status { color: #d6b45b; }
+    .receipt-body { border-top: 1px solid var(--c-border); padding: 5px 10px 8px; }
     .receipt-row { display: flex; gap: 7px; margin-top: 5px; min-width: 0; color: var(--c-text-dim); }
     .receipt-label { flex: none; color: var(--c-text); font-weight: 600; }
     .receipt-value { min-width: 0; overflow-wrap: anywhere; }
@@ -2187,17 +2203,22 @@
       const status = ['completed', 'passed', 'unmet'].includes(receipt.status) ? receipt.status : 'completed';
       const tools = Array.isArray(receipt.tools) ? receipt.tools.filter(tool => typeof tool === 'string') : [];
       if (!tools.length) return;
-      const card = document.createElement('section');
+      const card = document.createElement('details');
       card.className = 'receipt ' + status;
-      const head = document.createElement('div');
-      head.className = 'receipt-head';
+      const head = document.createElement('summary');
+      const chev = document.createElement('span');
+      chev.className = 'chev';
+      chev.textContent = '▸';
       const title = document.createElement('span');
+      title.className = 'sum';
       title.textContent = t('receiptTitle');
       const state = document.createElement('span');
       state.className = 'receipt-status';
       state.textContent = '· ' + receiptStatus(status);
-      head.append(title, state);
+      head.append(chev, title, state);
       card.appendChild(head);
+      const body = document.createElement('div');
+      body.className = 'receipt-body';
       const row = (label, value) => {
         if (!value) return;
         const el = document.createElement('div');
@@ -2209,7 +2230,7 @@
         text.className = 'receipt-value';
         text.textContent = value;
         el.append(key, text);
-        card.appendChild(el);
+        body.appendChild(el);
       };
       row(t('receiptObjective'), typeof receipt.objective === 'string' ? receipt.objective : '');
       const shownTools = tools.slice(0, 4).map(receiptToolName);
@@ -2222,7 +2243,8 @@
       undo.className = 'receipt-undo';
       const key = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent) ? '⌘Z' : 'Ctrl+Z';
       undo.textContent = t('receiptUndo').replace('{key}', key);
-      card.appendChild(undo);
+      body.appendChild(undo);
+      card.appendChild(body);
       log.appendChild(card);
     }
 
