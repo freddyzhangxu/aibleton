@@ -328,10 +328,11 @@
       white-space: pre;
     }
     .msg.ai .md-code code { background: transparent; padding: 0; }
-    /* Overlay scrollbars sit on top of a scroller's padding box. Reserve a
-       bottom lane so a wide table's horizontal bar never covers the next
-       Markdown block. */
-    .msg.ai .md-table-wrap { max-width: 100%; overflow-x: auto; padding-bottom: 14px; scrollbar-gutter: stable; }
+    /* WebKit's overlay scrollbar is not part of normal layout. Keep it in an
+       inner scrolling box, then give the outer block a separate safe gap so
+       it can never draw over the Markdown block that follows. */
+    .msg.ai .md-table-wrap { max-width: 100%; margin-bottom: 14px; }
+    .msg.ai .md-table-scroll { overflow-x: auto; padding-bottom: 14px; scrollbar-gutter: stable; }
     .msg.ai .md-table { border-collapse: collapse; min-width: 100%; width: max-content; }
     .msg.ai .md-table th, .msg.ai .md-table td {
       border: 1px solid var(--c-border);
@@ -1983,6 +1984,8 @@
         if (tableInfo) {
           const wrap = document.createElement('div');
           wrap.className = 'md-block md-table-wrap';
+          const scroller = document.createElement('div');
+          scroller.className = 'md-table-scroll';
           const table = document.createElement('table');
           table.className = 'md-table';
           const head = document.createElement('thead');
@@ -2007,7 +2010,8 @@
           }
           i = tableEnd; // consume the header, divider, and compatible rows
           table.append(head, body);
-          wrap.appendChild(table);
+          scroller.appendChild(table);
+          wrap.appendChild(scroller);
           target.appendChild(wrap);
           continue;
         }
