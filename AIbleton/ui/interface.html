@@ -401,22 +401,6 @@
       max-height: 160px;
       overflow-y: auto;
     }
-    /* Listen-hint card under a steps group: what to play to judge the change. */
-    .hints {
-      align-self: flex-start;
-      flex: 0 0 auto;
-      max-width: 92%;
-      background: var(--c-input-bg);
-      border: 1px solid var(--c-border);
-      border-left: 2px solid var(--c-accent);
-      border-radius: 6px;
-      padding: 4px 10px;
-      font-size: 11px;
-      color: var(--c-text-dim);
-      line-height: 1.7;
-    }
-    .hints b { color: var(--c-text); font-weight: 600; }
-
     /* A structured, server-measured receipt for a turn that changed the Set.
        It deliberately stays separate from model Markdown and raw tool traces. */
     .receipt {
@@ -2135,21 +2119,10 @@
       for (const a of actions) list.appendChild(addAction(a.tool, a.input, a.result));
       det.append(sum, list);
       log.appendChild(det);
-      addListenHints(actions);
     }
 
-    // Listen-hint card under a steps group: the server attaches a
-    // deterministic listen_hint to mutating tool results (what to play to
-    // judge the change). One line per distinct hint, deduped.
-    function addListenHints(actions) {
-      const hints = [];
-      for (const a of actions) {
-        const h = a.result && typeof a.result === 'object' ? a.result.listen_hint : null;
-        if (h) hints.push(h);
-      }
-      addHintLines(hints);
-    }
-
+    // The server persists deterministic listening hints on the receipt.
+    // They are rendered only when that compact task summary is expanded.
     function hintLines(hints) {
       const lines = [];
       for (const h of hints || []) {
@@ -2170,20 +2143,6 @@
         if (!lines.includes(line)) lines.push(line);
       }
       return lines;
-    }
-
-    function addHintLines(hints) {
-      const lines = hintLines(hints);
-      if (!lines.length) return;
-      const div = document.createElement('div');
-      div.className = 'hints';
-      for (const line of lines) {
-        const row = document.createElement('div');
-        row.textContent = line;
-        div.appendChild(row);
-      }
-      log.appendChild(div);
-      log.scrollTop = log.scrollHeight;
     }
 
     function receiptStatus(status) {
@@ -2232,11 +2191,12 @@
         el.append(key, text);
         body.appendChild(el);
       };
-      row(t('receiptObjective'), typeof receipt.objective === 'string' ? receipt.objective : '');
       const shownTools = tools.slice(0, 4).map(receiptToolName);
       if (tools.length > shownTools.length) shownTools.push('+' + (tools.length - shownTools.length));
       row(t('receiptChanges'), t('receiptChangesCount').replace('{n}', tools.length) + ' · ' + shownTools.join(', '));
-      row(t('receiptVerification'), typeof receipt.verification === 'string' ? receipt.verification : '');
+      if (status === 'unmet') {
+        row(t('receiptVerification'), typeof receipt.verification === 'string' ? receipt.verification : '');
+      }
       const listened = hintLines(Array.isArray(receipt.listenHints) ? receipt.listenHints : []);
       if (listened.length) row(t('receiptListen'), listened.join(' · '));
       const undo = document.createElement('div');
@@ -2309,7 +2269,7 @@
     }
 
     function renderMessages(messages) {
-      log.querySelectorAll('.msg, .steps, .hints, .receipt').forEach(el => el.remove());
+      log.querySelectorAll('.msg, .steps, .receipt').forEach(el => el.remove());
       if (!messages || !messages.length) {
         log.appendChild(welcome);
         return;
