@@ -328,7 +328,10 @@
       white-space: pre;
     }
     .msg.ai .md-code code { background: transparent; padding: 0; }
-    .msg.ai .md-table-wrap { max-width: 100%; overflow-x: auto; }
+    /* Overlay scrollbars sit on top of a scroller's padding box. Reserve a
+       bottom lane so a wide table's horizontal bar never covers the next
+       Markdown block. */
+    .msg.ai .md-table-wrap { max-width: 100%; overflow-x: auto; padding-bottom: 14px; scrollbar-gutter: stable; }
     .msg.ai .md-table { border-collapse: collapse; min-width: 100%; width: max-content; }
     .msg.ai .md-table th, .msg.ai .md-table td {
       border: 1px solid var(--c-border);
