@@ -307,13 +307,6 @@ Ableton Extensions SDK 仍在持续演进，相关 API 和能力可能发生变�
 > AIbleton 与 Ableton AG 无隶属、合作或官方背书关系。  
 > “Ableton” 和 “Live” 是 Ableton AG 的商标。
 
-## 贡献者
-
-感谢所有为 AIbleton 做出贡献的人。
-
-<a href="https://github.com/freddyzhangxu"><img src="https://github.com/freddyzhangxu.png" width="64" height="64" alt="freddyzhangxu"></a>
-<a href="https://github.com/openai"><img src="https://github.com/openai.png" width="64" height="64" alt="openai"></a>
-
 ## License
 
 [MIT](../LICENSE)

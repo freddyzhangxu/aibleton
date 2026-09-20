@@ -295,13 +295,6 @@ The Ableton Extensions SDK is evolving, and APIs and capabilities may change.
 > AIbleton is not affiliated with or endorsed by Ableton AG.
 > "Ableton" and "Live" are trademarks of Ableton AG.
 
-## Contributors
-
-Thanks to everyone who has contributed to AIbleton.
-
-<a href="https://github.com/freddyzhangxu"><img src="https://github.com/freddyzhangxu.png" width="64" height="64" alt="freddyzhangxu"></a>
-<a href="https://github.com/openai"><img src="https://github.com/openai.png" width="64" height="64" alt="openai"></a>
-
 ## License
 
 [MIT](LICENSE)
