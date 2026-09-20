@@ -9,6 +9,7 @@ import {
 } from "@ableton-extensions/sdk";
 import { tileClipNotes } from "../musicstate/builder.js";
 import type { Ctx } from "../state.js";
+import { commonText } from "../i18n/common.js";
 import { resolveTrack, snapshotClip, toNum, type TrackRef } from "./helpers.js";
 
 // ---------- arrange_song ----------
@@ -38,7 +39,7 @@ interface ResolvedPlacement {
  * Source clips are read into plain data up front — clear_range_bars may
  * delete them, and SDK objects throw once their Live object is gone.
  */
-export async function arrangeSong(context: Ctx, input: Record<string, unknown>): Promise<unknown> {
+export async function arrangeSong(context: Ctx, input: Record<string, unknown>, language?: string): Promise<unknown> {
   const song = context.application.song;
   const scenes = song.scenes ?? [];
   const num = toNum(scenes[0]?.signatureNumerator) || 4;
@@ -270,7 +271,7 @@ export async function arrangeSong(context: Ctx, input: Record<string, unknown>):
       bar_beats: barBeats,
       ...(clearInfo ? { would_clear: clearInfo } : {}),
       placements: planOut,
-      note: "校验通过，未改动 Set —— 去掉 dry_run 再调用即执行",
+      note: commonText(language ?? "zh", "dryRunValidated"),
     };
   }
 

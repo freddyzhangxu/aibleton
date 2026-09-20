@@ -25,6 +25,7 @@
  */
 
 import { findSection, type GoalView } from "../goal/view.js";
+import { goalDirection, goalText } from "../goal/i18n.js";
 import type { EffectDirection, ExpectedEffect, MusicPlan, PlanStep } from "./types.js";
 
 const fmt = (v: number): string => String(Math.round(v * 100) / 100);
@@ -64,22 +65,21 @@ export interface PlanReport {
 // Effect judges — one per metric, same shape as goal/evaluate.ts's judges.
 // ---------------------------------------------------------------------------
 
-const DIR_LABEL: Record<EffectDirection, string> = { increase: "上升", decrease: "下降" };
-
 function moved(direction: EffectDirection, before: number, after: number): boolean {
   return direction === "increase" ? after > before + EPS : after < before - EPS;
 }
 
-function sectionMissing(name: string, view: GoalView): string {
-  return `可用段落: ${view.sections.map((s) => s.name).join(", ") || "(无)"}`;
+function sectionMissing(view: GoalView, language?: string): string {
+  return goalText(language, "availableSections", view.sections.map((s) => s.name).join(", ") || goalText(language, "none"));
 }
 
 function judgeSectionMetric(
   fx: ExpectedEffect & { metric: "section_energy" | "section_tracks" },
   before: GoalView,
   after: GoalView,
+  language?: string,
 ): EffectCheck {
-  const label = fx.metric === "section_energy" ? "能量密度" : "参与轨数";
+  const label = goalText(language, fx.metric === "section_energy" ? "energyDensity" : "activeTracks");
   const unit = fx.metric === "section_energy" ? "/bar" : "";
   const id = `section[${fx.section}].${fx.metric === "section_energy" ? "energy" : "tracks"}`;
   const take = (s: { notes: number; density: number; tracks: number }) =>
@@ -87,23 +87,23 @@ function judgeSectionMetric(
 
   const sa = findSection(after, fx.section!);
   if (!sa) {
-    return { id, observed: false, expected: `段落「${fx.section}」存在`, actual: sectionMissing(fx.section!, after) };
+    return { id, observed: false, expected: goalText(language, "sectionExists", fx.section), actual: sectionMissing(after, language) };
   }
   const sb = findSection(before, fx.section!);
   if (!sb) {
-    return { id, observed: false, expected: `基线中存在段落「${fx.section}」`, actual: sectionMissing(fx.section!, before) };
+    return { id, observed: false, expected: goalText(language, "baselineSectionExists", fx.section), actual: sectionMissing(before, language) };
   }
   const vb = take(sb);
   const va = take(sa);
   return {
     id,
     observed: moved(fx.direction!, vb, va),
-    expected: `「${sa.name}」${label}${DIR_LABEL[fx.direction!]}（基线 ${fmt(vb)}${unit}）`,
+    expected: `${sa.name} ${label} ${goalDirection(language, fx.direction!)} (${goalText(language, "baseline", `${fmt(vb)}${unit}`)})`,
     actual: `${fmt(vb)} → ${fmt(va)}${unit}`,
   };
 }
 
-function judgeTrackNotes(fx: ExpectedEffect, before: GoalView, after: GoalView): EffectCheck {
+function judgeTrackNotes(fx: ExpectedEffect, before: GoalView, after: GoalView, language?: string): EffectCheck {
   const id = `track[${fx.track}].notes`;
   const norm = fx.track!.trim().toLowerCase();
   const ta = after.tracks.find((t) => t.name.toLowerCase() === norm);
@@ -111,8 +111,8 @@ function judgeTrackNotes(fx: ExpectedEffect, before: GoalView, after: GoalView):
     return {
       id,
       observed: false,
-      expected: `轨道「${fx.track}」存在`,
-      actual: `现有轨道: ${after.tracks.map((t) => t.name).join(", ") || "(空)"}`,
+      expected: goalText(language, "trackExists", fx.track),
+      actual: goalText(language, "availableTracks", after.tracks.map((t) => t.name).join(", ") || goalText(language, "empty")),
     };
   }
   const tb = before.tracks.find((t) => t.name.toLowerCase() === norm);
@@ -120,7 +120,7 @@ function judgeTrackNotes(fx: ExpectedEffect, before: GoalView, after: GoalView):
   return {
     id,
     observed: moved(fx.direction!, vb, ta.notes),
-    expected: `「${ta.name}」音符数${DIR_LABEL[fx.direction!]}（基线 ${vb}）`,
+    expected: `${ta.name} ${goalText(language, "trackNotes")} ${goalDirection(language, fx.direction!)} (${goalText(language, "baseline", vb)})`,
     actual: `${vb} → ${ta.notes}`,
   };
 }
@@ -132,18 +132,19 @@ function judgeTrackAudio(
   fx: ExpectedEffect & { metric: "track_crest" | "track_band_energy" },
   before: GoalView,
   after: GoalView,
+  language?: string,
 ): EffectCheck {
   const isCrest = fx.metric === "track_crest";
   const id = isCrest ? `track[${fx.track}].crest` : `track[${fx.track}].band[${fx.band}]`;
-  const label = isCrest ? "crest" : `${fx.band} 频段能量占比`;
+  const label = isCrest ? "crest" : goalText(language, "bandEnergyShare", fx.band);
   const norm = fx.track!.trim().toLowerCase();
   const ta = after.tracks.find((t) => t.name.toLowerCase() === norm);
   if (!ta) {
     return {
       id,
       observed: false,
-      expected: `轨道「${fx.track}」存在`,
-      actual: `现有轨道: ${after.tracks.map((t) => t.name).join(", ") || "(空)"}`,
+      expected: goalText(language, "trackExists", fx.track),
+      actual: goalText(language, "availableTracks", after.tracks.map((t) => t.name).join(", ") || goalText(language, "empty")),
     };
   }
   const tb = before.tracks.find((t) => t.name.toLowerCase() === norm);
@@ -155,51 +156,51 @@ function judgeTrackAudio(
     return {
       id,
       observed: false,
-      expected: `「${ta.name}」${label}${DIR_LABEL[fx.direction!]}（基线对比）`,
-      actual: "无音频特征（目标声明/校验时未启用音频分析）",
+      expected: `${ta.name} ${label} ${goalDirection(language, fx.direction!)} (${goalText(language, "baselineComparison")})`,
+      actual: goalText(language, "noAudio"),
     };
   }
   return {
     id,
     observed: moved(fx.direction!, vb, va),
-    expected: `「${ta.name}」源文件 ${label}${DIR_LABEL[fx.direction!]}（基线 ${fmt(vb)}）`,
+    expected: `${ta.name} ${goalText(language, "sourceMetric", label)} ${goalDirection(language, fx.direction!)} (${goalText(language, "baseline", fmt(vb))})`,
     actual: `${fmt(vb)} → ${fmt(va)}`,
   };
 }
 
-function judgeRoleAudible(fx: ExpectedEffect, after: GoalView): EffectCheck {
+function judgeRoleAudible(fx: ExpectedEffect, after: GoalView, language?: string): EffectCheck {
   const want = ROLE_GROUPS[fx.role!] ?? [fx.role!];
   const id = fx.section ? `role[${fx.role}]@${fx.section}` : `role[${fx.role}]`;
   const sec = fx.section ? findSection(after, fx.section) : undefined;
   if (fx.section && !sec) {
-    return { id, observed: false, expected: `段落「${fx.section}」存在`, actual: sectionMissing(fx.section, after) };
+    return { id, observed: false, expected: goalText(language, "sectionExists", fx.section), actual: sectionMissing(after, language) };
   }
   const scope: ReadonlySet<string> = sec ? sec.roles : after.songRoles;
-  const scopeLabel = fx.section ? `「${fx.section}」` : "全曲";
+  const scopeLabel = fx.section ?? goalText(language, "wholeSong");
   const hit = want.some((r) => scope.has(r));
   return {
     id,
     observed: hit,
-    expected: `${scopeLabel}可听见 ${fx.role}${ROLE_GROUPS[fx.role!] ? `（${want.join("|")}）` : ""}`,
-    actual: `现有角色: ${[...scope].join(", ") || "(无)"}`,
+    expected: goalText(language, "roleAudible", scopeLabel, fx.role, ROLE_GROUPS[fx.role!] ? ` (${want.join("|")})` : ""),
+    actual: goalText(language, "currentRoles", [...scope].join(", ") || goalText(language, "none")),
   };
 }
 
 /** One judged effect. Every metric has exactly one judge here. */
-export function checkEffect(fx: ExpectedEffect, before: GoalView, after: GoalView): EffectCheck {
+export function checkEffect(fx: ExpectedEffect, before: GoalView, after: GoalView, language?: string): EffectCheck {
   switch (fx.metric) {
     case "section_energy":
     case "section_tracks":
-      return judgeSectionMetric(fx as ExpectedEffect & { metric: "section_energy" | "section_tracks" }, before, after);
+      return judgeSectionMetric(fx as ExpectedEffect & { metric: "section_energy" | "section_tracks" }, before, after, language);
     case "track_notes":
-      return judgeTrackNotes(fx, before, after);
+      return judgeTrackNotes(fx, before, after, language);
     case "track_count": {
       const vb = before.trackCount;
       const va = after.trackCount;
       return {
         id: "trackCount",
         observed: moved(fx.direction!, vb, va),
-        expected: `轨道总数${DIR_LABEL[fx.direction!]}（基线 ${vb}）`,
+        expected: goalText(language, "trackCountChange", goalDirection(language, fx.direction!), vb),
         actual: `${vb} → ${va}`,
       };
     }
@@ -209,18 +210,19 @@ export function checkEffect(fx: ExpectedEffect, before: GoalView, after: GoalVie
       return {
         id: "tempo",
         observed: moved(fx.direction!, vb, va),
-        expected: `速度${DIR_LABEL[fx.direction!]}（基线 ${fmt(vb)} BPM）`,
+        expected: goalText(language, "tempoChange", goalDirection(language, fx.direction!), fmt(vb)),
         actual: `${fmt(vb)} → ${fmt(va)} BPM`,
       };
     }
     case "role_audible":
-      return judgeRoleAudible(fx, after);
+      return judgeRoleAudible(fx, after, language);
     case "track_crest":
     case "track_band_energy":
       return judgeTrackAudio(
         fx as ExpectedEffect & { metric: "track_crest" | "track_band_energy" },
         before,
         after,
+        language,
       );
   }
 }
@@ -253,6 +255,7 @@ export function buildPlanReport(
   executedTools: readonly string[],
   before: GoalView,
   after: GoalView,
+  language?: string,
 ): PlanReport {
   const done = executedStepIds(plan.steps, executedTools);
   const steps: StepReport[] = plan.steps.map((s) => ({
@@ -260,7 +263,7 @@ export function buildPlanReport(
     description: s.description,
     ...(s.tool ? { tool: s.tool } : {}),
     executed: done.has(s.id),
-    effects: s.expectedEffects.map((fx) => checkEffect(fx, before, after)),
+    effects: s.expectedEffects.map((fx) => checkEffect(fx, before, after, language)),
   }));
   const unexecuted = steps.filter((s) => !s.executed);
   const unobserved = steps.flatMap((s) =>

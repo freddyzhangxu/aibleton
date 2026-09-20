@@ -50,7 +50,8 @@ import { toBpm, toStrArr } from "./tools/helpers.js";
 import { NO_AUTH_HINT } from "./prompts.js";
 import { loadSkills, matchSkills, skillProblems } from "./skills.js";
 import { testConnection, testAudioConnection } from "./chat/testconn.js";
-import { errMessage } from "./errors.js";
+import { errMessage, friendlyBoundaryError } from "./errors.js";
+import { commonText, resolveTurnLanguage } from "./i18n/index.js";
 
 /** A selection is the default editing boundary. These are intentionally
  * narrow, explicit whole-Set requests — a vague "make it bigger" must not
@@ -281,17 +282,6 @@ function saveManualConfigs(): void {
 
 type Ctx = ExtensionContext<"1.0.0">;
 
-/** Live's own UI language ("EN" → "en") beats the webview's localStorage
- * pick: it's always present and always matches what the user sees, while
- * webview localStorage is not guaranteed to persist. The client-sent value
- * stays as fallback for non-Live clients (plain browser). */
-function liveLanguage(context: Ctx): string | undefined {
-  const raw = context.environment.language;
-  if (raw == null) return undefined;
-  const code = String(raw).toLowerCase();
-  return /^[a-z]{2}$/.test(code) ? code : undefined;
-}
-
 // Wire the late-bound hooks tools/* call back into server-owned state.
 // Function declarations hoist, so this top-level assignment sees them all.
 toolHooks.debugLog = debugLog;
@@ -382,7 +372,7 @@ async function chat(context: Ctx, req: ChatRequest) {
     throw new Error(hint.replace("{p}", PROVIDER_NAMES[cfg.provider]));
   }
   if (cfg.provider === "codex") {
-    await ensureCodexAuth(cfg);
+    await ensureCodexAuth(cfg, req.language);
     return chatOpenAI(context, cfg, req);
   }
   if (cfg.provider === "gemini") return chatGemini(context, cfg, req);
@@ -407,8 +397,10 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       req.on("end", () => {
         try {
           cb(body ? (JSON.parse(body) as Record<string, unknown>) : {});
-        } catch (err) {
-          send(400, JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        } catch {
+          const requestedLanguage = req.headers["x-aibleton-language"];
+          const language = Array.isArray(requestedLanguage) ? requestedLanguage[0] : requestedLanguage;
+          send(400, JSON.stringify({ error: commonText(language, "requestFailed") }));
         }
       });
     };
@@ -740,7 +732,9 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       readBody((parsed) => {
         const target = switchSession(String(parsed.id));
         if (!target) {
-          send(404, JSON.stringify({ error: "会话不存在" }));
+          send(404, JSON.stringify({
+            error: commonText(typeof parsed.language === "string" ? parsed.language : undefined, "sessionNotFound"),
+          }));
           return;
         }
         saveStore(context);
@@ -782,7 +776,9 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         debugLog(context, "STOP requested");
         send(200, JSON.stringify({ ok: true }));
       } else {
-        send(409, JSON.stringify({ ok: false, error: "当前没有运行中的任务" }));
+        const requestedLanguage = req.headers["x-aibleton-language"];
+        const language = Array.isArray(requestedLanguage) ? requestedLanguage[0] : requestedLanguage;
+        send(409, JSON.stringify({ ok: false, error: commonText(language, "noRunningTask") }));
       }
       return;
     }
@@ -805,19 +801,19 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     if (req.method === "POST" && req.url === "/api/chat") {
       readBody((parsed) => {
         const text = String(parsed.text ?? "").trim();
+        const languageContext = resolveTurnLanguage({
+          text,
+          panelLanguage: typeof parsed.language === "string" ? parsed.language : undefined,
+        });
         if (!text) {
-          send(400, JSON.stringify({ error: "消息不能为空" }));
+          send(400, JSON.stringify({ error: commonText(languageContext.replyLanguage, "emptyMessage") }));
           return;
         }
         if (busy) {
-          send(409, JSON.stringify({ error: "上一个任务还在进行中，请稍候" }));
+          send(409, JSON.stringify({ error: commonText(languageContext.replyLanguage, "busy") }));
           return;
         }
-        // Live's UI language is authoritative for reply language, error
-        // messages and web-search locale; overwrite before `parsed` fans out
-        // to toolState.activeLanguage and the chat providers' req.language.
-        const live = liveLanguage(context);
-        if (live) parsed.language = live;
+        parsed.language = languageContext.replyLanguage;
         const session = currentSession();
         // Text attachments fold into the stored message (so history keeps their
         // content); images leave a marker — the base64 itself only rides this
@@ -825,12 +821,12 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         let content = text;
         for (const a of (parsed.attachments as Attachment[] | undefined)?.slice(0, 10) ?? []) {
           if (typeof a?.text === "string") {
-            content += `\n\n【附件 ${a.name}】\n${a.text.slice(0, 20000)}`;
+            content += `\n\n<attachment name=${JSON.stringify(a.name)}>\n${a.text.slice(0, 20000)}\n</attachment>`;
           } else if ((a?.kind === "midi" || a?.kind === "als") && typeof a.data === "string") {
             // Binary music files reach the model as a parsed text summary.
-            content += `\n\n【附件 ${a.name}】\n${describeBinaryAttachment(a.name, a.kind, a.data)}`;
+            content += `\n\n<attachment name=${JSON.stringify(a.name)}>\n${describeBinaryAttachment(a.name, a.kind, a.data)}\n</attachment>`;
           } else if (typeof a?.data === "string") {
-            content += `\n[图片: ${a.name}]`;
+            content += `\n<image name=${JSON.stringify(a.name)} />`;
           }
         }
         session.messages.push({ role: "user", content });
@@ -854,7 +850,8 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         toolState.abortCtl = new AbortController();
         toolState.activeAudioConfig = resolveAudioConfig(
           mergeAudioRequest(parsed.audio as AudioRequestConfig | undefined));
-        toolState.activeLanguage = typeof parsed.language === "string" ? parsed.language : undefined;
+        toolState.activeLanguage = languageContext.replyLanguage;
+        toolState.activeLanguageContext = languageContext;
         toolState.activeDeleteAuthorization = deleteAuthorizationFor(text);
         toolState.activeGlobalIntent = hasGlobalIntent(text);
         toolState.activeMasterIntent = hasMasterIntent(text);
@@ -863,7 +860,11 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         // side, so closing the dialog (which kills this connection) does NOT
         // stop it. Clients poll /api/status and then read /api/history.
         send(202, JSON.stringify({ ok: true }));
-        debugLog(context, `TASK start: "${text.slice(0, 60)}"`);
+        debugLog(
+          context,
+          `TASK start: "${text.slice(0, 60)}" · reply=${languageContext.replyLanguage}` +
+            ` source=${languageContext.source} confidence=${languageContext.confidence.toFixed(2)}`,
+        );
         const matched = matchSkills(text);
         if (matched.length) {
           debugLog(context, `SKILLS matched: ${matched.map((s) => s.name).join(", ")}`);
@@ -873,14 +874,16 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             await chat(context, parsed);
             debugLog(context, "TASK done");
           } catch (err) {
-            lastError = err instanceof Error ? err.message : String(err);
-            debugLog(context, `TASK error: ${lastError}`);
+            const rawError = err instanceof Error ? err.stack ?? err.message : String(err);
+            lastError = friendlyBoundaryError(err, languageContext.replyLanguage);
+            debugLog(context, `TASK error: ${rawError}`);
             session.messages.pop(); // roll back the user message to keep the conversation consistent
             saveStore(context);
           } finally {
             busy = false;
             toolState.abortCtl = null;
             toolState.activeLanguage = undefined;
+            toolState.activeLanguageContext = null;
             toolState.activeDeleteAuthorization = undefined;
             toolState.phase = null;
             // Never leave a confirmation dangling past its task's lifetime.
@@ -908,7 +911,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
           selfUrl = `http://localhost:${addr.port}/`;
           resolve({ url: selfUrl, port: addr.port });
         } else {
-          reject(new Error("无法启动本地服务"));
+          reject(new Error(commonText("en", "serverStartFailed")));
         }
       });
     };

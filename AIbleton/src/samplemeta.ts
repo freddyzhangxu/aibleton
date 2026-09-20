@@ -7,6 +7,8 @@
  * (exact BPM/key first). Pure string processing — sandbox-safe.
  */
 
+import { commonText } from "./i18n/common.js";
+
 export interface SampleEntry {
   /** Original full path (returned to the model). */
   p: string;
@@ -234,7 +236,7 @@ export interface SampleSearchResult {
   suggestion?: string;
 }
 
-export function searchSampleIndex(index: SampleEntry[], q: string, limit = 30): SampleSearchResult {
+export function searchSampleIndex(index: SampleEntry[], q: string, limit = 30, language?: string): SampleSearchResult {
   const query = parseSampleQuery(q);
   const termVariants = query.terms.map((t) => [t, ...(SYNONYMS[t] ?? [])]);
 
@@ -276,8 +278,7 @@ export function searchSampleIndex(index: SampleEntry[], q: string, limit = 30): 
     parsed: { terms: query.terms, ...(query.bpm !== undefined ? { bpm: query.bpm } : {}), ...(query.key ? { key: query.key.label } : {}) },
   };
   if (!scored.length) {
-    result.suggestion =
-      "没有匹配：减少关键词数量，或换个说法（同义词已内置，如 dark/warm/punchy）。BPM 和调式只影响排序、不会过滤掉结果。";
+    result.suggestion = commonText(language, "sampleNoMatch");
   }
   return result;
 }

@@ -886,7 +886,7 @@
         phase_rendering: '正在从 Live 渲染音频…', phase_analyzing_render: '正在分析渲染音频…',
         phase_generating: '生成音频…（通常需要几十秒）', phase_applying: '应用修改…',
         phase_planning: '规划方案…', phase_searching: '联网搜索…',
-        error: '出错：', noHistory: '暂无历史对话', delSession: '删除此对话', msgUnit: '条',
+        error: '出错：', requestFailed: '请求失败', noHistory: '暂无历史对话', delSession: '删除此对话', msgUnit: '条',
         stepsDone: '{n} 个操作',
         hintPlayBar: '▶ 从第 {a} 小节播放', hintPlayRange: '▶ 播放第 {a}–{b} 小节',
         hintPlaySession: '▶ 触发该场景试听',
@@ -938,7 +938,7 @@
         phase_rendering: 'Rendering audio from Live…', phase_analyzing_render: 'Analyzing rendered audio…',
         phase_generating: 'Generating audio… (usually takes tens of seconds)', phase_applying: 'Applying changes…',
         phase_planning: 'Planning…', phase_searching: 'Searching the web…',
-        error: 'Error: ', noHistory: 'No past conversations', delSession: 'Delete this conversation', msgUnit: '',
+        error: 'Error: ', requestFailed: 'Request failed', noHistory: 'No past conversations', delSession: 'Delete this conversation', msgUnit: '',
         stepsDone: '{n} actions',
         hintPlayBar: '▶ Play from bar {a}', hintPlayRange: '▶ Play bars {a}–{b}',
         hintPlaySession: '▶ Trigger the scene to hear it',
@@ -990,7 +990,7 @@
         phase_rendering: 'Audio wird aus Live gerendert…', phase_analyzing_render: 'Gerendertes Audio wird analysiert…',
         phase_generating: 'Audio wird generiert… (dauert meist einige zehn Sekunden)', phase_applying: 'Änderungen werden angewendet…',
         phase_planning: 'Planung…', phase_searching: 'Websuche…',
-        error: 'Fehler: ', noHistory: 'Keine früheren Unterhaltungen', delSession: 'Diese Unterhaltung löschen', msgUnit: '',
+        error: 'Fehler: ', requestFailed: 'Anfrage fehlgeschlagen', noHistory: 'Keine früheren Unterhaltungen', delSession: 'Diese Unterhaltung löschen', msgUnit: '',
         stepsDone: '{n} Aktionen',
         hintPlayBar: '▶ Ab Takt {a} abspielen', hintPlayRange: '▶ Takte {a}–{b} abspielen',
         hintPlaySession: '▶ Szene zum Anhören triggern',
@@ -1036,7 +1036,7 @@
         phase_rendering: 'Rendu audio depuis Live…', phase_analyzing_render: 'Analyse de l’audio rendu…',
         phase_generating: 'Génération audio… (comptez quelques dizaines de secondes)', phase_applying: 'Application des modifications…',
         phase_planning: 'Planification…', phase_searching: 'Recherche web…',
-        error: 'Erreur : ', noHistory: 'Aucune conversation passée', delSession: 'Supprimer cette conversation', msgUnit: '',
+        error: 'Erreur : ', requestFailed: 'Échec de la requête', noHistory: 'Aucune conversation passée', delSession: 'Supprimer cette conversation', msgUnit: '',
         stepsDone: '{n} actions',
         hintPlayBar: '▶ Écouter à partir de la mesure {a}', hintPlayRange: '▶ Écouter les mesures {a}–{b}',
         hintPlaySession: '▶ Déclenchez la scène pour écouter',
@@ -1082,7 +1082,7 @@
         phase_rendering: 'Live からオーディオをレンダリング中…', phase_analyzing_render: 'レンダリング済みオーディオを解析中…',
         phase_generating: 'オーディオ生成中…（数十秒かかることがあります）', phase_applying: '変更を適用中…',
         phase_planning: 'プラン作成中…', phase_searching: 'Web を検索中…',
-        error: 'エラー：', noHistory: '過去の会話はありません', delSession: 'この会話を削除', msgUnit: '件',
+        error: 'エラー：', requestFailed: 'リクエスト失敗', noHistory: '過去の会話はありません', delSession: 'この会話を削除', msgUnit: '件',
         stepsDone: '{n} 件の操作',
         hintPlayBar: '▶ {a} 小節目から再生', hintPlayRange: '▶ {a}–{b} 小節を再生',
         hintPlaySession: '▶ シーンをトリガーして試聴',
@@ -1128,7 +1128,7 @@
         phase_rendering: 'Renderizando audio desde Live…', phase_analyzing_render: 'Analizando el audio renderizado…',
         phase_generating: 'Generando audio… (suele tardar decenas de segundos)', phase_applying: 'Aplicando cambios…',
         phase_planning: 'Planificando…', phase_searching: 'Buscando en la web…',
-        error: 'Error: ', noHistory: 'No hay conversaciones', delSession: 'Eliminar esta conversación', msgUnit: '',
+        error: 'Error: ', requestFailed: 'La solicitud falló', noHistory: 'No hay conversaciones', delSession: 'Eliminar esta conversación', msgUnit: '',
         stepsDone: '{n} acciones',
         hintPlayBar: '▶ Reproducir desde el compás {a}', hintPlayRange: '▶ Reproducir compases {a}–{b}',
         hintPlaySession: '▶ Dispara la escena para escucharla',
@@ -1174,7 +1174,7 @@
         phase_rendering: 'Rendering audio da Live…', phase_analyzing_render: 'Analisi dell’audio renderizzato…',
         phase_generating: 'Generazione audio… (di solito richiede decine di secondi)', phase_applying: 'Applicazione delle modifiche…',
         phase_planning: 'Pianificazione…', phase_searching: 'Ricerca web…',
-        error: 'Errore: ', noHistory: 'Nessuna conversazione passata', delSession: 'Elimina questa conversazione', msgUnit: '',
+        error: 'Errore: ', requestFailed: 'Richiesta non riuscita', noHistory: 'Nessuna conversazione passata', delSession: 'Elimina questa conversazione', msgUnit: '',
         stepsDone: '{n} azioni',
         hintPlayBar: '▶ Riproduci dalla battuta {a}', hintPlayRange: '▶ Riproduci battute {a}–{b}',
         hintPlaySession: '▶ Lancia la scena per ascoltare',
@@ -1636,7 +1636,7 @@
           localStorage.setItem('ai.audio.provider', code);
           fetch('/api/audio-config', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', 'x-aibleton-language': currentLang },
             body: JSON.stringify({ selected: code }),
           }).catch(() => {});
           audioVal.textContent = p.name;
@@ -2490,8 +2490,8 @@
           e.stopPropagation();
           const r = await fetch('/api/delete', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ id: s.id }),
+            headers: { 'content-type': 'application/json', 'x-aibleton-language': currentLang },
+            body: JSON.stringify({ id: s.id, language: currentLang }),
           }).then(r => r.json()).catch(() => null);
           if (r && s.id === h.currentId) renderMessages(r.messages);
           loadSessions();
@@ -2501,8 +2501,8 @@
         row.addEventListener('click', async () => {
           const r = await fetch('/api/switch', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ id: s.id }),
+            headers: { 'content-type': 'application/json', 'x-aibleton-language': currentLang },
+            body: JSON.stringify({ id: s.id, language: currentLang }),
           }).then(r => r.json()).catch(() => null);
           if (r) renderMessages(r.messages);
           historyPanel.classList.add('hidden');
@@ -2723,7 +2723,7 @@
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-aibleton-language': currentLang },
           body: JSON.stringify({
             text: text || '(附件)',
             provider: currentProvider,
@@ -2761,7 +2761,7 @@
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || '请求失败');
+        if (!res.ok) throw new Error(data.error || t('requestFailed'));
         // Task accepted (202) — it runs server-side even if this window closes.
         setThinking(true);
         setTimeout(pollStatus, 700);
@@ -2777,7 +2777,10 @@
       if (sendBtn.classList.contains('stop')) {
         // Busy → the button means "stop". pollStatus flips it back to the
         // arrow once the task has actually wound down server-side.
-        fetch('/api/stop', { method: 'POST' }).catch(() => {});
+        fetch('/api/stop', {
+          method: 'POST',
+          headers: { 'x-aibleton-language': currentLang },
+        }).catch(() => {});
       } else {
         send();
       }

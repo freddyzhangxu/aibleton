@@ -3,6 +3,7 @@ import type { AudioGenConfig } from "./audiogen.js";
 import type { DeleteAuthorization } from "./chat/deleteauth.js";
 import type { LocalConfig, Provider } from "./config/local.js";
 import type { SampleEntry } from "./samplemeta.js";
+import type { TurnLanguageContext } from "./i18n/language.js";
 
 export type Ctx = ExtensionContext<"1.0.0">;
 
@@ -45,9 +46,11 @@ export const toolState = {
   artistMemory: {} as ArtistMemory,
   /** Resolved audio-generation config for the running chat task. */
   activeAudioConfig: null as AudioGenConfig | null,
-  /** UI language of the running chat task — feeds the web tools' search locale
-   * (same per-request lifetime as activeAudioConfig; busy = one task at a time). */
+  /** Reply language of the running chat task. Kept as a compatibility alias
+   * while tools migrate to activeLanguageContext. */
   activeLanguage: undefined as string | undefined,
+  /** Resolved once from raw user text + panel fallback and fixed for the turn. */
+  activeLanguageContext: null as TurnLanguageContext | null,
   /** Kind-scoped delete permission derived from the CURRENT user message. */
   activeDeleteAuthorization: undefined as DeleteAuthorization | undefined,
   /** The CURRENT user explicitly asked to operate on the entire Set. This is

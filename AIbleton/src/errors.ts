@@ -10,6 +10,10 @@
  * Pure string matching, no I/O: safe inside the Extension Host sandbox.
  */
 
+import { apiErrorText } from "./i18n/errors.js";
+import { commonText } from "./i18n/common.js";
+import { normalizeLanguage, resolveReplyLanguage } from "./i18n/language.js";
+
 /** Marker so a mapped error never gets re-wrapped by an outer catch. */
 const FRIENDLY_MARK = "__aibletonFriendly";
 
@@ -35,12 +39,19 @@ export function actionableError(message: string): Error {
   return err;
 }
 
+export class AppError extends Error {
+  constructor(
+    public readonly code: string,
+    public readonly params: Record<string, string | number | string[]> = {},
+  ) {
+    super(code);
+    this.name = "AppError";
+  }
+}
+
 /** Settings-menu path matching the UI labels (gear menu), per UI language. */
 export function settingsPath(language: string | undefined, section: "ai" | "audio"): string {
-  const zh = (language ?? "").startsWith("zh");
-  return zh
-    ? `设置（齿轮）→ ${section === "ai" ? "AI 配置" : "音频生成"}`
-    : `Settings (gear icon) → ${section === "ai" ? "AI Provider" : "Audio Generation"}`;
+  return commonText(language, section === "ai" ? "settingsAi" : "settingsAudio");
 }
 
 export interface FriendlyApiErrorOpts {
@@ -74,55 +85,37 @@ const OVERLOADED_RE =
 export function friendlyApiError(opts: FriendlyApiErrorOpts): Error {
   const { what, settings, status, model } = opts;
   const raw = (opts.raw ?? "").trim();
+  // Internal control-flow sentinel; providers convert it to a localized stop
+  // note before anything is shown to the user.
   if (raw === "请求已停止") return new Error(raw);
-  const zh = (opts.language ?? "").startsWith("zh");
-  const pick = (z: string, e: string) => (zh ? z : e);
   const rawShort = raw.length > 160 ? raw.slice(0, 160) + "…" : raw;
   const where = status ? ` (${status})` : "";
 
   let msg: string;
   if (raw && NETWORK_RE.test(raw) && !status) {
     msg = /代理/.test(raw)
-      ? pick(
-          `连不上 ${what}：代理连接失败（${rawShort}）— 确认代理已启动且端口正确，或检查网络后重试。`,
-          `Couldn't reach ${what}: proxy connection failed (${rawShort}) — check that the proxy is running on the right port, then try again.`,
-        )
-      : pick(
-          `连不上 ${what} — 检查网络连接（海外服务可能需要代理）后重试。`,
-          `Couldn't reach ${what} — check your network connection (an overseas service may need a proxy) and try again.`,
-        );
+      ? apiErrorText(opts.language, "networkProxy", what, rawShort)
+      : apiErrorText(opts.language, "network", what);
   } else if (QUOTA_RE.test(raw)) {
-    msg = pick(
-      `${what} 账户额度不足 — 到 ${what} 控制台充值/升级，或在 ${settings} 更换 API Key。`,
-      `Your ${what} account is out of quota — top up in the ${what} console, or set a different API key in ${settings}.`,
-    );
+    msg = apiErrorText(opts.language, "quota", what, settings);
   } else if (status === 429 || RATE_RE.test(raw)) {
-    msg = pick(
-      `请求太频繁，${what} 暂时限流。等 1 分钟再试；持续出现请到 ${what} 控制台检查账户用量额度。`,
-      `${what} is rate-limiting requests. Wait a minute and retry; if it persists, check your ${what} account usage.`,
-    );
+    msg = apiErrorText(opts.language, "rate", what);
   } else if (status === 401 || status === 403 || AUTH_RE.test(raw)) {
-    msg = pick(
-      `${what} 拒绝了请求：API Key 无效或已过期。打开 ${settings} 重新填写后再试。`,
-      `${what} rejected the request: the API key is invalid or expired. Open ${settings} to update it, then try again.`,
-    );
+    msg = apiErrorText(opts.language, "auth", what, settings);
   } else if (MODEL_RE.test(raw) || (status === 404 && /model/i.test(raw))) {
-    msg = pick(
-      `模型名称${model ? `「${model}」` : ""}无效 — ${what} 不认识这个模型。打开 ${settings} 检查模型名拼写。`,
-      `${what} doesn't recognize the model${model ? ` "${model}"` : ""}. Open ${settings} and check the model name.`,
-    );
+    msg = apiErrorText(opts.language, "model", what, model ? ` "${model}"` : "", settings);
   } else if (
     status === 500 || status === 502 || status === 503 || status === 529 || OVERLOADED_RE.test(raw)
   ) {
-    msg = pick(
-      `${what} 服务暂时繁忙${where} — 稍后重试即可，不用改设置。`,
-      `${what} is temporarily overloaded${where} — try again in a moment; no settings change needed.`,
-    );
+    msg = apiErrorText(opts.language, "overloaded", what, where);
   } else {
-    msg = pick(
-      `${what} 出错${where}：${rawShort || "未知错误"} — 若反复出现，请检查 ${settings} 的配置。`,
-      `${what} failed${where}: ${rawShort || "unknown error"} — if this keeps happening, check ${settings}.`,
-    );
+    const lang = normalizeLanguage(opts.language);
+    const rawForUser = lang === "zh"
+      ? (rawShort || "未知错误")
+      : lang === "en"
+        ? (rawShort && !/[\u3400-\u9fff]/u.test(rawShort) ? rawShort : "unknown error")
+        : "PROVIDER_ERROR";
+    msg = apiErrorText(opts.language, "generic", what, where, rawForUser, settings);
   }
   const err = new Error(msg);
   (err as unknown as Record<string, unknown>)[FRIENDLY_MARK] = true;
@@ -154,13 +147,69 @@ const LIVE_GONE_RE =
  * bilingual like the other dispatcher messages). Unknown errors pass through
  * with their original message.
  */
-export function friendlyToolError(err: unknown): string {
+export function friendlyToolError(err: unknown, language?: string): string {
   const msg = errMessage(err);
-  if (LIVE_GONE_RE.test(msg)) {
-    return (
-      `操作对象已在 Live 中被删除或失效（原错误: ${msg}）— 先调用 get_song_overview 获取最新轨道/clip 状态，再重新指定目标。` +
-      ` / The target was deleted in Live — call get_song_overview for the current state, then retry.`
-    );
+  const lang = normalizeLanguage(language);
+  const containsHan = /[\u3400-\u9fff]/u.test(msg);
+  if (isFriendlyError(err)) {
+    const detected = resolveReplyLanguage({ text: msg, panelLanguage: lang });
+    const localized = detected.source !== "message" || detected.language === lang;
+    return localized ? msg : commonText(language, "toolFailed", "TOOL_EXECUTION");
   }
-  return msg;
+  if (err instanceof AppError) {
+    return commonText(language, "toolFailed", err.code);
+  }
+  if (LIVE_GONE_RE.test(msg)) {
+    return commonText(language, "liveObjectGone");
+  }
+  const safeRaw = (lang === "zh" && containsHan) || (lang === "en" && !containsHan);
+  return safeRaw ? msg : commonText(language, "toolFailed", "TOOL_EXECUTION");
+}
+
+const TOOL_PROSE_KEYS = new Set(["error", "warning", "undo", "index_refreshed"]);
+
+function proseMatchesLanguage(text: string, language: string | undefined): boolean {
+  const lang = normalizeLanguage(language);
+  const detected = resolveReplyLanguage({ text, panelLanguage: lang });
+  return detected.source !== "message" || detected.language === lang;
+}
+
+function replacementForToolProse(key: string, language?: string): string {
+  if (key === "error") return commonText(language, "toolFailed", "LEGACY_TOOL_RESULT");
+  if (key === "warning" || key === "warnings") return commonText(language, "genericWarning");
+  if (key === "undo") return commonText(language, "undoInLive");
+  if (key === "index_refreshed") return commonText(language, "targetRefreshed");
+  return commonText(language, "operationCompleted");
+}
+
+/**
+ * Transitional guard for legacy tool results that still contain prose.
+ * Structured values and user-authored names are untouched; only known prose
+ * fields are replaced when their detected language conflicts with the turn.
+ */
+export function sanitizeToolResultLanguage(result: unknown, language?: string, key = ""): unknown {
+  if (typeof result === "string") {
+    return TOOL_PROSE_KEYS.has(key) && !proseMatchesLanguage(result, language)
+      ? replacementForToolProse(key, language)
+      : result;
+  }
+  if (Array.isArray(result)) {
+    return result.map((value) => sanitizeToolResultLanguage(value, language, key === "warnings" ? "warning" : key));
+  }
+  if (!result || typeof result !== "object") return result;
+  return Object.fromEntries(
+    Object.entries(result as Record<string, unknown>).map(([childKey, value]) => [
+      childKey,
+      sanitizeToolResultLanguage(value, language, childKey),
+    ]),
+  );
+}
+
+/** Final UI boundary for background-task failures (`lastError`). */
+export function friendlyBoundaryError(err: unknown, language?: string, code = "CHAT_TASK"): string {
+  const msg = errMessage(err);
+  const lang = normalizeLanguage(language);
+  const detected = resolveReplyLanguage({ text: msg, panelLanguage: lang });
+  if (detected.source !== "message" || detected.language === lang) return msg;
+  return commonText(language, "genericError", code);
 }

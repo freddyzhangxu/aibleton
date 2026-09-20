@@ -16,6 +16,8 @@ import { callTool, goalGate } from "../../agent/runtime.js";
 import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
+import { commonText } from "../../i18n/common.js";
+import { languageCorrectionPrompt, replyNeedsLanguageCorrection } from "../../i18n/language.js";
 
 // ---------- Gemini generateContent API ----------
 
@@ -55,6 +57,8 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     ],
   });
   const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  let languageCorrections = 0;
+  let languageRewriteOnly = false;
   attachImages(contents, req, (last, images) => {
     if (!Array.isArray(last.parts)) return;
     last.parts.push(
@@ -86,7 +90,7 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     const requestBody = JSON.stringify({
       systemInstruction: { parts: [{ text: systemPromptFor(req.language) }] },
       contents,
-      tools,
+      ...(languageRewriteOnly ? {} : { tools }),
       ...(thinkingBudget ? { generationConfig: { thinkingConfig: { thinkingBudget } } } : {}),
     });
     let data: {
@@ -143,7 +147,14 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
           .filter((p) => typeof p.text === "string")
           .map((p) => p.text!)
           .join("\n")
-          .trim() || "（无文本回复）";
+          .trim() || commonText(req.language, "noTextReply");
+      if (languageCorrections < 1 && replyNeedsLanguageCorrection(reply, req.language)) {
+        languageCorrections++;
+        languageRewriteOnly = true;
+        contents.push({ role: "model", parts });
+        contents.push({ role: "user", parts: [{ text: languageCorrectionPrompt(req.language) }] });
+        continue;
+      }
       const gate = await goalGate(context, req.language);
       if (gate && "inject" in gate) {
         contents.push({ role: "model", parts });
@@ -163,6 +174,5 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     }
     contents.push({ role: "user", parts: responseParts });
   }
-  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
+  throw new Error(commonText(req.language, "tooManyToolRounds", AGENT_MAX_ROUNDS));
 }
-

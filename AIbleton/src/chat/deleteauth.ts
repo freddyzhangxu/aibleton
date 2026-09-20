@@ -3,6 +3,7 @@
  * errs on the side of refusing: broad cleanup wording must never become a
  * license for the model to choose what to delete.
  */
+import { commonText } from "../i18n/common.js";
 export type DeleteKind =
   | "track"
   | "scene"
@@ -51,13 +52,10 @@ export function deleteToolIsAuthorized(name: string, authorization: DeleteAuthor
   return isDeleteTool(name) && authorization?.has(DELETE_TOOL_KINDS[name]) === true;
 }
 
-export function deleteAuthorizationError(name: string): { error: string; delete_authorization_required: true } {
+export function deleteAuthorizationError(name: string, language?: string): { error: string; delete_authorization_required: true } {
   const kind = isDeleteTool(name) ? DELETE_TOOL_KINDS[name].replaceAll("_", " ") : "object";
   return {
-    error:
-      `删除未执行：请在本条消息中明确指定要删除的 ${kind}；` +
-      "“清理一下”或“删掉不用的东西”不构成删除授权。 / Deletion was not executed: explicitly name the " +
-      `${kind} to delete in this message; broad cleanup requests are not authorization.`,
+    error: commonText(language ?? "zh", "deleteNotAuthorized", kind),
     delete_authorization_required: true,
   };
 }

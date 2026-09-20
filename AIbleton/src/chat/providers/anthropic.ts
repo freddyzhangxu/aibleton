@@ -11,6 +11,8 @@ import { callTool, goalGate } from "../../agent/runtime.js";
 import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
+import { commonText } from "../../i18n/common.js";
+import { languageCorrectionPrompt, replyNeedsLanguageCorrection } from "../../i18n/language.js";
 
 export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
   const { baseUrl, authToken, model } = cfg;
@@ -33,6 +35,8 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     ],
   });
   const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  let languageCorrections = 0;
+  let languageRewriteOnly = false;
   attachImages(messages, req, (last, images) => {
     if (typeof last.content !== "string") return;
     last.content = [
@@ -86,7 +90,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
       model,
       max_tokens: claudeEffort ? claudeEffort.maxTokens : 4096,
       system: systemPromptFor(req.language),
-      tools: chatTools,
+      ...(languageRewriteOnly ? {} : { tools: chatTools }),
       messages,
       ...(thinking && !suppressThinking ? { thinking } : {}),
     });
@@ -184,12 +188,11 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
           // model to act now, and never use "…" as the placeholder — the model
           // parrots it back as its whole reply (seen in the wild).
           suppressThinking = true;
-          messages.push({ role: "assistant", content: "（上一条仅为内部思考，无可见输出）" });
+          messages.push({ role: "assistant", content: "(The previous block contained internal reasoning only; no visible answer.)" });
           messages.push({
             role: "user",
             content:
-              "思考已用尽长度限制，没有产生任何可见内容。停止推演，立即行动：直接调用工具或给出完整答复，" +
-              "不要输出省略号或占位符。 / Thinking consumed the entire token limit with no visible output. " +
+              "Thinking consumed the entire token limit with no visible output. " +
               "Stop deliberating and act now: call tools or give the full reply — no ellipses, no placeholders.",
           });
         } else {
@@ -197,8 +200,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
           messages.push({
             role: "user",
             content:
-              "你的上一条回复因长度限制被截断，请从中断处继续，不要重复已输出的内容。" +
-              " / Your previous reply was cut off by the token limit — continue exactly where you stopped, without repeating yourself.",
+              "Your previous reply was cut off by the token limit — continue exactly where you stopped, without repeating yourself.",
           });
         }
         continue;
@@ -215,7 +217,15 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     // A bare ellipsis after truncated rounds is the model parroting the old
     // continuation placeholder — drop it when real text was salvaged earlier.
     const finalText = lastText === "…" && textCarry ? "" : lastText;
-    const reply = [textCarry, finalText].filter(Boolean).join("\n") || "（无文本回复）";
+    const reply = [textCarry, finalText].filter(Boolean).join("\n") || commonText(req.language, "noTextReply");
+    if (languageCorrections < 1 && replyNeedsLanguageCorrection(reply, req.language)) {
+      languageCorrections++;
+      languageRewriteOnly = true;
+      messages.push({ role: "assistant", content: reply });
+      messages.push({ role: "user", content: languageCorrectionPrompt(req.language) });
+      textCarry = "";
+      continue;
+    }
     const gate = await goalGate(context, req.language);
     if (gate && "inject" in gate) {
       messages.push({ role: "assistant", content });
@@ -224,6 +234,5 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     }
     return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
   }
-  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
+  throw new Error(commonText(req.language, "tooManyToolRounds", AGENT_MAX_ROUNDS));
 }
-

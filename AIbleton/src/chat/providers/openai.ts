@@ -18,9 +18,11 @@ import {
   truncateResult,
 } from "../session.js";
 import { callTool, goalGate } from "../../agent/runtime.js";
-import { actionableError, errMessage, friendlyApiError, isFriendlyError, settingsPath } from "../../errors.js";
+import { errMessage, friendlyApiError, isFriendlyError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
+import { commonText } from "../../i18n/common.js";
+import { languageCorrectionPrompt, replyNeedsLanguageCorrection } from "../../i18n/language.js";
 
 const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 
@@ -35,8 +37,15 @@ function jwtExp(token: string): number | null {
 }
 
 /** Refresh an expired ChatGPT-account Codex token and persist it back to auth.json. */
-async function refreshCodexToken(cfg: ResolvedConfig): Promise<void> {
-  const fail = actionableError("Codex 登录已过期，请运行 codex login 重新登录 / Codex login expired — run `codex login` again");
+async function refreshCodexToken(cfg: ResolvedConfig, language?: string): Promise<void> {
+  const fail = friendlyApiError({
+    what: "Codex",
+    settings: settingsPath(language, "ai"),
+    status: 401,
+    raw: "expired token",
+    model: cfg.model,
+    language,
+  });
   if (!cfg.refreshToken) throw fail;
   const res = await rawPost(new URL("https://auth.openai.com/oauth/token"), {
     headers: { "content-type": "application/json" },
@@ -83,11 +92,11 @@ async function refreshCodexToken(cfg: ResolvedConfig): Promise<void> {
 }
 
 /** Proactively refresh a ChatGPT-account Codex token when it is about to expire. */
-export async function ensureCodexAuth(cfg: ResolvedConfig): Promise<void> {
+export async function ensureCodexAuth(cfg: ResolvedConfig, language?: string): Promise<void> {
   if (!cfg.chatgpt) return;
   const exp = cfg.authToken ? jwtExp(cfg.authToken) : null;
   if (exp && exp - Date.now() / 1000 > 120) return; // still valid
-  if (exp) await refreshCodexToken(cfg); // expired — refresh before the call
+  if (exp) await refreshCodexToken(cfg, language); // expired — refresh before the call
   // No readable exp (opaque token): proceed; a 401 triggers the refresh retry.
 }
 
@@ -186,7 +195,7 @@ async function readResponsesStream(
     if (!finalResponse.output?.length && items.length) finalResponse.output = items;
     return finalResponse;
   }
-  if (streamError) throw actionableError(`Codex 流式响应报错: ${streamError} / Codex stream error: ${streamError}`);
+  if (streamError) throw new Error(`Codex stream error: ${streamError}`);
   // A body without a trailing newline never entered the line loop — it is
   // still sitting in buf (the quota error body arrives exactly like this).
   const leftover = buf.trim();
@@ -199,18 +208,12 @@ async function readResponsesStream(
       if (body.error?.message) throw new Error(body.error.message);
     } catch (e) {
       if (e instanceof SyntaxError) {
-        throw actionableError(
-          `Codex 端点返回了非流式（非 SSE）响应 — 若使用自建中转，请确认它支持 ChatGPT 后端，或在 设置（齿轮）→ AI 配置 改用 Custom 提供商。详情: ${rawNonSse.slice(0, 300)}` +
-            ` / The endpoint answered a non-SSE response — if this is a relay, make sure it supports the ChatGPT backend, or switch to the Custom provider in Settings.`,
-        );
+        throw new Error(`The Codex endpoint returned a non-SSE response: ${rawNonSse.slice(0, 300)}`);
       }
       throw e;
     }
   }
-  throw actionableError(
-    "Codex 连接中断：流式响应未完成（未收到 completed 事件）— 检查网络/代理后重试。" +
-      " / Connection dropped before the response completed — check your network/proxy and retry.",
-  );
+  throw new Error("Connection dropped before the Codex response completed");
 }
 
 export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
@@ -224,6 +227,8 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       ]),
   });
   const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  let languageCorrections = 0;
+  let languageRewriteOnly = false;
   attachImages(input, req, (last, images) => {
     if (!Array.isArray(last.content)) return;
     last.content.push(
@@ -246,7 +251,7 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       model: cfg.model,
       instructions: systemPromptFor(req.language),
       input,
-      tools,
+      ...(languageRewriteOnly ? {} : { tools }),
       store: false,
       // The ChatGPT backend requires SSE streaming; api.openai.com takes plain JSON.
       ...(cfg.chatgpt ? { stream: true } : {}),
@@ -276,7 +281,7 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     try {
       let res = await doFetch();
       if (res.status === 401 && cfg.chatgpt && cfg.refreshToken) {
-        await refreshCodexToken(cfg);
+        await refreshCodexToken(cfg, req.language);
         res = await doFetch();
       }
       status = res.status;
@@ -330,7 +335,17 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
           .filter((c) => c.type === "output_text")
           .map((c) => c.text ?? "")
           .join("\n")
-          .trim() || "（无文本回复）";
+          .trim() || commonText(req.language, "noTextReply");
+      if (languageCorrections < 1 && replyNeedsLanguageCorrection(reply, req.language)) {
+        languageCorrections++;
+        languageRewriteOnly = true;
+        input.push(...output);
+        input.push({
+          role: "user",
+          content: [{ type: "input_text", text: languageCorrectionPrompt(req.language) }],
+        });
+        continue;
+      }
       const gate = await goalGate(context, req.language);
       if (gate && "inject" in gate) {
         input.push(...output);
@@ -354,6 +369,5 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       input.push({ type: "function_call_output", call_id: call.call_id, output: resultJson });
     }
   }
-  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
+  throw new Error(commonText(req.language, "tooManyToolRounds", AGENT_MAX_ROUNDS));
 }
-

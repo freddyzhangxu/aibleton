@@ -40,6 +40,8 @@
  * the loop's text-exit (gate).
  */
 
+import { commonText } from "../i18n/common.js";
+
 /** Provider-round backstop — replaces the per-loop literal. Sized for the
  * refine loop: 12 covers a plain goal-cycle; each refinement adds a
  * generate (+import) round-trip of ~2 rounds on top. */
@@ -144,13 +146,9 @@ export function mutationsLeft(executedTools: readonly string[], readOnly: Readon
  * errors far more reliably than to advisory text. The message orders the
  * wrap-up explicitly so the model doesn't burn its remaining rounds re-trying.
  */
-export function stepBudgetError(): Record<string, unknown> {
+export function stepBudgetError(language?: string): Record<string, unknown> {
   return {
-    error:
-      `本回合改动预算已用完（${AGENT_MAX_STEPS} 次修改类调用），该调用未执行。` +
-      `请停止修改，总结已完成的改动与未完成的部分，由用户决定是否继续（新回合会有新预算）。` +
-      ` / Turn mutation budget exhausted (${AGENT_MAX_STEPS} mutating calls executed) — this call was NOT executed. ` +
-      `Stop modifying, summarize what landed vs. what remains, and let the user decide whether to continue.`,
+    error: commonText(language, "budgetExhausted", AGENT_MAX_STEPS),
     budget_exhausted: true,
   };
 }

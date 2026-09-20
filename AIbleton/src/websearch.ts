@@ -14,12 +14,13 @@
  *
  * Both engines wrap result links in redirects: Bing /ck/a carries the target
  * as base64url in `u` (with an "a1" prefix), DDG /l/ carries it URL-encoded
- * in `uddg`. Search locale follows the UI language (users are global).
+ * in `uddg`. Search locale follows the turn's resolved reply language.
  */
 
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
 import { detectProxy, rawGet, readAll } from "./http.js";
+import { commonText } from "./i18n/common.js";
 
 export interface SearchHit {
   title: string;
@@ -162,7 +163,7 @@ function assertPublicHttp(url: URL): void {
 // ---------- web_search (Bing primary, DuckDuckGo fallback — both keyless) ----------
 
 /**
- * Search locale follows the UI language (the chat is localized to Live's 7
+ * Search locale follows the reply language (the chat supports Live's 7
  * languages; users are global, so nothing here is hardcoded to one region).
  *   al  = Accept-Language header
  *   mkt = Bing market param
@@ -370,7 +371,7 @@ export async function webFetch(
           url: url.href,
           title: "",
           chars: text.length,
-          text: text.slice(0, MAX_CHARS) + (text.length > MAX_CHARS ? "\n…（正文过长已截断）" : ""),
+          text: text.slice(0, MAX_CHARS) + (text.length > MAX_CHARS ? `\n… (${commonText(language, "contentTruncated")})` : ""),
         };
       }
       if (ctype && !ctype.includes("text/html") && !ctype.includes("application/xhtml")) {
@@ -382,7 +383,7 @@ export async function webFetch(
         url: url.href,
         title,
         chars: text.length,
-        text: text.slice(0, MAX_CHARS) + (text.length > MAX_CHARS ? "\n…（正文过长已截断）" : ""),
+        text: text.slice(0, MAX_CHARS) + (text.length > MAX_CHARS ? `\n… (${commonText(language, "contentTruncated")})` : ""),
       };
     }
     throw new Error("重定向次数过多（>3），已放弃");

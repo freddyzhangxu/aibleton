@@ -12,6 +12,7 @@
  */
 
 import type { CreativeAction } from "../actions/types.js";
+import { goalText } from "../../goal/i18n.js";
 import type {
   ReferenceGap,
   ReferenceGapMetric,
@@ -121,22 +122,24 @@ export function presentReferencePlanningContext(
 // ---------------------------------------------------------------------------
 
 /**
- * Reference progress as retry-message lines (bilingual, matching
+ * Reference progress as localized retry-message lines (matching
  * presentSectionVerification). Only UNSATISFIED measured metrics are listed —
  * "what still hasn't moved toward the reference" is the retry's correction
  * target; satisfied metrics are silent (the goal gate is the authority).
  */
-export function presentReferenceVerification(vers: readonly ReferenceVerification[]): string[] {
+export function presentReferenceVerification(vers: readonly ReferenceVerification[], language?: string): string[] {
   const fmt = (v?: number): string => (v === undefined ? "?" : String(r2(v)));
   const missed = vers.filter((v) => v.beforeGap !== undefined && v.satisfied !== true);
   if (!missed.length) return [];
   const parts = missed.map(
     (v) =>
-      `${v.metric}: 差距 ${fmt(v.beforeGap)}→${fmt(v.afterGap)}` +
-      (v.gapReduction !== undefined ? ` (缩小 ${r2(v.gapReduction)})` : " (修改后无法比较)"),
+      `${v.metric}: ${goalText(language, "referenceGap", fmt(v.beforeGap), fmt(v.afterGap))}` +
+      (v.gapReduction !== undefined
+        ? ` (${goalText(language, "gapReduced", r2(v.gapReduction))})`
+        : ` (${goalText(language, "notComparable")})`),
   );
   return [
-    `参考校验 / Reference: 与参考的差距未有效缩小 — ${parts.join("；")}` +
-      `。继续在原目标段落内缩小这些差距，不要转向其他段落，也不要试图复制参考本身。`,
+    goalText(language, "referenceFailed", parts.join("; ")) +
+      goalText(language, "referenceInstruction"),
   ];
 }

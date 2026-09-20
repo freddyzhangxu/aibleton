@@ -3,6 +3,7 @@ import { postconditionsFor } from "../verify/rules.js";
 import { runVerification } from "../verify/verifier.js";
 import type { ProbeSong } from "../verify/types.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
+import { commonText } from "../i18n/common.js";
 
 /** Tools that never touch the Set — always allowed, even with YOLO off.
  * web_search/web_fetch are read-only: free, keyless, and they touch nothing
@@ -115,8 +116,8 @@ export async function verifyToolResult(
       ...(result as Record<string, unknown>),
       verified: false,
       error:
-        `验证失败（操作已执行，未达预期）: ${v.remainingIssues.join("；")}。` +
-        `请勿直接重复该操作（避免重复创建内容），按实际状态修正。`,
+        commonText(toolState.activeLanguage, "verificationFailed", v.remainingIssues.join("; ")) + " " +
+        commonText(toolState.activeLanguage, "doNotRepeat"),
     };
   } catch (err) {
     toolHooks.debugLog(context, `VERIFY skipped ${name}: ${err instanceof Error ? err.message : String(err)}`);

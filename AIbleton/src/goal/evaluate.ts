@@ -14,6 +14,7 @@
 
 import { OFF_KEY_THRESHOLD, pcName } from "../analysis/interpret.js";
 import { genMetricValue } from "../genlog/diff.js";
+import { goalIssue, goalMetricLabel, goalText } from "./i18n.js";
 import type { Criterion, GenCriterionMetric, GoalCheck, GoalEvaluation, MusicGoal } from "./types.js";
 import {
   findSection,
@@ -32,8 +33,8 @@ export const ROLE_GROUPS: Record<string, string[]> = {
   low_end: ["kick", "bass"],
 };
 
-function sectionMissing(name: string, view: GoalView): GoalCheck["actual"] {
-  return `可用段落: ${view.sections.map((s) => s.name).join(", ") || "(无)"}`;
+function sectionMissing(view: GoalView, language?: string): GoalCheck["actual"] {
+  return goalText(language, "availableSections", view.sections.map((s) => s.name).join(", ") || goalText(language, "none"));
 }
 
 function judgeSectionEnergyGt(
@@ -41,10 +42,11 @@ function judgeSectionEnergyGt(
   b: string,
   before: GoalView,
   after: GoalView,
+  language?: string,
 ): GoalCheck {
   const id = `section[${a}].energy`;
   const sa = findSection(after, a);
-  if (!sa) return { id, passed: false, expected: `段落「${a}」存在`, actual: sectionMissing(a, after) };
+  if (!sa) return { id, passed: false, expected: goalText(language, "sectionExists", a), actual: sectionMissing(after, language) };
 
   const baselineMatch = b.match(/^baseline:(.+)$/i);
   let sb: GoalSectionMeasure | undefined;
@@ -52,20 +54,20 @@ function judgeSectionEnergyGt(
   if (baselineMatch) {
     const bName = baselineMatch[1].trim();
     sb = findSection(before, bName);
-    bLabel = `基线「${bName}」`;
+    bLabel = goalText(language, "baseline", bName);
     if (!sb) {
-      return { id, passed: false, expected: `基线中存在段落「${bName}」`, actual: sectionMissing(bName, before) };
+      return { id, passed: false, expected: goalText(language, "baselineSectionExists", bName), actual: sectionMissing(before, language) };
     }
   } else {
     sb = findSection(after, b);
-    bLabel = `「${b}」`;
-    if (!sb) return { id, passed: false, expected: `段落「${b}」存在`, actual: sectionMissing(b, after) };
+    bLabel = b;
+    if (!sb) return { id, passed: false, expected: goalText(language, "sectionExists", b), actual: sectionMissing(after, language) };
   }
 
   return {
     id,
     passed: sa.density > sb.density + EPS,
-    expected: `「${sa.name}」能量密度 > ${bLabel}（${fmt(sb.density)}/bar）`,
+    expected: goalText(language, "sectionEnergy", sa.name, bLabel, fmt(sb.density)),
     actual: `${fmt(sa.density)}/bar`,
   };
 }
@@ -75,16 +77,17 @@ function judgeSectionTracksGte(
   n: number | "baseline",
   before: GoalView,
   after: GoalView,
+  language?: string,
 ): GoalCheck {
   const id = `section[${section}].tracks`;
   const s = findSection(after, section);
-  if (!s) return { id, passed: false, expected: `段落「${section}」存在`, actual: sectionMissing(section, after) };
+  if (!s) return { id, passed: false, expected: goalText(language, "sectionExists", section), actual: sectionMissing(after, language) };
   const want = n === "baseline" ? (findSection(before, section)?.tracks ?? 0) : n;
-  const wantLabel = n === "baseline" ? `基线 ${want}` : `${want}`;
+  const wantLabel = n === "baseline" ? goalText(language, "baseline", want) : `${want}`;
   return {
     id,
     passed: s.tracks >= want,
-    expected: `「${s.name}」参与轨数 ≥ ${wantLabel}`,
+    expected: goalText(language, "sectionTracks", s.name, wantLabel),
     actual: `${s.tracks}`,
   };
 }
@@ -93,44 +96,45 @@ function judgeRolePresent(
   role: string,
   section: string | undefined,
   after: GoalView,
+  language?: string,
 ): GoalCheck {
   const want = ROLE_GROUPS[role] ?? [role];
   const id = section ? `role[${role}]@${section}` : `role[${role}]`;
   const sec = section ? findSection(after, section) : undefined;
   if (section && !sec) {
-    return { id, passed: false, expected: `段落「${section}」存在`, actual: sectionMissing(section, after) };
+    return { id, passed: false, expected: goalText(language, "sectionExists", section), actual: sectionMissing(after, language) };
   }
   const scope: ReadonlySet<string> = sec ? sec.roles : after.songRoles;
-  const scopeLabel = section ? `「${section}」` : "全曲";
+  const scopeLabel = section ?? goalText(language, "wholeSong");
   const hit = want.some((r) => scope.has(r));
   return {
     id,
     passed: hit,
-    expected: `${scopeLabel}存在 ${role}${ROLE_GROUPS[role] ? `（${want.join("|")}）` : ""}`,
-    actual: `现有角色: ${[...scope].join(", ") || "(无)"}`,
+    expected: goalText(language, "rolePresent", scopeLabel, role, ROLE_GROUPS[role] ? ` (${want.join("|")})` : ""),
+    actual: goalText(language, "currentRoles", [...scope].join(", ") || goalText(language, "none")),
   };
 }
 
-function judgeTracksUntouched(names: string[], before: GoalView, after: GoalView): GoalCheck {
+function judgeTracksUntouched(names: string[], before: GoalView, after: GoalView, language?: string): GoalCheck {
   const bad: string[] = [];
   for (const name of names) {
     const norm = name.trim().toLowerCase();
     const a = after.tracks.find((t) => t.name.toLowerCase() === norm);
     const b = before.tracks.find((t) => t.name.toLowerCase() === norm);
     if (!a) {
-      bad.push(`「${name}」已不存在`);
+      bad.push(goalText(language, "trackGone", name));
       continue;
     }
     // Notes-based proxy: a track whose audible content changed counts as
     // touched. Mixer/device tweaks are invisible here (documented in the
     // tool schema) — content identity is what this constraint protects.
-    if (b && a.notes !== b.notes) bad.push(`「${name}」音符 ${b.notes} → ${a.notes}`);
+    if (b && a.notes !== b.notes) bad.push(goalText(language, "notesChanged", name, b.notes, a.notes));
   }
   return {
     id: `untouched[${names.join(",")}]`,
     passed: bad.length === 0,
-    expected: `轨道 ${names.map((n) => `「${n}」`).join("")} 内容不变`,
-    actual: bad.join("；") || "未改动",
+    expected: goalText(language, "tracksUnchanged", names.join(", ")),
+    actual: bad.join("; ") || goalText(language, "notChanged"),
   };
 }
 
@@ -141,56 +145,54 @@ function findTrack(view: GoalView, name: string): GoalView["tracks"][number] | u
   return view.tracks.find((t) => t.name.toLowerCase() === norm);
 }
 
-const trackMissing = (name: string, view: GoalView): string =>
-  `可用轨道: ${view.tracks.map((t) => t.name).join(", ") || "(无)"}`;
-
-const NO_AUDIO = "无音频特征（目标声明/校验时未启用音频分析）";
+const trackMissing = (view: GoalView, language?: string): string =>
+  goalText(language, "availableTracks", view.tracks.map((t) => t.name).join(", ") || goalText(language, "none"));
 
 /** in_key / off_key_lte share one judge — in_key is off_key_lte at the
  * OFF_KEY issue threshold, so a set that doesn't trigger the issue passes
  * in_key by construction. An unmeasurable ratio FAILS (unknown ≠ clean),
  * with the reason spelled out so the model can act on it. */
-function judgeOffKeyLte(pct: number, after: GoalView): GoalCheck {
+function judgeOffKeyLte(pct: number, after: GoalView, language?: string): GoalCheck {
   const id = "offKey";
   if (after.offKeyRatio === undefined) {
     return {
       id,
       passed: false,
-      expected: `调外音占比可测量（Live Scale Mode 已开启，或可检测调性 + 足够音符材料）`,
-      actual: "无法测量 — 无可用调式或音符材料不足",
+      expected: goalText(language, "offKeyMeasurable"),
+      actual: goalText(language, "offKeyUnavailable"),
     };
   }
   return {
     id,
     passed: after.offKeyRatio <= pct + EPS,
-    expected: `调外音时长占比 ≤ ${fmt(pct * 100)}%（按 ${after.offKeyScale}）`,
+    expected: goalText(language, "offKeyShare", fmt(pct * 100), after.offKeyScale),
     actual: `${fmt(after.offKeyRatio * 100)}%`,
   };
 }
 
-function judgeTrackCrestGte(track: string, db: number, after: GoalView): GoalCheck {
+function judgeTrackCrestGte(track: string, db: number, after: GoalView, language?: string): GoalCheck {
   const id = `track[${track}].crest`;
   const t = findTrack(after, track);
-  if (!t) return { id, passed: false, expected: `轨道「${track}」存在`, actual: trackMissing(track, after) };
-  if (!t.audio) return { id, passed: false, expected: `「${t.name}」有音频特征`, actual: NO_AUDIO };
+  if (!t) return { id, passed: false, expected: goalText(language, "trackExists", track), actual: trackMissing(after, language) };
+  if (!t.audio) return { id, passed: false, expected: goalText(language, "trackAudioFeatures", t.name), actual: goalText(language, "noAudio") };
   return {
     id,
     passed: t.audio.crestDb >= db,
-    expected: `「${t.name}」源文件 crest ≥ ${fmt(db)} dB`,
+    expected: goalText(language, "sourceCrest", t.name, fmt(db)),
     actual: `${fmt(t.audio.crestDb)} dB`,
   };
 }
 
-function judgeTrackBandGte(track: string, band: string, pct: number, after: GoalView): GoalCheck {
+function judgeTrackBandGte(track: string, band: string, pct: number, after: GoalView, language?: string): GoalCheck {
   const id = `track[${track}].band[${band}]`;
   const t = findTrack(after, track);
-  if (!t) return { id, passed: false, expected: `轨道「${track}」存在`, actual: trackMissing(track, after) };
-  if (!t.audio) return { id, passed: false, expected: `「${t.name}」有音频特征`, actual: NO_AUDIO };
+  if (!t) return { id, passed: false, expected: goalText(language, "trackExists", track), actual: trackMissing(after, language) };
+  if (!t.audio) return { id, passed: false, expected: goalText(language, "trackAudioFeatures", t.name), actual: goalText(language, "noAudio") };
   const v = t.audio.bands[band as keyof typeof t.audio.bands];
   return {
     id,
     passed: v >= pct,
-    expected: `「${t.name}」源文件 ${band} 频段能量占比 ≥ ${fmt(pct)}`,
+    expected: goalText(language, "sourceBand", t.name, band, fmt(pct)),
     actual: `${fmt(v)}`,
   };
 }
@@ -201,8 +203,6 @@ function judgeTrackBandGte(track: string, band: string, pct: number, after: Goal
 // a failed check with the reason spelled out, never a silent pass.
 // ---------------------------------------------------------------------------
 
-const NO_GENLOG = "genlog 为空 — 本回合尚未生成音频（generate_audio 成功后才会记录）";
-
 function genValue(
   g: GoalGenMeasure,
   metric: GenCriterionMetric,
@@ -211,32 +211,29 @@ function genValue(
   return g.features ? genMetricValue(g.features, metric, band) : undefined;
 }
 
-function metricLabel(metric: GenCriterionMetric, band?: AudioBandName): string {
-  return metric === "band" ? `${band} 频段能量占比` : metric;
-}
-
 function judgeGenMetricGte(
   metric: GenCriterionMetric,
   band: AudioBandName | undefined,
   value: number,
   after: GoalView,
+  language?: string,
 ): GoalCheck {
   const id = metric === "band" ? `gen.band[${band}]` : `gen.${metric}`;
   const gen = after.latestGeneration;
-  if (!gen) return { id, passed: false, expected: `存在生成记录`, actual: NO_GENLOG };
+  if (!gen) return { id, passed: false, expected: goalText(language, "generationExists"), actual: goalText(language, "noGenlog") };
   const v = genValue(gen, metric, band);
   if (v === undefined) {
     return {
       id,
       passed: false,
-      expected: `最新生成（${gen.id}）可分析`,
-      actual: gen.featuresError ? `无法分析: ${gen.featuresError}` : "无音频特征",
+      expected: goalText(language, "generationAnalyzable", gen.id),
+      actual: gen.featuresError ? goalText(language, "analysisFailed", gen.featuresError) : goalText(language, "noAudioFeatures"),
     };
   }
   return {
     id,
     passed: v >= value,
-    expected: `最新生成（${gen.id}）${metricLabel(metric, band)} ≥ ${fmt(value)}`,
+    expected: goalText(language, "latestGenerationMetric", gen.id, goalMetricLabel(language, metric, band), fmt(value)),
     actual: fmt(v),
   };
 }
@@ -248,25 +245,26 @@ function judgeGenImprovedVsPrev(
   minDelta: number,
   before: GoalView,
   after: GoalView,
+  language?: string,
 ): GoalCheck {
   const id = metric === "band" ? `gen.band[${band}].improved` : `gen.${metric}.improved`;
   const cur = after.latestGeneration;
-  if (!cur) return { id, passed: false, expected: `存在生成记录`, actual: NO_GENLOG };
+  if (!cur) return { id, passed: false, expected: goalText(language, "generationExists"), actual: goalText(language, "noGenlog") };
   const prev = before.latestGeneration;
   if (!prev) {
     return {
       id,
       passed: false,
-      expected: `set_goal 时已有上一轮生成记录作基线`,
-      actual: "声明目标时 genlog 为空 — 无可比较的上一迭代",
+      expected: goalText(language, "baselineGenerationRequired"),
+      actual: goalText(language, "noBaselineGeneration"),
     };
   }
   if (cur.id === prev.id) {
     return {
       id,
       passed: false,
-      expected: `本回合产生新的生成（区别于基线 ${prev.id}）`,
-      actual: "没有新生成 — 最新记录仍是基线那一条",
+      expected: goalText(language, "newGenerationRequired", prev.id),
+      actual: goalText(language, "noNewGeneration"),
     };
   }
   const curV = genValue(cur, metric, band);
@@ -274,8 +272,8 @@ function judgeGenImprovedVsPrev(
     return {
       id,
       passed: false,
-      expected: `新生成（${cur.id}）可分析`,
-      actual: cur.featuresError ? `无法分析: ${cur.featuresError}` : "无音频特征",
+      expected: goalText(language, "generationAnalyzable", cur.id),
+      actual: cur.featuresError ? goalText(language, "analysisFailed", cur.featuresError) : goalText(language, "noAudioFeatures"),
     };
   }
   const prevV = genValue(prev, metric, band);
@@ -283,34 +281,34 @@ function judgeGenImprovedVsPrev(
     return {
       id,
       passed: false,
-      expected: `基线生成（${prev.id}）可分析`,
-      actual: prev.featuresError ? `无法分析: ${prev.featuresError}` : "无音频特征",
+      expected: goalText(language, "baselineGenerationAnalyzable", prev.id),
+      actual: prev.featuresError ? goalText(language, "analysisFailed", prev.featuresError) : goalText(language, "noAudioFeatures"),
     };
   }
   const delta = curV - prevV;
   const improved = direction === "up" ? delta >= minDelta : -delta >= minDelta;
-  const dirLabel = direction === "up" ? "提升" : "降低";
+  const dirLabel = goalText(language, direction === "up" ? "increase" : "decrease");
   return {
     id,
     passed: improved,
-    expected: `${metricLabel(metric, band)}较上一轮（${prev.id}）${dirLabel} ≥ ${fmt(minDelta)}`,
+    expected: goalText(language, "metricImproved", goalMetricLabel(language, metric, band), prev.id, dirLabel, fmt(minDelta)),
     actual: `${fmt(prevV)} → ${fmt(curV)}（Δ ${fmt(delta)}）`,
   };
 }
 
-function judge(c: Criterion, before: GoalView, after: GoalView): GoalCheck {
+function judge(c: Criterion, before: GoalView, after: GoalView, language?: string): GoalCheck {
   switch (c.kind) {
     case "section_energy_gt":
-      return judgeSectionEnergyGt(c.a, c.b, before, after);
+      return judgeSectionEnergyGt(c.a, c.b, before, after, language);
     case "section_tracks_gte":
-      return judgeSectionTracksGte(c.section, c.n, before, after);
+      return judgeSectionTracksGte(c.section, c.n, before, after, language);
     case "role_present":
-      return judgeRolePresent(c.role, c.section, after);
+      return judgeRolePresent(c.role, c.section, after, language);
     case "tempo_unchanged":
       return {
         id: "tempo",
         passed: Math.abs(after.tempo - before.tempo) <= 0.01,
-        expected: `速度保持 ${fmt(before.tempo)} BPM`,
+        expected: goalText(language, "tempoUnchanged", fmt(before.tempo)),
         actual: `${fmt(after.tempo)} BPM`,
       };
     case "key_unchanged": {
@@ -327,27 +325,27 @@ function judge(c: Criterion, before: GoalView, after: GoalView): GoalCheck {
         return {
           id: "key",
           passed: sameRoot && sameIntervals,
-          expected: `调式保持 ${pcName(before.liveScale.root)} ${before.liveScale.name}`,
+          expected: goalText(language, "scaleUnchanged", pcName(before.liveScale.root), before.liveScale.name),
           actual: `${pcName(after.liveScale.root)} ${after.liveScale.name}`,
         };
       }
       return {
         id: "key",
         passed: after.keyBest === before.keyBest,
-        expected: `调性保持 ${before.keyBest ?? "(无法检测)"}`,
-        actual: after.keyBest ?? "(无法检测)",
+        expected: goalText(language, "keyUnchanged", before.keyBest ?? goalText(language, "undetectable")),
+        actual: after.keyBest ?? goalText(language, "undetectable"),
       };
     }
     case "in_key":
-      return judgeOffKeyLte(OFF_KEY_THRESHOLD, after);
+      return judgeOffKeyLte(OFF_KEY_THRESHOLD, after, language);
     case "off_key_lte":
-      return judgeOffKeyLte(c.pct, after);
+      return judgeOffKeyLte(c.pct, after, language);
     case "track_count_gte": {
       const want = c.n === "baseline" ? before.trackCount : c.n;
       return {
         id: "trackCount",
         passed: after.trackCount >= want,
-        expected: `轨道总数 ≥ ${c.n === "baseline" ? `基线 ${want}` : want}`,
+        expected: goalText(language, "trackCountAtLeast", c.n === "baseline" ? goalText(language, "baseline", want) : want),
         actual: `${after.trackCount}`,
       };
     }
@@ -355,34 +353,33 @@ function judge(c: Criterion, before: GoalView, after: GoalView): GoalCheck {
       return {
         id: "noNewTracks",
         passed: after.trackCount <= before.trackCount,
-        expected: `不新增轨道（基线 ${before.trackCount}）`,
+        expected: goalText(language, "noNewTracks", before.trackCount),
         actual: `${before.trackCount} → ${after.trackCount}`,
       };
     case "tracks_untouched":
-      return judgeTracksUntouched(c.names, before, after);
+      return judgeTracksUntouched(c.names, before, after, language);
     case "track_crest_gte":
-      return judgeTrackCrestGte(c.track, c.db, after);
+      return judgeTrackCrestGte(c.track, c.db, after, language);
     case "track_band_gte":
-      return judgeTrackBandGte(c.track, c.band, c.pct, after);
+      return judgeTrackBandGte(c.track, c.band, c.pct, after, language);
     case "gen_metric_gte":
-      return judgeGenMetricGte(c.metric, c.band, c.value, after);
+      return judgeGenMetricGte(c.metric, c.band, c.value, after, language);
     case "gen_improved_vs_prev":
-      return judgeGenImprovedVsPrev(c.metric, c.band, c.direction, c.min_delta, before, after);
+      return judgeGenImprovedVsPrev(c.metric, c.band, c.direction, c.min_delta, before, after, language);
   }
 }
-
-const issueLine = (c: GoalCheck): string =>
-  `${c.id}: 期望 ${c.expected}${c.actual ? `，实际 ${c.actual}` : ""}`;
 
 export function evaluateGoal(
   goal: MusicGoal,
   before: GoalView,
   after: GoalView,
+  language?: string,
 ): GoalEvaluation {
   const checks = [
-    ...goal.constraints.map((c) => ({ ...judge(c, before, after), constraint: true })),
-    ...goal.successCriteria.map((c) => ({ ...judge(c, before, after), constraint: false })),
+    ...goal.constraints.map((c) => ({ ...judge(c, before, after, language), constraint: true })),
+    ...goal.successCriteria.map((c) => ({ ...judge(c, before, after, language), constraint: false })),
   ];
+  const issueLine = (c: GoalCheck): string => goalIssue(language, c.id, c.expected, c.actual);
   const constraintIssues = checks.filter((c) => c.constraint && !c.passed).map(issueLine);
   const criteriaIssues = checks.filter((c) => !c.constraint && !c.passed).map(issueLine);
   return {

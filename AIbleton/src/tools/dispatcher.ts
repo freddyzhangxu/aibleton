@@ -47,6 +47,8 @@ import { buildMusicState } from "../musicstate/builder.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
 import { resolvedSelection } from "../setcontext.js";
 import { selectionGuard } from "../selectionguard.js";
+import { actionableError } from "../errors.js";
+import { commonText } from "../i18n/common.js";
 import {
   applySwing,
   buildSongSnapshot,
@@ -212,7 +214,7 @@ async function presentDeviceParameters(device: Device<"1.0.0">, rawFilter: unkno
   if (truncated) parameters = parameters.slice(0, cap);
   return {
     parameterCount: device.parameters.length,
-    ...(truncated ? { note: `仅返回前 ${cap} 个参数。请用 filter 按名称精确查询（如 "freq"、"reso"、"coarse"、"lfo"）` } : {}),
+    ...(truncated ? { note: commonText(toolState.activeLanguage, "parametersTruncated", cap) } : {}),
     parameters,
   };
 }
@@ -237,7 +239,7 @@ export async function runTool(
   );
   if (selectionRefusal) throw new Error(selectionRefusal);
   if (isDeleteTool(name) && !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization)) {
-    return deleteAuthorizationError(name);
+    return deleteAuthorizationError(name, toolState.activeLanguage);
   }
 
   switch (name) {
@@ -291,7 +293,7 @@ export async function runTool(
       return toolHooks.handleSetPlan(context, input);
     }
     case "arrange_song": {
-      return arrangeSong(context, input);
+      return arrangeSong(context, input, toolState.activeLanguage);
     }
     case "update_memory": {
       // Partial update: only fields present in input are touched; "" / [] / 0
@@ -359,10 +361,7 @@ export async function runTool(
       return {
         created: track.name,
         type: "MIDI",
-        routing_setup_required:
-          `One-time manual routing (the SDK cannot set this): 1) In Live, set this track's Output Type to "Ableton Move" and Output Channel to ${channel}. ` +
-          `2) On Move: firmware ≥1.5, Standalone Mode (NOT Control Live), USB-C to this computer; hold Shift + press a track button and set that track's MIDI In to channel ${channel} (or Auto). ` +
-          `Notes, velocity and poly aftertouch reach Move; MIDI CC does not. From then on, any clip you write into this track plays on Move.`,
+        routing_setup_required: commonText(toolState.activeLanguage, "moveRoutingSetup", channel),
       };
     }
     case "move_status": {
@@ -375,7 +374,7 @@ export async function runTool(
             connected: true,
             paired: false,
             host: moveHost(toolState.moveSettings),
-            hint: "设备可达，但尚未配对 — 调用 move_pair（不带 code）让 Move 显示配对码。",
+            hint: commonText(toolState.activeLanguage, "movePairHint"),
           };
         }
         throw e;
@@ -389,8 +388,7 @@ export async function runTool(
         await pairStart(toolState.moveSettings);
         return {
           pairing: "code_shown",
-          message:
-            "Move 屏幕上现在显示一个 6 位配对码。请让用户报出这串数字，然后用 move_pair({ code }) 完成配对。",
+          message: commonText(toolState.activeLanguage, "movePairCode"),
         };
       }
       toolState.moveSettings.token = await pairComplete(toolState.moveSettings, code);
@@ -415,7 +413,13 @@ export async function runTool(
       const result = await uploadFile(toolState.moveSettings, filePath, folder, input.overwrite === true);
       return {
         ...result,
-        message: `${result.uploaded} 已上传到 Move 的 ${result.folder} 文件夹（${Math.round(result.size / 1024)} KB）— 在 Move 上即可找到，可装入鼓垫或旋律轨道。`,
+        message: commonText(
+          toolState.activeLanguage,
+          "moveUploadComplete",
+          result.uploaded,
+          result.folder,
+          Math.round(result.size / 1024),
+        ),
       };
     }
     case "move_download_set": {
@@ -430,7 +434,7 @@ export async function runTool(
       return {
         saved: target,
         size: data.length,
-        message: `Set 已下载到 ${target}（${Math.round(data.length / 1024)} KB）。`,
+        message: commonText(toolState.activeLanguage, "moveDownloadComplete", target, Math.round(data.length / 1024)),
       };
     }
     case "move_analyze_set": {
@@ -851,20 +855,20 @@ export async function runTool(
     case "search_samples": {
       const q = String(input.query ?? "").trim();
       if (!q) throw new Error("query 不能为空");
-      return searchSampleIndex(toolHooks.buildSampleIndex(), q, 30);
+      return searchSampleIndex(toolHooks.buildSampleIndex(), q, 30, toolState.activeLanguage);
     }
     case "web_search": {
       // Should be unreachable (the tools list already hides it when off) —
       // this is the safety net, e.g. a stale request mid-toggle.
       if (!toolState.webSettings.enabled) {
-        throw new Error("联网搜索已关闭：设置(齿轮) → 联网搜索 打开后可用 / Web search is off — enable it in Settings → Web Search");
+        throw actionableError(commonText(toolState.activeLanguage, "webDisabled"));
       }
       const results = await webSearch(String(input.query ?? ""), toolState.abortCtl?.signal ?? undefined, toolState.activeLanguage);
       return { total: results.length, results };
     }
     case "web_fetch": {
       if (!toolState.webSettings.enabled) {
-        throw new Error("联网搜索已关闭：设置(齿轮) → 联网搜索 打开后可用 / Web search is off — enable it in Settings → Web Search");
+        throw actionableError(commonText(toolState.activeLanguage, "webDisabled"));
       }
       return await webFetch(String(input.url ?? ""), toolState.abortCtl?.signal ?? undefined, toolState.activeLanguage);
     }

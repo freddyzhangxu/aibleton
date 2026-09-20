@@ -16,6 +16,8 @@ import { callTool, goalGate } from "../../agent/runtime.js";
 import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
+import { commonText } from "../../i18n/common.js";
+import { languageCorrectionPrompt, replyNeedsLanguageCorrection } from "../../i18n/language.js";
 
 // ---------- OpenAI-compatible chat/completions (custom endpoint) ----------
 
@@ -67,6 +69,8 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     }),
   ];
   const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  let languageCorrections = 0;
+  let languageRewriteOnly = false;
   attachImages(messages, req, (last, images) => {
     last.content = [
       { type: "text", text: typeof last.content === "string" ? last.content : "" },
@@ -87,7 +91,11 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
 
   for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-    const requestBody = JSON.stringify({ model: cfg.model, messages, tools });
+    const requestBody = JSON.stringify({
+      model: cfg.model,
+      messages,
+      ...(languageRewriteOnly ? {} : { tools }),
+    });
     let data: ChatCompletionsData;
     let status: number;
     try {
@@ -132,7 +140,14 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       `ROUND ${round}: content=${(msg.content ?? "").length} chars, tool_calls=${calls.length}`);
     if (!calls.length) {
       const reply =
-        (typeof msg.content === "string" ? msg.content : "").trim() || "（无文本回复）";
+        (typeof msg.content === "string" ? msg.content : "").trim() || commonText(req.language, "noTextReply");
+      if (languageCorrections < 1 && replyNeedsLanguageCorrection(reply, req.language)) {
+        languageCorrections++;
+        languageRewriteOnly = true;
+        messages.push({ role: "assistant", content: reply });
+        messages.push({ role: "user", content: languageCorrectionPrompt(req.language) });
+        continue;
+      }
       const gate = await goalGate(context, req.language);
       if (gate && "inject" in gate) {
         messages.push({ role: "assistant", content: msg.content ?? "" });
@@ -159,6 +174,5 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       messages.push({ role: "tool", tool_call_id: call.id ?? "", content: resultJson });
     }
   }
-  throw new Error(`工具调用轮次超过 ${AGENT_MAX_ROUNDS}，已中止 / Too many tool rounds, aborted`);
+  throw new Error(commonText(req.language, "tooManyToolRounds", AGENT_MAX_ROUNDS));
 }
-

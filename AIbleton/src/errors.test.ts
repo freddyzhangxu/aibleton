@@ -10,8 +10,10 @@ import {
   actionableError,
   friendlyApiError,
   friendlyAudioError,
+  friendlyBoundaryError,
   friendlyToolError,
   isFriendlyError,
+  sanitizeToolResultLanguage,
   settingsPath,
 } from "./errors.js";
 
@@ -109,6 +111,19 @@ test("audio errors route to 设置 → 音频生成", () => {
   assert.match(e.message, /音频生成/);
 });
 
+test("Spanish provider errors stay Spanish", () => {
+  const e = friendlyApiError({
+    what: "Claude",
+    settings: settingsPath("es", "ai"),
+    status: 401,
+    raw: "invalid api key",
+    language: "es",
+  });
+  assert.match(e.message, /rechazó la solicitud/i);
+  assert.match(e.message, /Ajustes/);
+  assert.doesNotMatch(e.message, /[\u3400-\u9fff]/u);
+});
+
 test("mapped errors are marked so outer catches never double-wrap", () => {
   const e = friendlyApiError({ what: "Claude", settings: AI_ZH, status: 401, raw: "x", language: "zh" });
   assert.ok(isFriendlyError(e));
@@ -117,12 +132,36 @@ test("mapped errors are marked so outer catches never double-wrap", () => {
 });
 
 test("deleted Live objects tell the model to re-fetch the song state", () => {
-  const msg = friendlyToolError(new Error("Invalid object reference"));
+  const msg = friendlyToolError(new Error("Invalid object reference"), "zh");
   assert.match(msg, /get_song_overview/);
   assert.match(msg, /已不存在|被删除|失效/);
 });
 
-test("unknown tool errors pass through untouched", () => {
-  assert.equal(friendlyToolError(new Error("轨道序号 9 无效")), "轨道序号 9 无效");
-  assert.equal(friendlyToolError("plain string"), "plain string");
+test("unknown tool errors only pass through when their language matches", () => {
+  assert.equal(friendlyToolError(new Error("轨道序号 9 无效"), "zh"), "轨道序号 9 无效");
+  assert.equal(friendlyToolError("plain string", "en"), "plain string");
+  const es = friendlyToolError(new Error("轨道序号 9 无效"), "es");
+  assert.match(es, /operación de la herramienta/i);
+  assert.doesNotMatch(es, /[\u3400-\u9fff]/u);
+});
+
+test("legacy tool prose is sanitized without changing structured values", () => {
+  const result = sanitizeToolResultLanguage({
+    track_name: "鼓组",
+    track_index: 0,
+    message: "analysis evidence stays intact",
+    warning: "操作返回警告。",
+    undo: "已删除；请在 Live 中撤销。",
+  }, "es") as Record<string, unknown>;
+  assert.equal(result.track_name, "鼓组");
+  assert.equal(result.track_index, 0);
+  assert.equal(result.message, "analysis evidence stays intact");
+  assert.match(String(result.warning), /advertencia/i);
+  assert.match(String(result.undo), /Deshacer/i);
+});
+
+test("background-task boundary hides a mismatched-language raw error", () => {
+  const message = friendlyBoundaryError(new Error("轨道序号 9 无效"), "es");
+  assert.match(message, /error interno/i);
+  assert.doesNotMatch(message, /[\u3400-\u9fff]/u);
 });

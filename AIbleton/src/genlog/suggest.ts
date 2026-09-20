@@ -4,14 +4,15 @@
  * The refine loop's self-correction surface: which knob to turn when the
  * artifact missed the declared bar. No LLM guessing — a closed rule table
  * keyed by the failed criterion's metric and the direction of the gap.
- * Prompt keywords are English because every provider's prompt language is;
- * the surrounding explanation follows the chat's Chinese-first style.
+ * Prompt keywords stay English because every provider's prompt language is;
+ * the surrounding explanation follows the active chat language.
  *
  * One hint per failed criterion, and one global rule: adjust ONE thing per
  * iteration — a refinement that changes five parameters teaches nothing.
  */
 
 import type { AudioBandName } from "../dsp.js";
+import { diagnosticLanguage, goalText } from "../goal/i18n.js";
 import type { GenCriterionMetric } from "../goal/types.js";
 
 /** Prompt keywords to ADD when the metric must move up / down. */
@@ -66,9 +67,15 @@ export interface GenGap {
  * gap always yields the same hint, so the retry surface is testable and the
  * model cannot be gaslit by phrasing drift.
  */
-export function suggestForGenGap(gap: GenGap): string {
+export function suggestForGenGap(gap: GenGap, language?: string): string {
+  const lang = diagnosticLanguage(language);
   if (gap.metric === "band") {
     const hint = BAND_HINTS[gap.band ?? "mid"];
+    if (lang !== "zh") {
+      return gap.direction === "up"
+        ? `${gap.band}: ${goalText(language, "increase")} → add \"${hint}\" to the prompt`
+        : `${gap.band}: ${goalText(language, "decrease")} → add \"light ${gap.band}, less ${gap.band} weight\" to the prompt`;
+    }
     const line =
       gap.direction === "up"
         ? `${gap.band} 频段不足 → prompt 加入「${hint}」，并考虑移除与该频段冲突的描述`
@@ -76,9 +83,17 @@ export function suggestForGenGap(gap: GenGap): string {
     return line;
   }
   const h = PROMPT_HINTS[gap.metric];
-  if (!h) return `${gap.metric} 不达标 → 调整 prompt 后重新生成`;
+  if (!h) {
+    return lang === "zh"
+      ? `${gap.metric} 不达标 → 调整 prompt 后重新生成`
+      : `${gap.metric}: target not met → adjust the prompt and generate again`;
+  }
   const kw = gap.direction === "up" ? h.up : h.down;
   const avoid = AVOID_HINTS[gap.metric];
+  if (lang !== "zh") {
+    return `${gap.metric}: ${goalText(language, gap.direction === "up" ? "increase" : "decrease")} → add \"${kw}\" to the prompt` +
+      (avoid ? `; avoid conflicting terms` : "");
+  }
   return (
     `${gap.metric} 需要${gap.direction === "up" ? "提升" : "降低"} → prompt 加入「${kw}」` +
     (avoid ? `；避免 ${avoid}` : "")
@@ -89,3 +104,7 @@ export function suggestForGenGap(gap: GenGap): string {
 export const REFINE_DISCIPLINE =
   "每轮只调一个主要方向（其它 prompt 内容保持不变），这样每轮的 diff 才能归因；" +
   "生成参数（时长/器乐/歌词）除非目标涉及，否则保持与上一轮一致。";
+
+export function refineDiscipline(language?: string): string {
+  return diagnosticLanguage(language) === "zh" ? REFINE_DISCIPLINE : goalText(language, "refineDiscipline");
+}

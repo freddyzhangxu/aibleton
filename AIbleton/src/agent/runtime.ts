@@ -37,6 +37,7 @@ import {
 } from "../goal/types.js";
 import { buildGoalView, type GoalView } from "../goal/view.js";
 import { evaluateGoal } from "../goal/evaluate.js";
+import { goalIssue, goalText, normalizeGoalLanguage } from "../goal/i18n.js";
 import { normalizePlan, planNeedsAudio, type MusicPlan } from "../plan/types.js";
 import { buildPlanReport, executedStepIds, type PlanReport } from "../plan/check.js";
 import {
@@ -69,7 +70,7 @@ import {
   diffGenerations,
   latestGeneration,
   loadGenLog,
-  REFINE_DISCIPLINE,
+  refineDiscipline,
   suggestForGenGap,
   type GenGap,
 } from "../genlog/index.js";
@@ -96,10 +97,11 @@ import {
   isDeleteTool,
 } from "../chat/deleteauth.js";
 import * as fs from "node:fs";
-import { friendlyToolError } from "../errors.js";
+import { actionableError, friendlyToolError, sanitizeToolResultLanguage } from "../errors.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
 import { truncateResult } from "../chat/session.js";
 import { clearTurnGoalOutcome, setTurnGoalOutcome } from "./turnoutcome.js";
+import { commonText } from "../i18n/common.js";
 
 // ---------- Goal/Intent layer (goal/) ----------
 //
@@ -217,21 +219,26 @@ const PLAN_META_TOOLS = new Set(["set_goal", "set_plan"]);
 /** Known tool names for plan validation — built once from TOOLS. */
 const VALID_TOOL_NAMES: ReadonlySet<string> = new Set(TOOLS.map((t) => t.name));
 
+function localizedNormalizationWarnings(
+  warnings: string[],
+  kind: "invalidGoalWarning" | "invalidPlanWarning",
+): string[] {
+  if (!warnings.length) return [];
+  if (toolState.activeLanguage === "zh") return warnings;
+  return [commonText(toolState.activeLanguage, kind)];
+}
+
 export function handleSetPlan(context: Ctx, input: Record<string, unknown>): unknown {
   if (!pendingGoal) {
-    throw new Error("set_plan 需要先声明目标 — 请先调用 set_goal（计划必须挂在目标上）。 / Call set_goal first: a plan belongs to a declared goal.");
+    throw actionableError(commonText(toolState.activeLanguage, "planRequiresGoal"));
   }
   const norm = normalizePlan(input, VALID_TOOL_NAMES);
   if (!norm.steps) {
-    throw new Error(
-      `set_plan 未生效：没有有效步骤。` + (norm.warnings.length ? ` ${norm.warnings.join("；")}` : ""),
-    );
+    throw actionableError(commonText(toolState.activeLanguage, "planNoValidSteps"));
   }
-  const warnings = [...norm.warnings];
+  const warnings = localizedNormalizationWarnings(norm.warnings, "invalidPlanWarning");
   if (mutationsThisTurn > 0) {
-    warnings.push(
-      `注意：本回合已有 ${mutationsThisTurn} 次改动先于 set_plan 执行 — 计划应在动手之前声明（步骤匹配仍会回放已执行的调用）。`,
-    );
+    warnings.push(commonText(toolState.activeLanguage, "planDeclaredLate", mutationsThisTurn));
   }
   pendingPlan = { goal: pendingGoal.goal, steps: norm.steps };
   // Replay the turn so far: a plan declared late still gets correct statuses.
@@ -275,13 +282,10 @@ function summarizeView(v: GoalView): Record<string, unknown> {
 export async function handleSetGoal(context: Ctx, input: Record<string, unknown>): Promise<unknown> {
   const norm = normalizeGoal(input);
   if (!norm.goal) {
-    throw new Error(
-      `set_goal 未生效：没有有效的 successCriteria/constraints。` +
-        (norm.warnings.length ? ` ${norm.warnings.join("；")}` : ""),
-    );
+    throw actionableError(commonText(toolState.activeLanguage, "goalNoValidCriteria"));
   }
   const late = mutationsThisTurn > 0;
-  const warnings = [...norm.warnings];
+  const warnings = localizedNormalizationWarnings(norm.warnings, "invalidGoalWarning");
   // PR16: an optional reference track rides the goal as comparison evidence.
   // Parsed BEFORE the baseline block so audio enrichment covers a reference
   // comparison too (gaps on audio metrics need the current side decoded).
@@ -293,14 +297,12 @@ export async function handleSetGoal(context: Ctx, input: Record<string, unknown>
   const referenceTempo =
     typeof refInput?.tempo_bpm === "number" && refInput.tempo_bpm > 0 ? refInput.tempo_bpm : undefined;
   if (late && !pendingGoal) {
-    warnings.push(
-      `注意：本回合已有 ${mutationsThisTurn} 次改动先于 set_goal 执行，基线捕获的是改动后的状态 — set_goal 应在任何修改类工具之前调用。`,
-    );
+    warnings.push(commonText(toolState.activeLanguage, "goalDeclaredLate", mutationsThisTurn));
   }
   if (pendingPlan) {
     // The goal the plan was built for just changed — the old plan is stale.
     pendingPlan = null;
-    warnings.push(`目标已重新声明，之前的计划已清除 — 请重新调用 set_plan。`);
+    warnings.push(commonText(toolState.activeLanguage, "goalRedeclared"));
   }
   // Audio criteria judge clip source files: decode them before capturing the
   // baseline so the after-view compares like with like. Cache makes the
@@ -362,9 +364,7 @@ export async function handleSetGoal(context: Ctx, input: Record<string, unknown>
       pendingGoal.referenceAnalysis = undefined;
       pendingGoal.referenceError = outcome.error;
       pendingGoal.referencePinnedSectionId = undefined;
-      warnings.push(
-        `参考音频不可用（${outcome.error}${outcome.message ? `: ${outcome.message}` : ""}）— 目标校验将不使用参考对比，其余流程不受影响。`,
-      );
+      warnings.push(commonText(toolState.activeLanguage, "referenceUnavailable", outcome.error));
       toolHooks.debugLog(context, `REFERENCE ${outcome.error}: ${referencePath}${outcome.message ? ` · ${outcome.message}` : ""}`);
     }
   }
@@ -461,25 +461,20 @@ export async function handleSetGoal(context: Ctx, input: Record<string, unknown>
 
 type GoalGateResult = { inject: string } | { appendNote: string } | null;
 
-const GOAL_RETRY_TAIL: Record<string, string> = {
-  zh: "请继续调用工具直到标准满足；若确实无法满足，向用户如实说明卡在哪一步。禁止在标准未满足时声称已完成。 / Keep working until the criteria pass, or tell the user honestly what is blocking you — do NOT claim completion while they are unmet.",
-  en: "Keep working until the criteria pass, or tell the user honestly what is blocking you — do NOT claim completion while they are unmet.",
-};
-
 /** Plan diagnosis appended to goal-gate messages: which steps never ran and
  * which predicted effects didn't materialize — the retry's self-correction
  * target. Empty when the plan fully executed and every effect was observed. */
-function planDiagnosisLines(report: PlanReport): string[] {
+function planDiagnosisLines(report: PlanReport, language?: string): string[] {
   const lines: string[] = [];
   const unexecuted = report.unexecuted.map(
     (s) => `${s.id}「${s.description}」${s.tool ? ` (${s.tool})` : ""}`,
   );
-  if (unexecuted.length) lines.push(`计划中未执行的步骤：${unexecuted.join("；")}`);
+  if (unexecuted.length) lines.push(goalText(language, "unexecutedSteps", unexecuted.join("; ")));
   const missed = report.unobserved.map(
-    (fx) => `${fx.stepId}「${fx.description}」: 期望 ${fx.expected}${fx.actual ? `，实际 ${fx.actual}` : ""}`,
+    (fx) => goalIssue(language, `${fx.stepId} "${fx.description}"`, fx.expected, fx.actual),
   );
-  if (missed.length) lines.push(`预期效果未观察到：${missed.join("；")}`);
-  if (lines.length) lines.unshift(`【计划诊断 / Plan】已执行 ${report.executedCount}/${report.total} 步：`);
+  if (missed.length) lines.push(goalText(language, "unobservedEffects", missed.join("; ")));
+  if (lines.length) lines.unshift(goalText(language, "planDiagnosis", report.executedCount, report.total));
   return lines;
 }
 
@@ -498,29 +493,26 @@ function goalRetryMessage(
   referenceLines?: string[],
 ): string {
   const lines: string[] = [
-    `【目标校验 / Goal check】第 ${retries}/${AGENT_MAX_RETRIES} 次校验，目标「${goal.objective}」尚未达成：`,
+    goalText(language, "goalRetry", retries, AGENT_MAX_RETRIES, goal.objective),
   ];
-  if (ev.constraintIssues.length) lines.push(`约束违反：${ev.constraintIssues.join("；")}`);
-  if (ev.criteriaIssues.length) lines.push(`未达成标准：${ev.criteriaIssues.join("；")}`);
-  if (plan) lines.push(...planDiagnosisLines(plan));
-  if (sectionVer && sectionName) lines.push(...presentSectionVerification(sectionVer, sectionName));
+  if (ev.constraintIssues.length) lines.push(goalText(language, "constraintViolations", ev.constraintIssues.join("; ")));
+  if (ev.criteriaIssues.length) lines.push(goalText(language, "unmetCriteria", ev.criteriaIssues.join("; ")));
+  if (plan) lines.push(...planDiagnosisLines(plan, language));
+  if (sectionVer && sectionName) lines.push(...presentSectionVerification(sectionVer, sectionName, language));
   if (referenceLines?.length) lines.push(...referenceLines);
   if (replanned) {
     // The loop's single retry IS the replan: the old route already missed, so
     // it is cleared rather than re-run. A fresh focused plan is invited, not
     // required — a one-call fix may go directly.
-    lines.push(
-      `原计划已清除 — 请根据以上诊断重新声明一个聚焦剩余差距的 set_plan（差距很小也可直接修复）。` +
-        ` / The previous plan has been cleared — re-declare a focused set_plan for the remaining gap (or fix it directly if small).`,
-    );
+    lines.push(goalText(language, "planCleared"));
   }
-  lines.push(GOAL_RETRY_TAIL[language ?? ""] ?? GOAL_RETRY_TAIL.zh);
+  lines.push(goalText(language, "retryInstruction"));
   return lines.join("\n");
 }
 
 /** Compact diff of the last two registry records — "what the previous
  * refinement actually changed", so the next prompt edit is attributable. */
-function lastIterationDiffLines(): string[] {
+function lastIterationDiffLines(language?: string): string[] {
   const records = loadGenLog();
   if (records.length < 2) return [];
   const diff = diffGenerations(records[records.length - 2], records[records.length - 1]);
@@ -531,8 +523,8 @@ function lastIterationDiffLines(): string[] {
   if (!entries.length) return [];
   const fmt = (v: number) => String(Math.round(v * 100) / 100);
   return [
-    `上一轮迭代变化（${diff.from} → ${diff.to}）：` +
-      entries.map(([m, e]) => `${m} ${fmt(e!.before)}→${fmt(e!.after)}（Δ ${e!.delta > 0 ? "+" : ""}${fmt(e!.delta)}）`).join("，"),
+    goalText(language, "previousIteration", diff.from, diff.to) + " " +
+      entries.map(([m, e]) => `${m} ${fmt(e!.before)}→${fmt(e!.after)} (Δ ${e!.delta > 0 ? "+" : ""}${fmt(e!.delta)})`).join(", "),
   ];
 }
 
@@ -544,20 +536,21 @@ function goalRefineMessage(
   ev: GoalEvaluation,
   genGaps: GenGap[],
   refinements: number,
+  language?: string,
 ): string {
   const lines: string[] = [
-    `【生成迭代 / Generation refine】第 ${refinements}/${AGENT_MAX_REFINEMENTS} 次迭代 — 目标「${goal.objective}」的生成产物尚未达标：`,
+    goalText(language, "generationRefine", refinements, AGENT_MAX_REFINEMENTS, goal.objective),
   ];
   const genIssues = [...ev.constraintIssues, ...ev.criteriaIssues].filter((i) => i.startsWith("gen."));
-  if (genIssues.length) lines.push(`未达成：${genIssues.join("；")}`);
-  if (refinements > 1) lines.push(...lastIterationDiffLines());
-  lines.push(`调整建议：${genGaps.map((g) => suggestForGenGap(g)).join("；")}`);
-  lines.push(REFINE_DISCIPLINE);
+  if (genIssues.length) lines.push(goalText(language, "generationUnmet", genIssues.join("; ")));
+  if (refinements > 1) lines.push(...lastIterationDiffLines(language));
+  lines.push(goalText(language, "adjustmentSuggestions", genGaps.map((g) => suggestForGenGap(g, language)).join("; ")));
+  lines.push(refineDiscipline(language));
   lines.push(
-    `请用调整后的 prompt 再次调用 generate_audio（建议带 importTo 直接上轨）。剩余迭代预算：${AGENT_MAX_REFINEMENTS - refinements} 次。` +
+    goalText(language, "generateAgain", AGENT_MAX_REFINEMENTS - refinements) +
       (toolHooks.getAudioAutoRefine()
         ? ""
-        : `（autoRefine 未开启，每次生成仍需你确认 — 可在 设置 → 音频生成 里打开自动迭代）`),
+        : goalText(language, "autoRefineOff")),
   );
   return lines.join("\n");
 }
@@ -568,13 +561,12 @@ function goalRefineMessage(
  * verdict the user saw. The measured pass now always lands as a system line
  * with the actual numbers, so a fabricated failure is visibly contradicted. */
 function goalMetNote(ev: GoalEvaluation, language?: string): string {
-  const zh = (language ?? "").startsWith("zh") || !language;
-  const head = zh ? "\n\n✅ 目标校验通过（系统实测）：" : "\n\n✅ Goal check passed (server-measured): ";
+  const head = goalText(language, "goalPassed");
   const passed = ev.checks
     .filter((c) => c.passed)
     .map((c) => `${c.id}${c.actual ? ` = ${c.actual}` : ""}`)
-    .join("；");
-  const tail = zh ? "。以系统实测为准。" : ". Trust this over any text above.";
+    .join("; ");
+  const tail = goalText(language, "trustMeasured");
   return `${head}${passed || "—"}${tail}`;
 }
 
@@ -583,17 +575,12 @@ function goalOutcomeSummary(ev: GoalEvaluation, met: boolean): string | undefine
     const passed = ev.checks
       .filter((c) => c.passed)
       .map((c) => `${c.id}${c.actual ? ` = ${c.actual}` : ""}`)
-      .join("；");
+      .join("; ");
     return passed || undefined;
   }
-  const issues = [...ev.constraintIssues, ...ev.criteriaIssues].join("；");
+  const issues = [...ev.constraintIssues, ...ev.criteriaIssues].join("; ");
   return issues || undefined;
 }
-
-const GOAL_UNMET_NOTE: Record<string, string> = {
-  zh: `\n\n⚠️ 目标校验未通过（系统已重试 ${AGENT_MAX_RETRIES} 次）：`,
-  en: `\n\n⚠️ Goal check failed (retried ${AGENT_MAX_RETRIES}× by the server): `,
-};
 
 function goalUnmetNote(
   ev: GoalEvaluation,
@@ -603,15 +590,12 @@ function goalUnmetNote(
   sectionName?: string,
   referenceLines?: string[],
 ): string {
-  const head = GOAL_UNMET_NOTE[language ?? ""] ?? GOAL_UNMET_NOTE.zh;
-  const issues = [...ev.constraintIssues, ...ev.criteriaIssues].join("；");
-  const planLines = plan ? planDiagnosisLines(plan) : [];
-  if (sectionVer && sectionName) planLines.push(...presentSectionVerification(sectionVer, sectionName));
+  const head = goalText(language, "goalFailed", AGENT_MAX_RETRIES);
+  const issues = [...ev.constraintIssues, ...ev.criteriaIssues].join("; ");
+  const planLines = plan ? planDiagnosisLines(plan, language) : [];
+  if (sectionVer && sectionName) planLines.push(...presentSectionVerification(sectionVer, sectionName, language));
   if (referenceLines?.length) planLines.push(...referenceLines);
-  const tail =
-    (language ?? "").startsWith("zh") || !language
-      ? "。以上为系统对 Live Set 的实际检测结果，与上文表述如有出入以检测结果为准。"
-      : ". This is the server's measured state of the Live Set — trust it over the text above.";
+  const tail = goalText(language, "trustMeasuredFailure");
   return `${head}${issues}${planLines.length ? `\n${planLines.join("\n")}` : ""}${tail}`;
 }
 
@@ -621,6 +605,7 @@ function goalUnmetNote(
 export async function goalGate(context: Ctx, language?: string): Promise<GoalGateResult> {
   const held = pendingGoal;
   if (!held) return null;
+  const locale = normalizeGoalLanguage(language);
   // The gate re-measures the Set (and may decode clip audio) — that work is
   // "analyzing" from the user's seat, not idle thinking.
   toolState.phase = "analyzing";
@@ -634,12 +619,12 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
     }
     const after = buildGoalView(afterState);
     if (goalNeedsGenlog(held.goal)) attachLatestGeneration(after);
-    const ev = evaluateGoal(held.goal, held.baseline, after);
+    const ev = evaluateGoal(held.goal, held.baseline, after, locale);
     // Plan diagnosis rides the SAME before/after views, so a plan effect and
     // a goal criterion can never disagree about the numbers. The plan never
     // gates: a met goal clears it silently (debugLog only).
     const plan = pendingPlan
-      ? buildPlanReport(pendingPlan, executedToolsThisTurn, held.baseline, after)
+      ? buildPlanReport(pendingPlan, executedToolsThisTurn, held.baseline, after, locale)
       : null;
     // PR15: when the goal resolved a target section, re-analyze THAT section
     // and judge the before/after change against goal-aware criteria. One
@@ -677,6 +662,7 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
           if (afterRefCtx) {
             referenceLines = presentReferenceVerification(
               verifyReferenceProgress(held.section.reference, afterRefCtx),
+              locale,
             );
           }
         }
@@ -724,7 +710,7 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
           (plan ? ` · plan ${plan.executedCount}/${plan.total} steps` : "") +
           (sectionVer ? ` · section ${sectionVer.status}` : ""),
       );
-      return { appendNote: goalMetNote(ev, language) };
+      return { appendNote: goalMetNote(ev, locale) };
     }
     toolHooks.debugLog(
       context,
@@ -746,7 +732,7 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
       pendingGoal = null;
       pendingPlan = null;
       return {
-        appendNote: goalUnmetNote(ev, language, plan ?? undefined, sectionVer, held.section?.target.name, referenceLines),
+        appendNote: goalUnmetNote(ev, locale, plan ?? undefined, sectionVer, held.section?.target.name, referenceLines),
       };
     }
     if (action === "refine") {
@@ -760,7 +746,7 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
         context,
         `GOAL REFINE (${held.refinements}/${AGENT_MAX_REFINEMENTS}): ${genGaps.map((g) => g.metric).join(", ")}`,
       );
-      return { inject: goalRefineMessage(held.goal, ev, genGaps, held.refinements) };
+      return { inject: goalRefineMessage(held.goal, ev, genGaps, held.refinements, locale) };
     }
     held.retries++;
     // The single retry IS the replan: the old route already missed, so clear
@@ -776,7 +762,7 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
         held.goal,
         ev,
         held.retries,
-        language,
+        locale,
         plan ?? undefined,
         replanned,
         sectionVer,
@@ -827,7 +813,7 @@ export async function callTool(
   if (!READ_ONLY_TOOLS.has(name)) {
     const refusal = selectionGuard(context, resolvedSelection(context), toolState.activeGlobalIntent, name, input);
     if (refusal) {
-      const refused = { error: refusal };
+      const refused = { error: friendlyToolError(refusal, toolState.activeLanguage) };
       actions.push({ tool: name, input, result: refused });
       toolHooks.debugLog(context, `TOOL ${name} REFUSED: selection boundary`);
       return JSON.stringify(refused);
@@ -836,7 +822,7 @@ export async function callTool(
   // Delete permission is never inferred from YOLO, tool history, or a prior
   // chat message. The dispatcher repeats this guard as defense in depth.
   if (isDeleteTool(name) && !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization)) {
-    const refused = deleteAuthorizationError(name);
+    const refused = deleteAuthorizationError(name, toolState.activeLanguage);
     actions.push({ tool: name, input, result: refused });
     toolHooks.debugLog(context, `TOOL ${name} REFUSED: no explicit delete authorization`);
     return JSON.stringify(refused);
@@ -850,7 +836,7 @@ export async function callTool(
     !READ_ONLY_TOOLS.has(name) &&
     countMutations(executedToolsThisTurn, READ_ONLY_TOOLS) >= AGENT_MAX_STEPS
   ) {
-    const refused = stepBudgetError();
+    const refused = stepBudgetError(toolState.activeLanguage);
     actions.push({ tool: name, input, result: refused });
     toolHooks.debugLog(context, `TOOL ${name} REFUSED: mutation budget ${AGENT_MAX_STEPS} exhausted`);
     return JSON.stringify(refused);
@@ -872,7 +858,7 @@ export async function callTool(
   if (needsConfirm) {
     const allowed = await askConfirmation(name, input);
     if (!allowed) {
-      const denied = { error: "用户拒绝了该操作 / user denied this action" };
+      const denied = { error: commonText(toolState.activeLanguage, "userDenied") };
       actions.push({ tool: name, input, result: denied });
       toolHooks.debugLog(context, `TOOL ${name} DENIED by user`);
       return JSON.stringify(denied);
@@ -887,7 +873,8 @@ export async function callTool(
     // happened"); the step's effect check carries that diagnosis instead.
     if (!PLAN_META_TOOLS.has(name)) executedToolsThisTurn.push(name);
   } catch (err) {
-    result = { error: friendlyToolError(err) };
+    toolHooks.debugLog(context, `TOOL ${name} ERROR: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
+    result = { error: friendlyToolError(err, toolState.activeLanguage) };
   } finally {
     // The model digests the result next — back to the generic phase.
     toolState.phase = "thinking";
@@ -912,9 +899,11 @@ export async function callTool(
   ) {
     mutationsThisTurn++;
   }
+  const rawResultJson = JSON.stringify(result);
+  result = sanitizeToolResultLanguage(result, toolState.activeLanguage);
   actions.push({ tool: name, input, result });
   const resultJson = JSON.stringify(result);
-  toolHooks.debugLog(context, `TOOL ${name} ${JSON.stringify(input)} -> ${resultJson.slice(0, 400)}`);
+  toolHooks.debugLog(context, `TOOL ${name} ${JSON.stringify(input)} -> ${rawResultJson.slice(0, 400)}`);
   return truncateResult(resultJson);
 }
 

@@ -22,4 +22,4 @@ export {
   recordGeneration,
   type RecordGenerationInput,
 } from "./store.js";
-export { REFINE_DISCIPLINE, suggestForGenGap, type GenGap } from "./suggest.js";
+export { REFINE_DISCIPLINE, refineDiscipline, suggestForGenGap, type GenGap } from "./suggest.js";

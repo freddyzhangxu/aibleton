@@ -27,6 +27,7 @@
  */
 
 import type { MusicGoal } from "../../goal/types.js";
+import { goalIssue, goalText } from "../../goal/i18n.js";
 import type { SectionFeatures } from "../features/types.js";
 import type { MusicalRelationships } from "../relationships/types.js";
 import type { CreativeAction, CreativeActionKind } from "../actions/types.js";
@@ -467,18 +468,18 @@ export function verifySectionChange(
 // complaint. Empty when the judged criteria all passed.
 // ---------------------------------------------------------------------------
 
-export function presentSectionVerification(ver: SectionVerification, sectionName: string): string[] {
+export function presentSectionVerification(ver: SectionVerification, sectionName: string, language?: string): string[] {
   const r2 = (x: number): number => Math.round(x * 100) / 100;
   const fmt = (v?: number): string => (v === undefined ? "?" : String(r2(v)));
   const fmtCrit = (c: SectionCriterionResult): string =>
-    `${c.metric} 期望 ${c.direction}: ${fmt(c.before)}→${fmt(c.after)}` +
+    goalIssue(language, c.metric, `${c.direction}: ${fmt(c.before)}→${fmt(c.after)}`) +
     (c.delta !== undefined ? ` (Δ${c.delta >= 0 ? "+" : ""}${r2(c.delta)})` : "") +
-    (c.status === "unknown" ? " — 数据不足" : "") +
+    (c.status === "unknown" ? ` — ${goalText(language, "dataInsufficient")}` : "") +
     (c.referenceSectionId !== undefined ? ` [vs ${c.referenceSectionId}]` : "");
   const lines: string[] = [];
   if (!ver.matchedAfter) {
     lines.push(
-      `段落校验 / Section「${sectionName}」: 修改后无法重新定位目标段落（可能已被删除或编曲结构大变），按整曲标准判断。`,
+      goalText(language, "sectionRelocateFailed", sectionName),
     );
     return lines;
   }
@@ -491,7 +492,13 @@ export function presentSectionVerification(ver: SectionVerification, sectionName
   const judgedMissed = judged.filter((c) => c.status !== "passed");
   if (!judgedMissed.length) return lines;
   lines.push(
-    `段落校验 / Section「${sectionName}」${ver.status === "failed" ? "未达标" : "无法确认"}：${judgedMissed.map(fmtCrit).join("；")}`,
+    goalText(
+      language,
+      "sectionResult",
+      sectionName,
+      goalText(language, ver.status === "failed" ? "sectionFailed" : "sectionUnknown"),
+      judgedMissed.map(fmtCrit).join("; "),
+    ),
   );
   const judgedKeys = new Set(
     judged.map((c) => `${c.metric}:${c.direction}:${c.referenceSectionId ?? ""}`),
@@ -500,7 +507,7 @@ export function presentSectionVerification(ver: SectionVerification, sectionName
     (c) => c.status !== "passed" && !judgedKeys.has(`${c.metric}:${c.direction}:${c.referenceSectionId ?? ""}`),
   );
   if (supportingMissed.length) {
-    lines.push(`支持性指标 / supporting: ${supportingMissed.map(fmtCrit).join("；")}`);
+    lines.push(goalText(language, "supporting", supportingMissed.map(fmtCrit).join("; ")));
   }
   return lines;
 }
