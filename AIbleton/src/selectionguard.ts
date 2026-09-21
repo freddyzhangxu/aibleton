@@ -23,7 +23,7 @@ const MUTATING_TOOLS = new Set([
   "arrange_song", "update_memory", "set_tempo", "create_midi_track",
   "create_audio_track", "duplicate_track", "delete_track", "create_move_track",
   "move_pair", "move_upload_sample", "rename_track", "set_track_state",
-  "insert_device", "delete_device", "set_device_parameter", "set_device_parameters",
+  "insert_device", "replace_device", "delete_device", "set_device_parameter", "set_device_parameters",
   "set_track_mixer", "load_drum_kit", "import_audio_clip", "load_sample",
   "create_take_lane", "write_take_midi_clip", "import_take_audio_clip",
   "set_audio_clip_warp",

@@ -137,6 +137,28 @@ const insertDevice: PostconditionRule = (_input, result) => {
   ];
 };
 
+const replaceDevice: PostconditionRule = (_input, result) => {
+  if (result.replacement_not_applied === true) return [];
+  const ti = Number(result.track_index);
+  const replacement = String(result.replacement);
+  const removed = String(result.replaced);
+  return [
+    {
+      id: `track[${ti}].device-replacement`,
+      expected: `存在「${replacement}」且已移除「${removed}」`,
+      probe: (song) => {
+        const t = trackAt(song, ti);
+        if (!t) return noTrack(ti);
+        const names = t.devices.map((device) => device.name);
+        return {
+          passed: names.includes(replacement) && !names.includes(removed),
+          actual: names.join(", ") || "(无设备)",
+        };
+      },
+    },
+  ];
+};
+
 const setDeviceParameter: PostconditionRule = (_input, result) => {
   const ti = Number(result.track_index);
   const deviceName = String(result.device);
@@ -256,6 +278,7 @@ const POSTCONDITIONS: Record<string, PostconditionRule> = {
   create_midi_track: createTrack,
   create_audio_track: createTrack,
   insert_device: insertDevice,
+  replace_device: replaceDevice,
   set_device_parameter: setDeviceParameter,
   write_midi_clip: writeMidiClip,
   write_session_clip: writeSessionClip,

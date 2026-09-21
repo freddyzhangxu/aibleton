@@ -129,6 +129,7 @@ export function listenHintFor(
     case "load_drum_kit":
     case "load_sample":
     case "insert_device":
+    case "replace_device":
       // Track-level timbre change — no single bar; hear it in context.
       return finish(one(result), {});
     default:

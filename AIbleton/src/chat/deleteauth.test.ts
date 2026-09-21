@@ -38,11 +38,13 @@ test("authorizes named device replacement in English and Chinese", () => {
     "Replace the Operator devices on Track 1 and Track 2 with piano samples.",
   );
   assert.equal(deleteToolIsAuthorized("delete_device", english), true);
+  assert.equal(deleteToolIsAuthorized("replace_device", english), true);
   assert.equal(deleteToolIsAuthorized("delete_track", english), false);
   assert.equal(deleteToolIsAuthorized("delete_arrangement_clip", english), false);
 
   const chinese = deleteAuthorizationFor("把 Track 1 和 Track 2 的 Operator 换成钢琴采样。");
   assert.equal(deleteToolIsAuthorized("delete_device", chinese), true);
+  assert.equal(deleteToolIsAuthorized("replace_device", chinese), true);
   assert.equal(deleteToolIsAuthorized("delete_scene", chinese), false);
 });
 

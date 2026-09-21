@@ -27,6 +27,12 @@ test("makes named device replacement a verified sample-swap workflow", () => {
   assert.match(SYSTEM_PROMPT, /get_simpler_sample to verify every target/);
 });
 
+test("uses the safe replacement tool for named built-in device swaps", () => {
+  assert.match(SYSTEM_PROMPT, /replace_device/);
+  assert.match(SYSTEM_PROMPT, /allow_delete_first/);
+  assert.match(SYSTEM_PROMPT, /safe insertion.*fails/i);
+});
+
 test("keeps user bar ranges out of invented goal-section names", () => {
   assert.match(SYSTEM_PROMPT, /A user bar range is edit scope, not automatically a Section name/);
   assert.match(SYSTEM_PROMPT, /Never invent, merge, or normalize a Section name yourself/);

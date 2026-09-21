@@ -871,7 +871,13 @@ export async function callTool(
     // Plan-layer step matching counts every call that actually ran — a call
     // whose verify later fails still executed ("missed target" ≠ "never
     // happened"); the step's effect check carries that diagnosis instead.
-    if (!PLAN_META_TOOLS.has(name)) executedToolsThisTurn.push(name);
+    const executed = !(
+      result &&
+      typeof result === "object" &&
+      !Array.isArray(result) &&
+      (result as Record<string, unknown>).executed === false
+    );
+    if (!PLAN_META_TOOLS.has(name) && executed) executedToolsThisTurn.push(name);
   } catch (err) {
     toolHooks.debugLog(context, `TOOL ${name} ERROR: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
     result = { error: friendlyToolError(err, toolState.activeLanguage) };
