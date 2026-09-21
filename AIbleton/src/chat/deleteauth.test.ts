@@ -48,9 +48,9 @@ test("authorizes named device replacement in English and Chinese", () => {
   assert.equal(deleteToolIsAuthorized("delete_scene", chinese), false);
 });
 
-test("authorizes the explicit Chinese safe-replacement phrasing", () => {
+test("rejects a replacement request that forbids the required source deletion", () => {
   const auth = deleteAuthorizationFor("把第1轨（1-Operator）的 Operator 安全替换成 Analog；若失败不要删除 Operator。");
-  assert.equal(deleteToolIsAuthorized("replace_device", auth), true);
+  assert.equal(deleteToolIsAuthorized("replace_device", auth), false);
 });
 
 test("does not infer device deletion from vague or negated replacement requests", () => {
@@ -60,6 +60,7 @@ test("does not infer device deletion from vague or negated replacement requests"
     "把 lead 改成钢琴。",
     "不要替换 Operator。",
     "Don't replace the Operator device with a piano sample.",
+    "把 Operator 替换成 Analog；若失败不要删除 Operator。",
   ]) {
     assert.equal(deleteToolIsAuthorized("delete_device", deleteAuthorizationFor(text)), false, text);
   }

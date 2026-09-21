@@ -511,19 +511,15 @@ export const TOOLS = [
   {
     name: "replace_device",
     description:
-      "Safely replace one explicitly named built-in Live device on the same track. The default first inserts the replacement at the source device's position, verifies both devices, then deletes only the named source. Do NOT use insert_device to replace an existing instrument: it appends to the chain. If this tool returns replacement_not_applied with source_preserved:true, tell the user the safe insertion failed and ask for an explicit new request allowing deletion first; only then call again with allow_delete_first:true. Third-party plug-ins are not supported.",
+      "Replace one explicitly named built-in Live device on the same track. This deletes only the named source device FIRST, then inserts the replacement at the source position and verifies the final chain. Do NOT use insert_device to replace an existing instrument: it appends to the chain. If insertion fails after deletion, return the Live Undo recovery instruction; never retry or delete any further device. Third-party plug-ins are not supported.",
     input_schema: {
       type: "object",
       properties: {
         track_index: { type: "number", description: "0-based regular-track index" },
         track_name: { type: "string", description: TRACK_NAME_DESC },
-        source_device_name: { type: "string", description: "Current exact name of the device to remove after replacement succeeds" },
+        source_device_name: { type: "string", description: "Current exact name of the device to delete before inserting the replacement" },
         source_device_index: { type: "number", description: "Optional 0-based source device index; source_device_name is preferred" },
         replacement_device_name: { type: "string", description: "Built-in Live device to insert, e.g. Analog or Wavetable" },
-        allow_delete_first: {
-          type: "boolean",
-          description: "DANGEROUS fallback. Set true only after safe insertion failed AND the current user message explicitly authorizes deleting the named source before insertion. If insertion then fails, the user must use Live Undo.",
-        },
       },
       required: ["track_index", "source_device_name", "replacement_device_name"],
     },

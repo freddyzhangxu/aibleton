@@ -512,99 +512,42 @@ export async function runTool(
       if (replacementName.toLowerCase() === source.name.toLowerCase()) {
         throw new Error("替换设备不能与源设备同名");
       }
-
-      const safeFailure = (extra: Record<string, unknown>) =>
-        trackResult(ref, {
+      await context.withinTransaction(() => track.deleteDevice(source));
+      try {
+        const replacement = await context.withinTransaction(() =>
+          track.insertDevice(replacementName, sourceIndex),
+        );
+        const landed = track.devices[sourceIndex];
+        const sourceStillPresent = track.devices.some((device) => device.name === source.name);
+        if (!landed || landed.name !== replacement.name || sourceStillPresent) {
+          return trackResult(ref, {
+            replacement_not_applied: true,
+            source: source.name,
+            replacement: replacement.name,
+            source_deleted: true,
+            replacement_inserted_but_unverified: replacement.name,
+            mode: "delete_first",
+            undo: "源设备已删除，但新设备未能在预期位置验证；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。",
+          });
+        }
+        return trackResult(ref, {
+          replaced: source.name,
+          replacement: replacement.name,
+          source_device_index: sourceIndex,
+          replacement_device_index: sourceIndex,
+          mode: "delete_first",
+          verified: true,
+        });
+      } catch {
+        return trackResult(ref, {
           replacement_not_applied: true,
           source: source.name,
           replacement: replacementName,
-          source_preserved: true,
-          delete_first_available: true,
-          executed: false,
-          ...extra,
-        });
-
-      if (input.allow_delete_first === true) {
-        await context.withinTransaction(() => track.deleteDevice(source));
-        try {
-          const replacement = await context.withinTransaction(() =>
-            track.insertDevice(replacementName, sourceIndex),
-          );
-          const landed = track.devices[sourceIndex];
-          if (!landed || landed.name !== replacement.name) {
-            return trackResult(ref, {
-              replacement_not_applied: true,
-              source_deleted: true,
-              replacement_inserted_but_unverified: replacement.name,
-              mode: "delete_first",
-              undo: "源设备已删除，但新设备未能在预期位置验证；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。",
-            });
-          }
-          return trackResult(ref, {
-            replaced: source.name,
-            replacement: replacement.name,
-            source_device_index: sourceIndex,
-            replacement_device_index: sourceIndex,
-            mode: "delete_first",
-            verified: true,
-          });
-        } catch {
-          return trackResult(ref, {
-            replacement_not_applied: true,
-            source_deleted: true,
-            mode: "delete_first",
-            undo: "源设备已删除，但新设备插入失败；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。",
-          });
-        }
-      }
-
-      let replacement: Device<"1.0.0">;
-      try {
-        replacement = await context.withinTransaction(() =>
-          track.insertDevice(replacementName, sourceIndex),
-        );
-      } catch {
-        return safeFailure({ reason: "safe_insert_failed" });
-      }
-      const inserted = track.devices[sourceIndex];
-      const shiftedSource = track.devices[sourceIndex + 1];
-      if (!inserted || inserted.name !== replacement.name || !shiftedSource || shiftedSource.name !== source.name) {
-        return safeFailure({
-          reason: "safe_insert_unverified",
-          replacement_inserted_but_unverified: replacement.name,
-          undo: "新设备已插入但设备链未能安全验证；旧设备尚未删除。请在 Live 中检查设备链，必要时使用 Undo（⌘Z / Ctrl+Z）。",
+          source_deleted: true,
+          mode: "delete_first",
+          undo: "源设备已删除，但新设备插入失败；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。",
         });
       }
-      try {
-        await context.withinTransaction(() => track.deleteDevice(shiftedSource));
-      } catch {
-        return trackResult(ref, {
-          replacement_not_applied: true,
-          source: source.name,
-          replacement: replacement.name,
-          source_preserved: true,
-          replacement_inserted_but_source_retained: true,
-          undo: "新设备已插入，但旧设备删除失败；请在 Live 中检查设备链，必要时使用 Undo（⌘Z / Ctrl+Z）。",
-        });
-      }
-      const landed = track.devices[sourceIndex];
-      const sourceStillPresent = track.devices.some((device) => device.name === source.name);
-      if (!landed || landed.name !== replacement.name || sourceStillPresent) {
-        return trackResult(ref, {
-          replacement_not_applied: true,
-          source: source.name,
-          replacement: replacement.name,
-          undo: "设备链未能在替换后验证；请在 Live 中检查设备链，必要时使用 Undo（⌘Z / Ctrl+Z）。",
-        });
-      }
-      return trackResult(ref, {
-        replaced: source.name,
-        replacement: replacement.name,
-        source_device_index: sourceIndex,
-        replacement_device_index: sourceIndex,
-        mode: "safe",
-        verified: true,
-      });
     }
     case "delete_device": {
       const ref = resolveTrack(context, input, "track_index");

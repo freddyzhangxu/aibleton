@@ -53,54 +53,31 @@ async function withDeviceReplacementAuthorization<T>(fn: () => Promise<T>): Prom
   }
 }
 
-test("replace_device safely inserts before the source, verifies the chain, then removes only the source", async () => {
+test("replace_device deletes the source before inserting the replacement at its index", async () => {
   const { context, calls, devices } = replacementContext();
   const result = await withDeviceReplacementAuthorization(() =>
     runTool(context, "replace_device", replacementInput()),
   ) as Record<string, unknown>;
 
-  assert.deepEqual(calls, ["insert:Analog:0", "delete:Operator"]);
+  assert.deepEqual(calls, ["delete:Operator", "insert:Analog:0"]);
   assert.deepEqual(devices.map((device) => device.name), ["Analog", "Auto Filter"]);
   assert.equal(result.replaced, "Operator");
   assert.equal(result.replacement, "Analog");
   assert.equal(result.verified, true);
+  assert.equal(result.mode, "delete_first");
 });
 
-test("replace_device preserves the source when safe insertion fails", async () => {
+test("replace_device reports Undo recovery when insertion fails after deleting the source", async () => {
   const { context, calls, devices } = replacementContext({ failInsert: true });
   const result = await withDeviceReplacementAuthorization(() =>
     runTool(context, "replace_device", replacementInput()),
   ) as Record<string, unknown>;
 
-  assert.deepEqual(calls, ["insert:Analog:0"]);
-  assert.deepEqual(devices.map((device) => device.name), ["Operator", "Auto Filter"]);
-  assert.equal(result.replacement_not_applied, true);
-  assert.equal(result.source_preserved, true);
-  assert.equal(result.delete_first_available, true);
-});
-
-test("replace_device uses delete-first only when explicitly requested", async () => {
-  const { context, calls, devices } = replacementContext();
-  const result = await withDeviceReplacementAuthorization(() =>
-    runTool(context, "replace_device", replacementInput({ allow_delete_first: true })),
-  ) as Record<string, unknown>;
-
-  assert.deepEqual(calls, ["delete:Operator", "insert:Analog:0"]);
-  assert.deepEqual(devices.map((device) => device.name), ["Analog", "Auto Filter"]);
-  assert.equal(result.replaced, "Operator");
-  assert.equal(result.replacement, "Analog");
-  assert.equal(result.mode, "delete_first");
-});
-
-test("replace_device reports Undo recovery when delete-first insertion fails", async () => {
-  const { context, calls, devices } = replacementContext({ failInsert: true });
-  const result = await withDeviceReplacementAuthorization(() =>
-    runTool(context, "replace_device", replacementInput({ allow_delete_first: true })),
-  ) as Record<string, unknown>;
-
   assert.deepEqual(calls, ["delete:Operator", "insert:Analog:0"]);
   assert.deepEqual(devices.map((device) => device.name), ["Auto Filter"]);
+  assert.equal(result.replacement_not_applied, true);
   assert.equal(result.source_deleted, true);
+  assert.equal(result.mode, "delete_first");
   assert.match(String(result.undo), /Undo/);
 });
 

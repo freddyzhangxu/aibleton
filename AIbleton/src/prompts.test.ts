@@ -27,10 +27,10 @@ test("makes named device replacement a verified sample-swap workflow", () => {
   assert.match(SYSTEM_PROMPT, /get_simpler_sample to verify every target/);
 });
 
-test("uses the safe replacement tool for named built-in device swaps", () => {
+test("uses delete-first replacement for named built-in device swaps", () => {
   assert.match(SYSTEM_PROMPT, /replace_device/);
-  assert.match(SYSTEM_PROMPT, /allow_delete_first/);
-  assert.match(SYSTEM_PROMPT, /safe insertion.*fails/i);
+  assert.match(SYSTEM_PROMPT, /deletes the named source first/i);
+  assert.doesNotMatch(SYSTEM_PROMPT, /allow_delete_first/);
 });
 
 test("keeps user bar ranges out of invented goal-section names", () => {
