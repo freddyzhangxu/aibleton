@@ -14,7 +14,7 @@ import { buildMusicState } from "../../musicstate/builder.js";
 import { midiClip, note, snapshot, track } from "../../music/features/__tests__/fixtures.js";
 import { evaluateGoal } from "../evaluate.js";
 import { normalizeGoal } from "../types.js";
-import { buildGoalView, type GoalView } from "../view.js";
+import { buildGoalView, type GoalTrackMeasure, type GoalView } from "../view.js";
 
 const SCALE_OFF = { mode: false, root: 0, name: "", intervals: [] };
 const C_MAJOR = { mode: true, root: 0, name: "Major", intervals: [0, 2, 4, 5, 7, 9, 11] };
@@ -39,6 +39,24 @@ function goalWith(criterion: Parameters<typeof evaluateGoal>[0]["successCriteria
     constraints: [],
     successCriteria: [criterion],
   };
+}
+
+function untouchedGoal(names: string[]) {
+  return {
+    type: "edit" as const,
+    objective: "test",
+    constraints: [{ kind: "tracks_untouched" as const, names }],
+    successCriteria: [],
+  };
+}
+
+function goalTrack(
+  name: string,
+  type: "midi" | "audio",
+  notes = 0,
+  muted = false,
+): GoalTrackMeasure {
+  return { name, type, notes, muted, role: "unknown" };
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +146,56 @@ test("off_key_lte: pct 0 is a valid strict bound (zero off-key notes)", () => {
   assert.equal(evaluateGoal(goalWith({ kind: "off_key_lte", pct: 0 }), view(), clean).met, true);
   const dirty = view({ offKeyRatio: 0.01, offKeyScale: "Live scale C Major" });
   assert.equal(evaluateGoal(goalWith({ kind: "off_key_lte", pct: 0 }), view(), dirty).met, false);
+});
+
+// ---------------------------------------------------------------------------
+// tracks_untouched
+// ---------------------------------------------------------------------------
+
+test("tracks_untouched: inserting a track may renumber default tracks without changing their content", () => {
+  const names = ["1-Operator", "2-Drum Rack", "3-Audio", "4-Audio"];
+  const before = view({
+    trackCount: 4,
+    tracks: [
+      goalTrack("1-Operator", "midi", 24),
+      goalTrack("2-Drum Rack", "midi", 48),
+      goalTrack("3-Audio", "audio"),
+      goalTrack("4-Audio", "audio"),
+    ],
+  });
+  const after = view({
+    trackCount: 5,
+    tracks: [
+      goalTrack("1-Operator", "midi", 24),
+      goalTrack("2-Drum Rack", "midi", 48),
+      goalTrack("Bass", "midi", 16),
+      goalTrack("4-Audio", "audio"),
+      goalTrack("5-Audio", "audio"),
+    ],
+  });
+
+  assert.equal(evaluateGoal(untouchedGoal(names), before, after).met, true);
+});
+
+test("tracks_untouched: a renumbered default track with changed content still fails", () => {
+  const names = ["3-Audio", "4-Audio"];
+  const before = view({
+    tracks: [goalTrack("3-Audio", "audio"), goalTrack("4-Audio", "audio")],
+  });
+  const after = view({
+    tracks: [goalTrack("4-Audio", "audio", 1), goalTrack("5-Audio", "audio")],
+  });
+
+  assert.equal(evaluateGoal(untouchedGoal(names), before, after).met, false);
+});
+
+test("tracks_untouched: a missing custom-named track still fails", () => {
+  const before = view({ tracks: [goalTrack("Pads", "midi", 16)] });
+  const after = view({ tracks: [goalTrack("Bass", "midi", 16)] });
+  const ev = evaluateGoal(untouchedGoal(["Pads"]), before, after);
+
+  assert.equal(ev.met, false);
+  assert.match(ev.checks[0].actual ?? "", /Pads/);
 });
 
 // ---------------------------------------------------------------------------

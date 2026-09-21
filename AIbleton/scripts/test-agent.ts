@@ -99,7 +99,10 @@ console.log("== 预算拒绝的结构化 error ==");
   const err = stepBudgetError();
   check("带 error 键（弱模型对结构错误最敏感）", typeof err.error === "string" && err.error.length > 0);
   check("带 budget_exhausted 标记", err.budget_exhausted === true);
-  check("消息含预算数值与「未执行」语义", String(err.error).includes(String(AGENT_MAX_STEPS)) && String(err.error).includes("NOT executed"));
+  check(
+    "消息含预算数值与「未执行」语义",
+    String(err.error).includes(String(AGENT_MAX_STEPS)) && /not executed|未执行/i.test(String(err.error)),
+  );
 }
 
 // ---------------------------------------------------------------------------

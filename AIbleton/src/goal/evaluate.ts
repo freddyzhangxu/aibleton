@@ -115,12 +115,32 @@ function judgeRolePresent(
   };
 }
 
+const DEFAULT_TRACK_NAME = /^(\d+)-(MIDI|Audio)$/i;
+
+/** Live renumbers these names when a track is inserted before them. Custom
+ * names remain stable user intent and must therefore keep exact matching. */
+function isDefaultTrackName(track: GoalView["tracks"][number]): boolean {
+  const match = track.name.trim().match(DEFAULT_TRACK_NAME);
+  return match?.[2].toLowerCase() === track.type;
+}
+
+function sameUntouchedTrack(
+  before: GoalView["tracks"][number],
+  after: GoalView["tracks"][number],
+): boolean {
+  return before.type === after.type && before.muted === after.muted && before.notes === after.notes;
+}
+
 function judgeTracksUntouched(names: string[], before: GoalView, after: GoalView, language?: string): GoalCheck {
   const bad: string[] = [];
+
+  // User-assigned names are identity anchors. Preserve the existing exact
+  // lookup behavior for them, including the notes-only content proxy.
   for (const name of names) {
     const norm = name.trim().toLowerCase();
-    const a = after.tracks.find((t) => t.name.toLowerCase() === norm);
     const b = before.tracks.find((t) => t.name.toLowerCase() === norm);
+    if (b && isDefaultTrackName(b)) continue;
+    const a = after.tracks.find((t) => t.name.toLowerCase() === norm);
     if (!a) {
       bad.push(goalText(language, "trackGone", name));
       continue;
@@ -130,6 +150,31 @@ function judgeTracksUntouched(names: string[], before: GoalView, after: GoalView
     // tool schema) — content identity is what this constraint protects.
     if (b && a.notes !== b.notes) bad.push(goalText(language, "notesChanged", name, b.notes, a.notes));
   }
+
+  // Live's generated names (<ordinal>-MIDI/Audio) are positional, so adding
+  // a track can rename an otherwise untouched track. Match protected default
+  // tracks as an ordered, one-to-one subsequence by the properties this
+  // criterion can actually measure. This preserves deletions and content
+  // changes as failures without trying to undo cosmetic renumbering.
+  const protectedDefaults = before.tracks.filter((track) =>
+    names.some((name) => name.trim().toLowerCase() === track.name.trim().toLowerCase()) &&
+    isDefaultTrackName(track),
+  );
+  let afterCursor = 0;
+  for (const baseline of protectedDefaults) {
+    while (
+      afterCursor < after.tracks.length &&
+      !sameUntouchedTrack(baseline, after.tracks[afterCursor])
+    ) {
+      afterCursor++;
+    }
+    if (afterCursor < after.tracks.length) {
+      afterCursor++;
+      continue;
+    }
+    bad.push(goalText(language, "trackGone", baseline.name));
+  }
+
   return {
     id: `untouched[${names.join(",")}]`,
     passed: bad.length === 0,

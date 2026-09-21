@@ -33,6 +33,9 @@ export interface GoalGenMeasure {
 
 export interface GoalTrackMeasure {
   name: string;
+  /** Needed to recognize Live's renumbered default names without confusing
+   * MIDI and audio tracks that happen to have the same note count. */
+  type: "midi" | "audio";
   role: string; // TrackRole
   notes: number; // audible arrangement notes incl. loop repeats
   muted: boolean;
@@ -121,6 +124,7 @@ export function buildGoalView(state: MusicState): GoalView {
     const a = ma.trackAudio?.[i];
     return {
       name: ts.track.name,
+      type: ts.track.type,
       role: ma.trackRoles[i]?.role ?? "unknown",
       notes: ts.measurements?.audibleNotes ?? 0,
       muted: ts.muted,

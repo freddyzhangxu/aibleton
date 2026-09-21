@@ -9,6 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  AGENT_MAX_ROUNDS,
   AGENT_MAX_REFINEMENTS,
   AGENT_MAX_RETRIES,
   gateAction,
@@ -17,6 +18,10 @@ import {
 } from "../loop.js";
 
 const refinable = (used: number): RefineState => ({ available: true, used });
+
+test("provider round backstop leaves room for a final post-tool response", () => {
+  assert.equal(AGENT_MAX_ROUNDS, 22);
+});
 
 test("met goal passes regardless of refine availability", () => {
   assert.equal(gateAction(true, 0, 5, refinable(0)), "pass");

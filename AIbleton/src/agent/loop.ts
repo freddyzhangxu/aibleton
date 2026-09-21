@@ -42,10 +42,10 @@
 
 import { commonText } from "../i18n/common.js";
 
-/** Provider-round backstop — replaces the per-loop literal. Sized for the
- * refine loop: 12 covers a plain goal-cycle; each refinement adds a
- * generate (+import) round-trip of ~2 rounds on top. */
-export const AGENT_MAX_ROUNDS = 20;
+/** Provider-round backstop — replaces the per-loop literal. Twenty rounds
+ * cover the planned goal/refine cycle; two more leave room for the final
+ * post-tool response or measured goal check after a legitimate repair. */
+export const AGENT_MAX_ROUNDS = 22;
 
 /**
  * Hard cap on EXECUTED Set-mutating calls per turn. Deliberately small: a
