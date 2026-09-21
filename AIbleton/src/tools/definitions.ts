@@ -510,7 +510,7 @@ export const TOOLS = [
   },
   {
     name: "delete_device",
-    description: "Remove one built-in device from a regular track. Call ONLY when the CURRENT user message explicitly asks to delete a device; Live Undo can restore it.",
+    description: "Remove one built-in device from a regular track. Call ONLY when the CURRENT user message explicitly asks to delete a device, or explicitly replaces/swaps a named device or instrument with another sound source. In a replacement, delete only the named source device. Live Undo can restore it.",
     input_schema: {
       type: "object",
       properties: {

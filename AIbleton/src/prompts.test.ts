@@ -18,3 +18,16 @@ test("injects one explicit reply language for the turn", () => {
   assert.match(prompt, /Use Spanish for all user-facing prose/);
   assert.doesNotMatch(prompt, /[\u3400-\u9fff]/u);
 });
+
+test("makes named device replacement a verified sample-swap workflow", () => {
+  assert.match(SYSTEM_PROMPT, /replace or swap a NAMED device\/instrument/);
+  assert.match(SYSTEM_PROMPT, /do NOT call set_goal or set_plan/);
+  assert.match(SYSTEM_PROMPT, /load_sample loads into an existing Simpler or inserts one itself/);
+  assert.match(SYSTEM_PROMPT, /delete ONLY the named source device/);
+  assert.match(SYSTEM_PROMPT, /get_simpler_sample to verify every target/);
+});
+
+test("keeps user bar ranges out of invented goal-section names", () => {
+  assert.match(SYSTEM_PROMPT, /A user bar range is edit scope, not automatically a Section name/);
+  assert.match(SYSTEM_PROMPT, /Never invent, merge, or normalize a Section name yourself/);
+});
