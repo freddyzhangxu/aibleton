@@ -1,6 +1,7 @@
 import { CRITERION_KINDS, GOAL_TYPES } from "../goal/types.js";
 import { EFFECT_METRICS } from "../plan/types.js";
 import { toolState } from "../state.js";
+import { RANDOM_MELODIC_INSTRUMENTS } from "./instruments.js";
 
 // ---------- Claude tool definitions ----------
 
@@ -497,7 +498,7 @@ export const TOOLS = [
   {
     name: "insert_device",
     description:
-      'Insert a built-in Live device at the end of a track\'s device chain. Audible immediately: "Operator", "Wavetable" (synths), "Impulse". EMPTY and silent until loaded: "Drum Rack" (use load_drum_kit instead), "Simpler" (use load_sample instead), "Sampler" (cannot load samples via API — never use, pick Simpler). Effects: "Reverb", "Auto Filter", "Compressor", "EQ Eight", "Delay". Third-party plugins are not supported.',
+      `Insert a built-in Live device at the end of a track's device chain. For an unspecified melodic/bass instrument, pass device_name "random"; the server selects one of ${RANDOM_MELODIC_INSTRUMENTS.join(", ")}. Explicit device names are preserved. Audible immediately: "Operator", "Wavetable", "Analog", "Drift", and "Meld" (synths), "Impulse". EMPTY and silent until loaded: "Drum Rack" (use load_drum_kit instead), "Simpler" (use load_sample instead), "Sampler" (cannot load samples via API — never use, pick Simpler). Effects: "Reverb", "Auto Filter", "Compressor", "EQ Eight", "Delay". Third-party plugins are not supported.`,
     input_schema: {
       type: "object",
       properties: {

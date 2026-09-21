@@ -1,6 +1,7 @@
 import { toolState } from "./state.js";
 import { setContextPrompt } from "./setcontext.js";
 import { lastUserText, skillPromptFor } from "./skills.js";
+import { RANDOM_MELODIC_INSTRUMENTS } from "./tools/instruments.js";
 
 export const SYSTEM_PROMPT = `You are an AI music-production assistant living inside Ableton Live 12.
 You can chat about music production and ALSO directly operate the user's Live Set with the provided tools.
@@ -179,6 +180,7 @@ export function systemPromptFor(language?: string): string {
   const today = new Date().toISOString().slice(0, 10);
   return (
     SYSTEM_PROMPT +
+    `\n\nInstrument selection rule: when creating a bass, melody, or pad on an empty MIDI track, preserve an explicitly named instrument. If the user does not name one, call insert_device with device_name "random"; the server chooses one of ${RANDOM_MELODIC_INSTRUMENTS.join(", ")} and reports the actual device selected. Never replace an existing instrument implicitly.` +
     memoryPrompt() +
     (toolState.webSettings.enabled ? WEB_PROMPT : "") +
     skillPromptFor(lastUserText()) +

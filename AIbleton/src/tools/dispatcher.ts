@@ -74,6 +74,7 @@ import { presentTakeLanes, takeLaneAt } from "./take-lanes.js";
 import { parseWarpMode, presentWarp, resolveAudioClip } from "./warp.js";
 import { chainDeviceAt, drumPadAt, drumRackAt, presentPad, presentPads, setParamValue as setChainParam } from "./drum-rack.js";
 import { deleteAuthorizationError, deleteToolIsAuthorized, isDeleteTool } from "../chat/deleteauth.js";
+import { pickRandomMelodicInstrument } from "./instruments.js";
 
 // ---------- Factory drum kits (Drum Essentials pack) ----------
 
@@ -549,10 +550,18 @@ export async function runTool(
     case "insert_device": {
       const ref = resolveTrack(context, input, "index");
       const track = ref.track;
+      const requestedName = String(input.device_name ?? "").trim();
+      if (!requestedName) throw new Error("请提供 device_name");
+      const isRandom = requestedName.toLowerCase() === "random";
+      const deviceName = isRandom ? pickRandomMelodicInstrument() : requestedName;
       const device = await context.withinTransaction(() =>
-        track.insertDevice(String(input.device_name), track.devices.length),
+        track.insertDevice(deviceName, track.devices.length),
       );
-      return trackResult(ref, { inserted: device.name, into: track.name });
+      return trackResult(ref, {
+        inserted: device.name,
+        into: track.name,
+        ...(isRandom ? { requested: "random", selected: device.name } : {}),
+      });
     }
     case "replace_device": {
       const ref = resolveTrack(context, input, "track_index");

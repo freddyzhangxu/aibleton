@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { SYSTEM_PROMPT, systemPromptFor } from "./prompts.js";
+import { RANDOM_MELODIC_INSTRUMENTS } from "./tools/instruments.js";
 
 test("keeps track indices internal and presents user-facing tracks one-based", () => {
   assert.match(SYSTEM_PROMPT, /0-based INTERNAL tool coordinates/);
@@ -42,4 +43,10 @@ test("auto-creates a MIDI track when MIDI writing targets an Audio Track", () =>
   assert.match(SYSTEM_PROMPT, /automatically creates an empty MIDI Track and writes the MIDI there/);
   assert.match(SYSTEM_PROMPT, /created_position_relative_to_source/);
   assert.match(SYSTEM_PROMPT, /Do not retry the same write after an auto-created result/);
+});
+
+test("uses code-side random melodic instrument selection when no device is named", () => {
+  const prompt = systemPromptFor("en");
+  assert.match(prompt, /call insert_device with device_name "random"/);
+  for (const device of RANDOM_MELODIC_INSTRUMENTS) assert.match(prompt, new RegExp(device));
 });
