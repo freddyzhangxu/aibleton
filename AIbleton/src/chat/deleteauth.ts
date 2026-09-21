@@ -28,10 +28,15 @@ export type DeleteAuthorization = ReadonlySet<DeleteKind>;
 const DELETE_VERB = /(?:\b(?:delete|remove|erase|trash)\b|删除|删掉|删去|移除)/i;
 const NEGATED_DESTRUCTIVE_ACTION =
   /(?:\b(?:do not|don't|dont|never)\s+(?:delete|remove|erase|trash|replace|swap|switch)\b|(?:不要|别|不)[\s\S]{0,80}?(?:删除|删掉|删去|移除|替换|替代|换成|改成|改用))/i;
+/** A safe replacement explicitly preserves the old device only when the
+ * preceding insertion fails. That is a conditional recovery instruction,
+ * not a revocation of replacement permission. */
+const PRESERVE_SOURCE_IF_SAFE_INSERT_FAILS =
+  /(?:(?:替换|替代)[\s\S]{0,160}(?:若|如果)[\s\S]{0,32}(?:失败|不成功)[\s\S]{0,32}(?:不要|别|不)[\s\S]{0,32}(?:删除|删掉|删去|移除)|(?:replace|swap|switch)[\s\S]{0,160}(?:if|when)[\s\S]{0,32}(?:fail|fails|failed)[\s\S]{0,32}(?:do not|don't|dont|never)[\s\S]{0,32}(?:delete|remove|erase|trash))/i;
 const DEVICE_SOURCE_PATTERN =
   /(?:\b(?:devices?|instruments?|plugins?|effects?|operator|wavetable|simpler|sampler|impulse|drum rack|instrument rack|audio effect rack|midi effect rack|eq eight|auto filter|compressor|reverb|delay)\b|设备|插件|效果器|乐器)/i;
 const DEVICE_REPLACEMENT_REQUEST =
-  /(?:\b(?:replace|swap|switch)\b[\s\S]{0,160}\b(?:with|to|for)\s+\S|(?:换成|改成|改用)\s*(?:为)?\s*\S|(?:用|以)\s*\S[\s\S]{0,160}(?:替换|替代)\s*\S|(?:替换|替代)\s*\S[\s\S]{0,160}(?:为|成)\s*\S)/i;
+  /(?:\b(?:replace|swap|switch)\b[\s\S]{0,160}\b(?:with|to|for)\s+\S|(?:换成|改成|改用)\s*(?:为)?\s*\S|(?:用|以)\s*\S[\s\S]{0,160}(?:替换|替代)\s*\S|(?:安全)?(?:替换|替代)\s*(?:为|成)\s*\S|(?:替换|替代)\s*\S[\s\S]{0,160}(?:为|成)\s*\S)/i;
 const KIND_PATTERNS: Readonly<Record<DeleteKind, RegExp>> = {
   track: /(?:\btracks?\b|轨道)/i,
   scene: /(?:\bscenes?\b|场景)/i,
@@ -45,7 +50,7 @@ const KIND_PATTERNS: Readonly<Record<DeleteKind, RegExp>> = {
  * deletion; a negative destructive statement invalidates the whole request
  * rather than trying to infer grammar across clauses. */
 export function deleteAuthorizationFor(userText: string): DeleteAuthorization {
-  if (NEGATED_DESTRUCTIVE_ACTION.test(userText)) return new Set();
+  if (NEGATED_DESTRUCTIVE_ACTION.test(userText) && !PRESERVE_SOURCE_IF_SAFE_INSERT_FAILS.test(userText)) return new Set();
   const kinds = new Set<DeleteKind>();
   if (DELETE_VERB.test(userText)) {
     for (const [kind, pattern] of Object.entries(KIND_PATTERNS) as [DeleteKind, RegExp][]) {

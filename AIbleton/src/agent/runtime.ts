@@ -800,6 +800,18 @@ function phaseForTool(name: string): string {
   return TOOL_PHASES[name] ?? (READ_ONLY_TOOLS.has(name) ? "reading" : "applying");
 }
 
+/** A mutation tool can report that its safety preflight made no Set change.
+ * Keep such calls visible to the model, but exclude them from budgets,
+ * verification, listen hints, and durable mutation receipts. */
+function didExecute(result: unknown): boolean {
+  return !(
+    result &&
+    typeof result === "object" &&
+    !Array.isArray(result) &&
+    (result as Record<string, unknown>).executed === false
+  );
+}
+
 export async function callTool(
   context: Ctx,
   actions: { tool: string; input: unknown; result: unknown }[],
@@ -865,31 +877,28 @@ export async function callTool(
     }
   }
   let result: unknown;
+  let executed = true;
   toolState.phase = phaseForTool(name);
   try {
     result = await runTool(context, name, input);
+    executed = didExecute(result);
     // Plan-layer step matching counts every call that actually ran — a call
     // whose verify later fails still executed ("missed target" ≠ "never
     // happened"); the step's effect check carries that diagnosis instead.
-    const executed = !(
-      result &&
-      typeof result === "object" &&
-      !Array.isArray(result) &&
-      (result as Record<string, unknown>).executed === false
-    );
     if (!PLAN_META_TOOLS.has(name) && executed) executedToolsThisTurn.push(name);
   } catch (err) {
     toolHooks.debugLog(context, `TOOL ${name} ERROR: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
     result = { error: friendlyToolError(err, toolState.activeLanguage) };
+    executed = false;
   } finally {
     // The model digests the result next — back to the generic phase.
     toolState.phase = "thinking";
   }
-  result = await verifyToolResult(context, name, input, result);
+  if (executed) result = await verifyToolResult(context, name, input, result);
   // Deterministic listen hint (tools/listenhint.ts): after a successful
   // mutation, tell the user what to play to judge the change. Advisory only —
   // a hint bug must never fail or alter a working call.
-  if (result !== null && typeof result === "object" && !("error" in result)) {
+  if (executed && result !== null && typeof result === "object" && !("error" in result)) {
     try {
       const hint = listenHintFor(context, name, input, result as Record<string, unknown>);
       if (hint) result = { ...(result as Record<string, unknown>), listen_hint: hint };
@@ -901,6 +910,7 @@ export async function callTool(
   // its baseline is already post-change (handleSetGoal's late warning).
   if (
     !READ_ONLY_TOOLS.has(name) &&
+    executed &&
     !(result !== null && typeof result === "object" && "error" in result)
   ) {
     mutationsThisTurn++;

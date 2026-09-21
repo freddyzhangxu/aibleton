@@ -17,7 +17,10 @@ export type TurnReceipt = {
 const NON_SET_MUTATIONS = new Set(["move_upload_sample", "move_download_set"]);
 
 function succeeded(result: unknown): result is Record<string, unknown> {
-  return !!result && typeof result === "object" && !("error" in result);
+  return !!result &&
+    typeof result === "object" &&
+    !("error" in result) &&
+    (result as Record<string, unknown>).executed !== false;
 }
 
 function setMutation(action: ToolAction): boolean {

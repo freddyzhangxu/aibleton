@@ -11,6 +11,7 @@ test("receipt is absent for reads, declarations, rejected calls and file-only ge
     ok("set_goal"),
     failed("write_midi_clip"),
     ok("generate_audio", { path: "/tmp/kick.wav" }),
+    ok("replace_device", { executed: false, replacement_not_applied: true, listen_hint: { tracks: ["Lead"] } }),
   ]), undefined);
 });
 
