@@ -37,3 +37,9 @@ test("keeps user bar ranges out of invented goal-section names", () => {
   assert.match(SYSTEM_PROMPT, /A user bar range is edit scope, not automatically a Section name/);
   assert.match(SYSTEM_PROMPT, /Never invent, merge, or normalize a Section name yourself/);
 });
+
+test("auto-creates a MIDI track when MIDI writing targets an Audio Track", () => {
+  assert.match(SYSTEM_PROMPT, /automatically creates an empty MIDI Track and writes the MIDI there/);
+  assert.match(SYSTEM_PROMPT, /created_position_relative_to_source/);
+  assert.match(SYSTEM_PROMPT, /Do not retry the same write after an auto-created result/);
+});

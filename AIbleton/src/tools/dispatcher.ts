@@ -66,6 +66,7 @@ import {
   toNum,
   toStrArr,
   trackResult,
+  type TrackRef,
 } from "./helpers.js";
 import { arrangeSong } from "./arrange.js";
 import { analyzeRenderedTrack } from "./rendered.js";
@@ -223,6 +224,62 @@ function requireMovePaired(): void {
   if (!toolState.moveSettings.token) {
     throw new Error("Move 尚未配对 — 先调用 move_pair（不带 code）获取屏幕上的配对码。");
   }
+}
+
+type MidiTrackPosition = "before" | "after" | "unknown";
+
+type MidiWriteTarget = {
+  track: MidiTrack<"1.0.0">;
+  ref: TrackRef;
+  autoCreated?: {
+    source: TrackRef;
+    relative: MidiTrackPosition;
+  };
+};
+
+function uniqueMidiTrackName(song: Ctx["application"]["song"], sourceName: string): string {
+  const base = `MIDI - ${sourceName.trim() || "Track"}`;
+  const names = new Set(song.tracks.map((track) => track.name.trim().toLowerCase()));
+  if (!names.has(base.toLowerCase())) return base;
+  for (let suffix = 2; suffix < 10000; suffix++) {
+    const candidate = `${base} ${suffix}`;
+    if (!names.has(candidate.toLowerCase())) return candidate;
+  }
+  throw new Error(`无法为“${sourceName}”生成唯一的 MIDI 轨名称`);
+}
+
+async function resolveMidiWriteTarget(context: Ctx, source: TrackRef): Promise<MidiWriteTarget> {
+  if (source.track instanceof MidiTrack) return { track: source.track, ref: source };
+  if (!(source.track instanceof AudioTrack)) {
+    throw new Error(`轨道 ${source.index}（${source.track.name}）不是 MIDI 或音频轨道`);
+  }
+
+  const song = context.application.song;
+  const track = await context.withinTransaction(() => song.createMidiTrack());
+  track.name = uniqueMidiTrackName(song, source.track.name);
+  const index = song.tracks.indexOf(track);
+  if (index < 0) throw new Error(`MIDI 轨“${track.name}”已创建，但无法定位其轨道位置`);
+
+  const sourceIndex = song.tracks.indexOf(source.track);
+  const relative: MidiTrackPosition =
+    index < sourceIndex ? "before" : index > sourceIndex ? "after" : "unknown";
+  return {
+    track,
+    ref: { track, index },
+    autoCreated: { source: { ...source, index: sourceIndex }, relative },
+  };
+}
+
+function midiWriteTargetResult(target: MidiWriteTarget): Record<string, unknown> {
+  if (!target.autoCreated) return {};
+  const source = target.autoCreated.source;
+  return {
+    track: target.track.name,
+    auto_created_midi_track: true,
+    source_audio_track: source.track.name,
+    source_audio_track_index: source.index,
+    created_position_relative_to_source: target.autoCreated.relative,
+  };
 }
 
 export async function runTool(
@@ -1189,12 +1246,10 @@ export async function runTool(
       };
     }
     case "write_midi_clip": {
-      const ref = resolveTrack(context, input, "track_index");
-      const track = midiTrackAt(context, ref.index);
+      const source = resolveTrack(context, input, "track_index");
       const start = Number(input.start_beat ?? 0);
       const length = Number(input.length_beats ?? 16);
       if (!(length > 0)) throw new Error("length_beats 必须大于 0");
-      const clip = await context.withinTransaction(() => track.createMidiClip(start, length));
       // Snap before swing so baked swing offsets survive; grid read live from the song.
       const gridQ = toNum(song.gridQuantization);
       const gridT = Boolean(song.gridIsTriplet);
@@ -1202,40 +1257,66 @@ export async function runTool(
       let notes = parseNotes(input.notes, length);
       if (snap) notes = snapNotesToGrid(notes, gridQ, gridT);
       notes = applySwing(notes, Number(input.swing ?? 0)).filter((n) => n.startTime < length);
+      const target = await resolveMidiWriteTarget(context, source);
+      let clip;
+      try {
+        clip = await context.withinTransaction(() => target.track.createMidiClip(start, length));
+      } catch (error) {
+        if (target.autoCreated) {
+          throw new Error(`MIDI 轨“${target.track.name}”已创建，但 Clip 写入失败：${error instanceof Error ? error.message : String(error)}`);
+        }
+        throw error;
+      }
       clip.notes = notes;
       if (input.name) clip.name = String(input.name);
-      return trackResult(ref, {
+      return trackResult(target.ref, {
         clip: clip.name,
         start,
         length,
         noteCount: notes.length,
         swing: Number(input.swing ?? 0),
         ...(snap ? { snapped_to_grid: gridLabel(gridQ, gridT) } : {}),
+        ...midiWriteTargetResult(target),
       });
     }
     case "write_session_clip": {
-      const ref = resolveTrack(context, input, "track_index");
-      const track = midiTrackAt(context, ref.index);
+      const source = resolveTrack(context, input, "track_index");
       const sceneIndex = Number(input.scene_index);
-      const slot = track.clipSlots[sceneIndex];
-      if (!slot) throw new Error(`场景序号 ${sceneIndex} 无效`);
-      if (slot.clip) throw new Error("该 clip 槽已有 clip，请先删除或换一个槽位");
+      const sourceSlot = source.track.clipSlots[sceneIndex];
+      if (!Number.isInteger(sceneIndex) || !sourceSlot) throw new Error(`场景序号 ${sceneIndex} 无效`);
+      if (source.track instanceof MidiTrack && sourceSlot.clip) {
+        throw new Error("该 clip 槽已有 clip，请先删除或换一个槽位");
+      }
       const length = Number(input.length_beats ?? 16);
-      const clip = await context.withinTransaction(() => slot.createMidiClip(length));
+      if (!(length > 0)) throw new Error("length_beats 必须大于 0");
       const gridQ = toNum(song.gridQuantization);
       const gridT = Boolean(song.gridIsTriplet);
       const snap = input.snap_to_grid === true;
       let notes = parseNotes(input.notes, length);
       if (snap) notes = snapNotesToGrid(notes, gridQ, gridT);
       notes = applySwing(notes, Number(input.swing ?? 0)).filter((n) => n.startTime < length);
+      const target = await resolveMidiWriteTarget(context, source);
+      const slot = target.track.clipSlots[sceneIndex];
+      if (!slot) throw new Error(`新 MIDI 轨没有场景序号 ${sceneIndex}`);
+      if (slot.clip) throw new Error("该 clip 槽已有 clip，请先删除或换一个槽位");
+      let clip;
+      try {
+        clip = await context.withinTransaction(() => slot.createMidiClip(length));
+      } catch (error) {
+        if (target.autoCreated) {
+          throw new Error(`MIDI 轨“${target.track.name}”已创建，但 Session Clip 写入失败：${error instanceof Error ? error.message : String(error)}`);
+        }
+        throw error;
+      }
       clip.notes = notes;
       if (input.name) clip.name = String(input.name);
-      return trackResult(ref, {
+      return trackResult(target.ref, {
         clip: clip.name,
         length,
         noteCount: notes.length,
         swing: Number(input.swing ?? 0),
         ...(snap ? { snapped_to_grid: gridLabel(gridQ, gridT) } : {}),
+        ...midiWriteTargetResult(target),
       });
     }
     case "delete_arrangement_clip": {

@@ -847,7 +847,7 @@ export const TOOLS = [
   {
     name: "write_midi_clip",
     description:
-      "Create a MIDI clip in a track's arrangement and fill it with notes. Times are in beats (4/4: one bar = 4 beats, so 4 bars = 16 beats). pitch is a MIDI note number (0–127); for an Impulse drum kit use pitches 48–60 (48=kick-ish, 50=snare-ish, 54=closed hat-ish, 58=open hat-ish).",
+      "Create a MIDI clip in a track's arrangement and fill it with notes. If the target is an Audio Track, automatically create an empty MIDI Track and write the clip there; the result reports the new track's actual name, index, and position relative to the Audio Track. Times are in beats (4/4: one bar = 4 beats, so 4 bars = 16 beats). pitch is a MIDI note number (0–127); for an Impulse drum kit use pitches 48–60 (48=kick-ish, 50=snare-ish, 54=closed hat-ish, 58=open hat-ish).",
     input_schema: {
       type: "object",
       properties: {
@@ -881,7 +881,7 @@ export const TOOLS = [
   {
     name: "write_session_clip",
     description:
-      "Create a looping MIDI clip in a Session View slot (track_index × scene_index) and fill it with notes. Same note format as write_midi_clip.",
+      "Create a looping MIDI clip in a Session View slot (track_index × scene_index) and fill it with notes. If the target is an Audio Track, automatically create an empty MIDI Track and write the clip there; the result reports the new track's actual name, index, and position relative to the Audio Track. Same note format as write_midi_clip.",
     input_schema: {
       type: "object",
       properties: {
