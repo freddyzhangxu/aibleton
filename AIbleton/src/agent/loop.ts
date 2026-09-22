@@ -55,7 +55,7 @@ export const AGENT_MAX_ROUNDS = 22;
  * is still a change the next call must reckon with); denied/thrown calls
  * never executed and cost nothing.
  */
-export const AGENT_MAX_STEPS = 8;
+export const AGENT_MAX_STEPS = 12;
 
 /** Goal-gate replans per turn. One — see the header. */
 export const AGENT_MAX_RETRIES = 1;

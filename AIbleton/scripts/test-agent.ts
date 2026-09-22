@@ -44,8 +44,8 @@ console.log("== 循环上限常量 ==");
 {
   check("重试上限恰为 1（PR7 决策：单次 replan）", AGENT_MAX_RETRIES === 1);
   check(
-    "步数预算在 5~8 之间（PR7 建议区间）",
-    AGENT_MAX_STEPS >= 5 && AGENT_MAX_STEPS <= 8,
+    "步数预算在 5~12 之间（PR7 建议区间）",
+    AGENT_MAX_STEPS >= 5 && AGENT_MAX_STEPS <= 12,
     `AGENT_MAX_STEPS=${AGENT_MAX_STEPS}`,
   );
   check(
