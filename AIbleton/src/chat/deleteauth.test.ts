@@ -48,6 +48,71 @@ test("authorizes named device replacement in English and Chinese", () => {
   assert.equal(deleteToolIsAuthorized("delete_scene", chinese), false);
 });
 
+test("authorizes the reported Analog-to-sample wording", () => {
+  const auth = deleteAuthorizationFor("删除 Track 3（Bass）的 Analog，并换成该采样。");
+  assert.equal(deleteToolIsAuthorized("delete_device", auth), true);
+  assert.equal(deleteToolIsAuthorized("replace_device", auth), true);
+  assert.equal(deleteToolIsAuthorized("delete_track", auth), false);
+});
+
+test("recognizes all advertised built-in device names in replacement requests", () => {
+  for (const device of [
+    "Analog",
+    "Operator",
+    "Wavetable",
+    "Drift",
+    "Meld",
+    "Collision",
+    "Tension",
+    "Impulse",
+    "Drum Rack",
+    "Instrument Rack",
+    "Audio Effect Rack",
+    "MIDI Effect Rack",
+    "EQ Eight",
+    "Auto Filter",
+    "Compressor",
+    "Reverb",
+    "Delay",
+    "Simpler",
+    "Sampler",
+  ]) {
+    const auth = deleteAuthorizationFor(`Replace the ${device} with a sample.`);
+    assert.equal(deleteToolIsAuthorized("delete_device", auth), true, device);
+  }
+});
+
+test("recognizes common multilingual replacement wording", () => {
+  for (const text of [
+    "Replace Analog with a sample.",
+    "把 Analog 换成采样。",
+    "Reemplaza Analog con una muestra.",
+    "Remplace Analog par un échantillon.",
+    "Ersetze Analog durch ein Sample.",
+    "Substitua Analog por uma amostra.",
+    "Sostituisci Analog con un campione.",
+    "Analogをサンプルに置き換えて。",
+    "Analog을 샘플로 교체해 줘.",
+  ]) {
+    assert.equal(deleteToolIsAuthorized("delete_device", deleteAuthorizationFor(text)), true, text);
+  }
+});
+
+test("does not authorize multilingual negated replacement wording", () => {
+  for (const text of [
+    "Do not replace Analog with a sample.",
+    "No reemplaces Analog con una muestra.",
+    "Ne remplace pas Analog par un échantillon.",
+    "Ersetze Analog nicht durch ein Sample.",
+    "Não substitua Analog por uma amostra.",
+    "Non sostituire Analog con un campione.",
+    "Analogをサンプルに置き換えないで。",
+    "Analog을 샘플로 교체하지 마.",
+  ]) {
+    assert.equal(deleteToolIsAuthorized("delete_device", deleteAuthorizationFor(text)), false, text);
+  }
+});
+
 test("rejects a replacement request that forbids the required source deletion", () => {
   const auth = deleteAuthorizationFor("把第1轨（1-Operator）的 Operator 安全替换成 Analog；若失败不要删除 Operator。");
   assert.equal(deleteToolIsAuthorized("replace_device", auth), false);
