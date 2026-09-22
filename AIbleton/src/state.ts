@@ -61,6 +61,8 @@ export const toolState = {
   abortCtl: null as AbortController | null,
   /** Set by /api/stop: the running task aborts its in-flight request and exits. */
   stopRequested: false,
+  /** Distinguishes a user stop from an automatic repeated-tool-error stop. */
+  stopReason: null as "user" | "repeated_tool_error" | null,
   /** Coarse phase of the running task ("thinking" | "reading" | "analyzing" |
    * "generating" | "applying" | "planning" | "searching"), surfaced through
    * /api/status so the UI can show WHAT is happening, not just that it is

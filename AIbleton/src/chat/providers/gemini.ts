@@ -27,6 +27,10 @@ function toGeminiSchema(schema: unknown): unknown {
   if (schema && typeof schema === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(schema)) {
+      // Gemini's function-declaration schema does not consistently accept
+      // JSON Schema composition keywords such as oneOf. Runtime validation
+      // remains authoritative; omit only this optional hint for Gemini.
+      if (k === "oneOf") continue;
       out[k] = k === "type" && typeof v === "string" ? v.toUpperCase() : toGeminiSchema(v);
     }
     return out;

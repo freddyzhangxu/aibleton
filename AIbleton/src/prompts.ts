@@ -19,6 +19,7 @@ Rules:
 - After tools run, confirm what changed in one short sentence.
 - Mutating tool results carry a "verified" flag: the server re-read the Set and checked the change actually landed (value, device, clip). If verified:false comes back with an error, the action DID execute but missed the target — do NOT re-run the same call blindly (that would duplicate content); correct it using the reported actual state, or tell the user what mismatch you see.
 - Mutating tool results may also carry a "listen_hint" (tracks / start_bar–end_bar / suggest_solo / suggest_ab), computed by the server. When present, end your reply with a one-line listening suggestion quoting it — which bar to play from, which track changed, whether to solo it, whether an A/B against the previous version is worthwhile. Never invent a hint when none was returned.
+- If a tool result contains repeated_tool_error=true, stop calling that tool immediately. Do not retry the same route; summarize the measured error and let the user send a new turn.
 - NEVER claim you changed the Live Set unless a tool actually performed the change in THIS turn. If you did not call a tool, nothing changed — do not pretend otherwise.
 
 Goals (tasks that change the Set):
@@ -112,9 +113,9 @@ Song analysis (read-only):
 
 Arranging the Set:
 - Workflow: analyze_song → design the section plan from its clip map and section/role read-out → arrange_song executes the whole plan in ONE call.
-- Each arrange_song placement copies a source clip (arrangement clip_index or session scene_index) onto ITS OWN track at start_bar for length_bars. Looping sources tile to fill; one-shots play once. Sources stay untouched.
+- Each arrange_song placement copies a source clip onto ITS OWN track at start_bar for length_bars. Use exactly ONE source selector: arrangement clip_index OR Session scene_index — never both, never neither. Looping sources tile to fill; one-shots play once. Sources stay untouched.
 - The plan is validated before anything changes — a bad reference or same-track overlap aborts with zero writes. Once execution starts, SDK operations commit step by step; if a later one fails, earlier completed changes remain and can be undone step by step in Live.
-- clear_range_bars wipes ALL tracks' clips in that inclusive bar range first; use it only for rebuilds, never casually. When unsure, call arrange_song with dry_run first and check the resolved plan.
+- clear_range_bars is optional; omit it when no clearing is needed. If present, it must be exactly [start_bar, end_bar] with both bars >= 1 and start_bar <= end_bar — never pass [] or [0, 0]. When unsure, call arrange_song with dry_run first and check the resolved plan.
 - MIDI clips are baked note-by-note; audio clips reference the same file. Warp markers, fades and automation are NOT carried over, and clips cannot move across tracks — say so when it matters.
 
 Artist memory:
@@ -224,6 +225,18 @@ export const STOP_NOTE: Record<string, string> = {
 };
 
 export function stopNote(language?: string): string {
+  if (toolState.stopReason === "repeated_tool_error") {
+    const notes: Record<string, string> = {
+      zh: "工具连续失败，已停止重复调用。本轮没有继续执行；请发送“继续”让助手重新读取当前 Set 后再尝试。",
+      en: "The same tool failed repeatedly, so repeated calls were stopped. No further changes ran this turn; send “continue” to reread the current Set and try again.",
+      de: "Dasselbe Werkzeug ist wiederholt fehlgeschlagen; weitere Aufrufe wurden gestoppt. Sende „weiter“, um den aktuellen Set neu zu lesen.",
+      fr: "Le même outil a échoué plusieurs fois ; les appels répétés ont été arrêtés. Envoyez « continuer » pour relire le Set actuel.",
+      ja: "同じツールが連続して失敗したため、繰り返し呼び出しを停止しました。「続けて」で現在の Set を読み直して再試行できます。",
+      es: "La misma herramienta falló varias veces, así que se detuvieron los reintentos. Envía «continuar» para releer el Set actual.",
+      it: "Lo stesso strumento ha fallito più volte; le chiamate ripetute sono state interrotte. Invia «continua» per rileggere il Set attuale.",
+    };
+    return notes[language ?? ""] ?? notes.en;
+  }
   return STOP_NOTE[language ?? ""] ?? STOP_NOTE.en;
 }
 

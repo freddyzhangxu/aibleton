@@ -64,6 +64,28 @@ export const AGENT_MAX_RETRIES = 1;
  * three is the compromise between convergence and the user's credit card. */
 export const AGENT_MAX_REFINEMENTS = 3;
 
+/** Consecutive identical tool-error classes allowed before the turn is
+ * stopped. This protects the round budget from a model repeating one broken
+ * route after the server has already explained the same failure. */
+export const AGENT_MAX_CONSECUTIVE_TOOL_ERRORS = 3;
+
+export interface ConsecutiveToolErrorState {
+  key?: string;
+  count: number;
+}
+
+/** Advance the repeated-error circuit-breaker state. A successful call should
+ * be represented by an undefined key and resets the consecutive count. */
+export function nextToolErrorState(
+  state: ConsecutiveToolErrorState,
+  key?: string,
+): ConsecutiveToolErrorState {
+  if (!key) return { count: 0 };
+  return state.key === key
+    ? { key, count: state.count + 1 }
+    : { key, count: 1 };
+}
+
 // ---------------------------------------------------------------------------
 // The exit decision, as one pure function.
 // ---------------------------------------------------------------------------

@@ -302,11 +302,17 @@ export const TOOLS = [
               name: { type: "string", description: "New clip name (default: source clip's name)" },
             },
             required: ["start_bar", "length_bars"],
+            oneOf: [
+              { required: ["clip_index"], not: { required: ["scene_index"] } },
+              { required: ["scene_index"], not: { required: ["clip_index"] } },
+            ],
           },
         },
         clear_range_bars: {
           type: "array",
-          items: { type: "number" },
+          minItems: 2,
+          maxItems: 2,
+          items: { type: "number", minimum: 1 },
           description: "[startBar, endBar] inclusive — clear ALL tracks' clips in this range before placing (partially overlapping clips are trimmed to the range edge). Only for rebuilds.",
         },
         dry_run: {

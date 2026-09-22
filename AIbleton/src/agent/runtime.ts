@@ -19,14 +19,17 @@ function attachLatestGeneration(view: GoalView): void {
 // policy (budgets, gate decisions) lives in ./loop.ts — this file is the
 // mechanism that holds the state those decisions act on.
 import {
+  AGENT_MAX_CONSECUTIVE_TOOL_ERRORS,
   AGENT_MAX_REFINEMENTS,
   AGENT_MAX_RETRIES,
   countMutations,
   gateAction,
   mutationsLeft,
+  nextToolErrorState,
   refineHasNewArtifact,
   stepBudgetError,
   AGENT_MAX_STEPS,
+  type ConsecutiveToolErrorState,
 } from "./loop.js";
 import {
   goalNeedsAudio,
@@ -195,6 +198,7 @@ export function loadReferenceAnalysis(
 
 /** Mutating calls that actually executed this turn (drives lateBaseline). */
 let mutationsThisTurn = 0;
+let consecutiveToolErrors: ConsecutiveToolErrorState = { count: 0 };
 
 // ---------- Plan layer (plan/) ----------
 //
@@ -895,6 +899,28 @@ export async function callTool(
     toolState.phase = "thinking";
   }
   if (executed) result = await verifyToolResult(context, name, input, result);
+  const errorText =
+    result && typeof result === "object" && !Array.isArray(result) && "error" in result
+      ? String((result as Record<string, unknown>).error ?? "工具失败")
+      : undefined;
+  const errorClass = errorText
+    ? `${name}:${errorText.split("\n", 1)[0].slice(0, 240)}`
+    : undefined;
+  consecutiveToolErrors = nextToolErrorState(consecutiveToolErrors, errorClass);
+  if (consecutiveToolErrors.count >= AGENT_MAX_CONSECUTIVE_TOOL_ERRORS && errorText) {
+    result = {
+      ...(result as Record<string, unknown>),
+      error:
+        `${errorText}\n同一工具连续 ${AGENT_MAX_CONSECUTIVE_TOOL_ERRORS} 次失败，已停止重复调用；请重新读取当前状态并改用不同方案。`,
+      repeated_tool_error: true,
+    };
+    toolState.stopRequested = true;
+    toolState.stopReason = "repeated_tool_error";
+    toolHooks.debugLog(
+      context,
+      `TOOL ${name} AUTO-STOP: repeated error ${consecutiveToolErrors.count}/${AGENT_MAX_CONSECUTIVE_TOOL_ERRORS}`,
+    );
+  }
   // Deterministic listen hint (tools/listenhint.ts): after a successful
   // mutation, tell the user what to play to judge the change. Advisory only —
   // a hint bug must never fail or alter a working call.
@@ -931,6 +957,7 @@ export function resetTurnState(): void {
   pendingPlan = null;
   mutationsThisTurn = 0;
   executedToolsThisTurn = [];
+  consecutiveToolErrors = { count: 0 };
 }
 
 // Self-register the set_goal/set_plan tool handlers (dispatcher calls these

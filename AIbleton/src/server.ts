@@ -771,6 +771,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       // and release any tool call waiting on Allow/Deny so it can unwind.
       if (busy) {
         toolState.stopRequested = true;
+        toolState.stopReason = "user";
         toolState.abortCtl?.abort();
         answerConfirmation(false);
         debugLog(context, "STOP requested");
@@ -847,6 +848,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         busy = true;
         lastError = null;
         toolState.stopRequested = false;
+        toolState.stopReason = null;
         toolState.abortCtl = new AbortController();
         toolState.activeAudioConfig = resolveAudioConfig(
           mergeAudioRequest(parsed.audio as AudioRequestConfig | undefined));
@@ -882,6 +884,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
           } finally {
             busy = false;
             toolState.abortCtl = null;
+            toolState.stopReason = null;
             toolState.activeLanguage = undefined;
             toolState.activeLanguageContext = null;
             toolState.activeDeleteAuthorization = undefined;

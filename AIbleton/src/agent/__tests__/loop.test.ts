@@ -9,10 +9,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  AGENT_MAX_CONSECUTIVE_TOOL_ERRORS,
   AGENT_MAX_ROUNDS,
   AGENT_MAX_REFINEMENTS,
   AGENT_MAX_RETRIES,
   gateAction,
+  nextToolErrorState,
   refineHasNewArtifact,
   type RefineState,
 } from "../loop.js";
@@ -21,6 +23,21 @@ const refinable = (used: number): RefineState => ({ available: true, used });
 
 test("provider round backstop leaves room for a final post-tool response", () => {
   assert.equal(AGENT_MAX_ROUNDS, 22);
+});
+
+test("repeated tool-error state resets on success and trips deterministically", () => {
+  let state = { count: 0 };
+  state = nextToolErrorState(state, "arrange_song:bad plan");
+  assert.equal(state.count, 1);
+  state = nextToolErrorState(state, "arrange_song:bad plan");
+  assert.equal(state.count, 2);
+  state = nextToolErrorState(state, "arrange_song:bad plan");
+  assert.equal(state.count, AGENT_MAX_CONSECUTIVE_TOOL_ERRORS);
+  assert.deepEqual(nextToolErrorState(state), { count: 0 });
+  assert.deepEqual(nextToolErrorState(state, "arrange_song:other error"), {
+    key: "arrange_song:other error",
+    count: 1,
+  });
 });
 
 test("met goal passes regardless of refine availability", () => {
