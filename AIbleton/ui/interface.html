@@ -2721,7 +2721,7 @@
       localStorage.setItem(DRAFT_KEY, ''); // 已发送，清掉草稿
       fitInput();
       if (welcome.parentNode) welcome.remove();
-      addMsg('user', attachments.length
+      const userMsg = addMsg('user', attachments.length
         ? text + attachments.map(a => `\n[${attIcon(a)} ${a.name}]`).join('')
         : text);
 
@@ -2767,7 +2767,21 @@
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || t('requestFailed'));
+        if (!res.ok) {
+          if (res.status === 409) {
+            // The server-side task is still running. Keep its Stop control and
+            // restore this rejected instruction so it can be sent later.
+            userMsg.remove();
+            input.value = text;
+            localStorage.setItem(DRAFT_KEY, text);
+            pendingAttachments.unshift(...attachments);
+            renderChips();
+            fitInput();
+            addMsg('error', t('error') + (data.error || t('requestFailed')));
+            return;
+          }
+          throw new Error(data.error || t('requestFailed'));
+        }
         // Task accepted (202) — it runs server-side even if this window closes.
         setThinking(true);
         setTimeout(pollStatus, 700);
