@@ -1227,7 +1227,7 @@
 
     // ---------- AI providers ----------
     const PROVIDERS = {
-      codex:  { name: 'Codex',       base: 'https://api.openai.com/v1', model: 'gpt-5-codex' },
+      codex:  { name: 'Codex',       base: 'https://api.openai.com/v1', model: 'gpt-5.6-sol' },
       claude: { name: 'Claude',      base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
       gemini: { name: 'Gemini',      base: 'https://generativelanguage.googleapis.com', model: 'gemini-flash-latest' },
       // OpenAI 兼容端点（Grok / DeepSeek / Kimi / OpenRouter / Ollama…）：
@@ -1323,6 +1323,12 @@
     function refreshHealth() {
       fetch('/api/health?provider=' + currentProvider).then(r => r.json()).then(h => {
         updateModelName(h.model);
+        const connection = connState[currentProvider];
+        if (connection && connection.status === 'auth_expired') {
+          statusEl.textContent = t('connAuthExpired');
+          statusEl.title = connection.detail || '';
+          return;
+        }
         const pName = PROVIDERS[currentProvider].name;
         if (h.hasAuth) {
           statusEl.textContent = t('cfgLoaded').replace('{p}', pName);
@@ -1492,6 +1498,13 @@
           if (isCurrent) {
             btn.disabled = false;
             renderConnOut(kind);
+          }
+          const connection = connState[key];
+          if (kind !== 'audio' && p === currentProvider && connection?.status !== 'not_configured') {
+            // The config can be present even when the provider session has
+            // expired. Surface the actionable auth state in the main status
+            // bar, while keeping the provider-specific detail in the title.
+            refreshHealth();
           }
         });
     }

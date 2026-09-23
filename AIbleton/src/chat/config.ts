@@ -73,7 +73,7 @@ export function resolveConfig(req: ChatRequest): ResolvedConfig {
       baseUrl: (req.baseUrl || local.baseUrl || process.env.OPENAI_BASE_URL ||
         (chatgpt ? "https://chatgpt.com/backend-api/codex" : "https://api.openai.com/v1")).replace(/\/$/, ""),
       authToken: req.apiKey || local.apiKey || local.authToken || process.env.OPENAI_API_KEY || "",
-      model: req.model || local.model || "gpt-5-codex",
+      model: req.model || local.model || "gpt-5.6-sol",
       fromLocal,
       accountId: chatgpt ? local.accountId : undefined,
       refreshToken: chatgpt ? local.refreshToken : undefined,
