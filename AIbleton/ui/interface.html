@@ -881,7 +881,7 @@
         close: '关闭', minimize: '最小化为右下角小条（需 AIbletonBar 运行中）',
         newChat: '新建对话', history: '历史对话',
         send: '发送', stop: '停止', inputPh: '输入消息，Enter 发送（Shift+Enter 换行）',
-        thinking: '思考中…（可关闭窗口，任务在后台继续）',
+        thinkingNote: '（可关闭窗口，任务在后台继续）',
         phase_reading: '读取 Live Set…', phase_analyzing: '分析编曲…',
         phase_rendering: '正在从 Live 渲染音频…', phase_analyzing_render: '正在分析渲染音频…',
         phase_generating: '生成音频…（通常需要几十秒）', phase_applying: '应用修改…',
@@ -933,7 +933,7 @@
         close: 'Close', minimize: 'Minimize to the corner bar (requires AIbletonBar running)',
         newChat: 'New chat', history: 'History',
         send: 'Send', stop: 'Stop', inputPh: 'Type a message — Enter to send (Shift+Enter for a new line)',
-        thinking: 'Thinking… (you can close this window; the task continues in the background)',
+        thinkingNote: ' (you can close this window; the task continues in the background)',
         phase_reading: 'Reading Live Set…', phase_analyzing: 'Analyzing arrangement…',
         phase_rendering: 'Rendering audio from Live…', phase_analyzing_render: 'Analyzing rendered audio…',
         phase_generating: 'Generating audio… (usually takes tens of seconds)', phase_applying: 'Applying changes…',
@@ -985,7 +985,7 @@
         close: 'Schließen', minimize: 'Zur Leiste unten rechts minimieren (AIbletonBar muss laufen)',
         newChat: 'Neuer Chat', history: 'Verlauf',
         send: 'Senden', stop: 'Stoppen', inputPh: 'Nachricht eingeben – Enter zum Senden (Umschalt+Enter für Zeilenumbruch)',
-        thinking: 'Denkt nach… (Fenster kann geschlossen werden, die Aufgabe läuft im Hintergrund weiter)',
+        thinkingNote: ' (Fenster kann geschlossen werden, die Aufgabe läuft im Hintergrund weiter)',
         phase_reading: 'Live Set wird gelesen…', phase_analyzing: 'Arrangement wird analysiert…',
         phase_rendering: 'Audio wird aus Live gerendert…', phase_analyzing_render: 'Gerendertes Audio wird analysiert…',
         phase_generating: 'Audio wird generiert… (dauert meist einige zehn Sekunden)', phase_applying: 'Änderungen werden angewendet…',
@@ -1031,7 +1031,7 @@
         close: 'Fermer', minimize: 'Réduire en barre en bas à droite (AIbletonBar requis)',
         newChat: 'Nouvelle conversation', history: 'Historique',
         send: 'Envoyer', stop: 'Arrêter', inputPh: 'Saisissez un message — Entrée pour envoyer (Maj+Entrée pour sauter une ligne)',
-        thinking: 'Réflexion… (vous pouvez fermer la fenêtre, la tâche continue en arrière-plan)',
+        thinkingNote: ' (vous pouvez fermer la fenêtre, la tâche continue en arrière-plan)',
         phase_reading: 'Lecture du Live Set…', phase_analyzing: 'Analyse de l’arrangement…',
         phase_rendering: 'Rendu audio depuis Live…', phase_analyzing_render: 'Analyse de l’audio rendu…',
         phase_generating: 'Génération audio… (comptez quelques dizaines de secondes)', phase_applying: 'Application des modifications…',
@@ -1077,7 +1077,7 @@
         close: '閉じる', minimize: '右下のミニバーに最小化（AIbletonBar の起動が必要）',
         newChat: '新規チャット', history: '履歴',
         send: '送信', stop: '停止', inputPh: 'メッセージを入力 — Enter で送信（Shift+Enter で改行）',
-        thinking: '思考中…（ウィンドウを閉じてもタスクはバックグラウンドで続行）',
+        thinkingNote: '（ウィンドウを閉じてもタスクはバックグラウンドで続行）',
         phase_reading: 'Live Set を読み込み中…', phase_analyzing: 'アレンジを解析中…',
         phase_rendering: 'Live からオーディオをレンダリング中…', phase_analyzing_render: 'レンダリング済みオーディオを解析中…',
         phase_generating: 'オーディオ生成中…（数十秒かかることがあります）', phase_applying: '変更を適用中…',
@@ -1123,7 +1123,7 @@
         close: 'Cerrar', minimize: 'Minimizar a la barra inferior derecha (requiere AIbletonBar)',
         newChat: 'Nuevo chat', history: 'Historial',
         send: 'Enviar', stop: 'Detener', inputPh: 'Escribe un mensaje — Enter para enviar (Mayús+Enter para nueva línea)',
-        thinking: 'Pensando… (puedes cerrar la ventana; la tarea continúa en segundo plano)',
+        thinkingNote: ' (puedes cerrar la ventana; la tarea continúa en segundo plano)',
         phase_reading: 'Leyendo el Live Set…', phase_analyzing: 'Analizando el arreglo…',
         phase_rendering: 'Renderizando audio desde Live…', phase_analyzing_render: 'Analizando el audio renderizado…',
         phase_generating: 'Generando audio… (suele tardar decenas de segundos)', phase_applying: 'Aplicando cambios…',
@@ -1169,7 +1169,7 @@
         close: 'Chiudi', minimize: 'Riduci a barra in basso a destra (richiede AIbletonBar)',
         newChat: 'Nuova chat', history: 'Cronologia',
         send: 'Invia', stop: 'Interrompi', inputPh: 'Scrivi un messaggio — Invio per inviare (Maiusc+Invio per andare a capo)',
-        thinking: 'Sto pensando… (puoi chiudere la finestra; l’attività continua in background)',
+        thinkingNote: ' (puoi chiudere la finestra; l’attività continua in background)',
         phase_reading: 'Lettura del Live Set…', phase_analyzing: 'Analisi dell’arrangiamento…',
         phase_rendering: 'Rendering audio da Live…', phase_analyzing_render: 'Analisi dell’audio renderizzato…',
         phase_generating: 'Generazione audio… (di solito richiede decine di secondi)', phase_applying: 'Applicazione delle modifiche…',
@@ -1214,16 +1214,9 @@
     if (!I18N[currentLang]) currentLang = 'en';
     const t = (k) => I18N[currentLang][k] ?? I18N.en[k] ?? k;
     // Generic progress messages rotate only while the server has no more
-    // specific phase to report. Each keeps the original background-task note.
-    const THINKING_VARIANTS = {
-      zh: ['推敲中…（可关闭窗口，任务在后台继续）', '琢磨中…（可关闭窗口，任务在后台继续）'],
-      en: ['Pondering… (you can close this window; the task continues in the background)', 'Considering… (you can close this window; the task continues in the background)'],
-      de: ['Überlegt… (Fenster kann geschlossen werden, die Aufgabe läuft im Hintergrund weiter)', 'Erwägt… (Fenster kann geschlossen werden, die Aufgabe läuft im Hintergrund weiter)'],
-      fr: ['Réflexion en cours… (vous pouvez fermer la fenêtre, la tâche continue en arrière-plan)', 'Examen en cours… (vous pouvez fermer la fenêtre, la tâche continue en arrière-plan)'],
-      ja: ['検討中…（ウィンドウを閉じてもタスクはバックグラウンドで続行）', '整理中…（ウィンドウを閉じてもタスクはバックグラウンドで続行）'],
-      es: ['Considerando… (puedes cerrar la ventana; la tarea continúa en segundo plano)', 'Evaluando… (puedes cerrar la ventana; la tarea continúa en segundo plano)'],
-      it: ['Riflettendo… (puoi chiudere la finestra; l’attività continua in background)', 'Valutando… (puoi chiudere la finestra; l’attività continua in background)'],
-    };
+    // specific phase to report. The status words stay English in every
+    // locale; only the background-task note is localized.
+    const THINKING_STATUS_WORDS = ['Thinking…', 'Pondering…', 'Mulling…'];
 
     // ---------- AI providers ----------
     const PROVIDERS = {
@@ -2356,8 +2349,8 @@
     }
 
     function genericThinkingLabel() {
-      const variants = [t('thinking'), ...(THINKING_VARIANTS[currentLang] ?? THINKING_VARIANTS.en)];
-      return variants[thinkingVariantIndex % variants.length];
+      const word = THINKING_STATUS_WORDS[thinkingVariantIndex % THINKING_STATUS_WORDS.length];
+      return word + t('thinkingNote');
     }
 
     function renderThinkingLabel() {
