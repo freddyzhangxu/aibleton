@@ -71,3 +71,19 @@ test("detects a confident final-reply mismatch and creates a bounded rewrite pro
   assert.match(languageCorrectionPrompt("es"), /Spanish \(es\)/);
   assert.match(languageCorrectionPrompt("es"), /Do not call any tools/);
 });
+
+test("detects a later Chinese paragraph inside an otherwise Japanese reply", () => {
+  assert.equal(
+    replyNeedsLanguageCorrection(
+      "分析を開始しました。ここから結果を説明します。\n这里是中文回复，后面继续说明分析结果。",
+      "ja",
+    ),
+    true,
+  );
+  assert.equal(replyNeedsLanguageCorrection("分析を開始しました。結果を日本語で説明します。", "ja"), false);
+});
+
+test("ignores short Han-only labels and non-prose content for Japanese", () => {
+  assert.equal(replyNeedsLanguageCorrection("分析結果", "ja"), false);
+  assert.equal(replyNeedsLanguageCorrection("`set_goal`\n120 BPM\nTrack 1 (Pad)", "ja"), false);
+});

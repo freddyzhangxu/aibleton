@@ -152,11 +152,77 @@ const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
   zh: "Chinese", en: "English", de: "German", fr: "French", ja: "Japanese", es: "Spanish", it: "Italian",
 };
 
+const MIN_REPLY_LETTERS = 4;
+const MIN_JA_REPLY_HAN_LETTERS = 6;
+
+function letterCount(text: string): number {
+  return [...text.matchAll(/\p{L}/gu)].length;
+}
+
+function replySegments(text: string): string[] {
+  const clean = cleanForDetection(text).normalize("NFKC");
+  return clean
+    .split(/[\r\n]+|(?<=[。！？!?；;])\s*|(?<=[.!?])\s+/u)
+    .map((segment) => segment.trim())
+    .filter((segment) => letterCount(segment) >= MIN_REPLY_LETTERS);
+}
+
+function isMeaningfulReplyLanguage(
+  text: string,
+  expected: SupportedLanguage,
+  detected: ResolvedReplyLanguage,
+): boolean {
+  const letters = letterCount(text);
+  if (letters < MIN_REPLY_LETTERS) return false;
+
+  // Han-only Japanese labels and headings are indistinguishable from short
+  // Chinese fragments. Require a longer Chinese-looking segment when the
+  // expected language is Japanese; real mixed prose still exceeds this bound.
+  if (
+    expected === "ja" &&
+    detected.language === "zh" &&
+    !/[\u3040-\u30ff]/u.test(text) &&
+    letters < MIN_JA_REPLY_HAN_LETTERS
+  ) {
+    return false;
+  }
+  return true;
+}
+
 /** Only a confident, different language triggers one provider rewrite. */
 export function replyNeedsLanguageCorrection(text: string, expectedLanguage?: string): boolean {
   const expected = normalizeLanguage(expectedLanguage);
-  const detected = resolveReplyLanguage({ text, panelLanguage: expected });
-  return detected.source === "message" && detected.language !== expected && detected.confidence >= 0.7;
+  const clean = cleanForDetection(text).normalize("NFKC");
+  if (letterCount(clean) < MIN_REPLY_LETTERS) return false;
+
+  const detected = resolveReplyLanguage({ text: clean, panelLanguage: expected });
+  if (
+    detected.source === "message" &&
+    detected.language !== expected &&
+    detected.confidence >= 0.7 &&
+    isMeaningfulReplyLanguage(clean, expected, detected)
+  ) {
+    return true;
+  }
+
+  const segments = replySegments(clean);
+  if (segments.length < 2) return false;
+
+  const segmentLanguages = segments.map((segment) => ({
+    text: segment,
+    detected: resolveReplyLanguage({ text: segment, panelLanguage: expected }),
+  }));
+  const hasExpectedLanguage = segmentLanguages.some(({ detected: segment }) =>
+    segment.source === "message" && segment.language === expected && segment.confidence >= 0.7,
+  );
+  if (!hasExpectedLanguage) return false;
+
+  return segmentLanguages.some(({ text: segmentText, detected: segment }) =>
+    segment.source === "message" &&
+    segment.language !== expected &&
+    segment.confidence >= 0.7 &&
+    isMeaningfulReplyLanguage(segmentText, expected, segment),
+  );
 }
 
 export function languageCorrectionPrompt(language?: string): string {
