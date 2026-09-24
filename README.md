@@ -143,6 +143,10 @@ This allows generated music to be evaluated against measurable goals and refined
 - Remember artist preferences and musical context
 - Reuse reference and analysis information
 
+### Skills
+
+Customize AIbleton with local production Skills. Browse the [starter Skills](skills/) and see the [user guide](USER_GUIDE.md) for installation instructions.
+
 ### Ableton Move
 
 For setup, routing, pairing, and troubleshooting, see the [Ableton Move guide](docs/ableton-move.md).

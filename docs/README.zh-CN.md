@@ -143,6 +143,10 @@ AIbleton 可以利用音频分析形成迭代式音乐制作闭环：
 - 记住 Artist 偏好和音乐上下文
 - 重用 Reference 和分析结果
 
+### Skills — 技能扩展
+
+浏览仓库中的 [Skills 入门模板](../skills/)，并参阅[用户指南](USER_GUIDE_CN.md)了解安装方法。
+
 ### Ableton Move
 
 有关设置、路由、配对和故障排查，请参阅 [Ableton Move 操作手册](ableton-move.zh-CN.md)。

@@ -252,6 +252,23 @@ AIbleton 对 Move 有两条独立工作流：**USB-C MIDI 编排** 与 **Wi‑Fi
 - **新建对话**：点击 `+`。适合切换到完全不同的制作目标，避免旧上下文干扰。
 - **历史对话**：点击时钟图标可切换、删除会话。删除后无法通过界面恢复，先确认不再需要上下文。
 - **Skills**：在空输入框中输入 `/`，选择本地已安装的 skill；选中后会插入 `/skill-name`。`SKILL.md` 可以不写 YAML frontmatter；AIbleton 会从正文的“技能描述”和“触发关键词”字段提取信息。显式调用或关键词匹配都没有命中时，AIbleton 会额外调用当前模型一次，并发送本轮请求和本地技能名称/简介（不含全文）来选择相关 skill。
+- **安装入门 Skills**：仓库的 [`skills/`](../skills/) 目录提供了三个可直接使用的 Skill。从仓库根目录把需要的文件夹复制到 `~/.aibleton/skills/`（macOS/Linux）或 `%USERPROFILE%\.aibleton\skills\`（Windows）。例如：
+
+  ```bash
+  mkdir -p ~/.aibleton/skills
+  cp -R skills/bossa-nova-producer ~/.aibleton/skills/
+  cp -R skills/dark-techno-kit ~/.aibleton/skills/
+  cp -R skills/techno-production ~/.aibleton/skills/
+  ```
+
+  ```powershell
+  New-Item -ItemType Directory -Force "$HOME\.aibleton\skills" | Out-Null
+  Copy-Item -Recurse -Force ".\skills\bossa-nova-producer" "$HOME\.aibleton\skills\"
+  Copy-Item -Recurse -Force ".\skills\dark-techno-kit" "$HOME\.aibleton\skills\"
+  Copy-Item -Recurse -Force ".\skills\techno-production" "$HOME\.aibleton\skills\"
+  ```
+
+  只想安装一个时，只复制对应文件夹即可。复制后在 AIbleton 输入 `/`，即可查找并选择该 Skill。编辑 `SKILL.md` 可以按需定制。
 - **后台任务**：界面显示“思考中”时可以关闭窗口，任务仍会继续。想中止则在任务运行时点击停止按钮；停止不会回滚已经完成的 Set 写入。
 
 ## 11. 安全工作法

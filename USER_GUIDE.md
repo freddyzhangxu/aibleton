@@ -265,6 +265,23 @@ For Move Sets, try: `List my Move Sets`, then `Analyze the Set named [name]` or 
 - **New conversation**: Click `+`. This is useful when switching to a completely different production goal and avoiding interference from old context.
 - **Conversation history**: Click the clock icon to switch or delete conversations. Once deleted, they cannot be restored through the interface, so confirm that you no longer need the context first.
 - **Skills**: Type `/` in an empty input field and choose an installed local skill; selecting it inserts `/skill-name`. `SKILL.md` can omit YAML frontmatter; AIbleton reads `Description` and `Triggers` labels from the body when present. If explicit invocation and keyword matching find no skill, AIbleton sends the request and local skill names/descriptions (not full skill bodies) to the configured model in one extra call to select relevant skills.
+- **Install starter Skills**: The repository's [`skills/`](skills/) folder contains three ready-to-use Skills. From the repository root, copy the folders you want into `~/.aibleton/skills/` (macOS/Linux) or `%USERPROFILE%\.aibleton\skills\` (Windows). For example:
+
+  ```bash
+  mkdir -p ~/.aibleton/skills
+  cp -R skills/bossa-nova-producer ~/.aibleton/skills/
+  cp -R skills/dark-techno-kit ~/.aibleton/skills/
+  cp -R skills/techno-production ~/.aibleton/skills/
+  ```
+
+  ```powershell
+  New-Item -ItemType Directory -Force "$HOME\.aibleton\skills" | Out-Null
+  Copy-Item -Recurse -Force ".\skills\bossa-nova-producer" "$HOME\.aibleton\skills\"
+  Copy-Item -Recurse -Force ".\skills\dark-techno-kit" "$HOME\.aibleton\skills\"
+  Copy-Item -Recurse -Force ".\skills\techno-production" "$HOME\.aibleton\skills\"
+  ```
+
+  To install only one, copy only its folder. Then type `/` in AIbleton to find and select it. Edit `SKILL.md` to customize a Skill.
 - **Background tasks**: You can close the window while the interface shows “Thinking”; the task continues. To stop it, click the stop button while the task is running. Stopping does not roll back Set writes that have already completed.
 
 ## 11. A Safe Way of Working
