@@ -23,6 +23,8 @@ export interface ChatRequest {
   attachments?: Attachment[];
   /** Audio-generation provider config from the settings UI (same per-request pattern as apiKey). */
   audio?: { provider?: string; apiKey?: string; baseUrl?: string };
+  /** Server-selected local skills for this turn; never accepted from the client. */
+  selectedSkillNames?: string[];
 }
 
 export interface ResolvedConfig {

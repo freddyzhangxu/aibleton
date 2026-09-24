@@ -111,7 +111,7 @@ interface OpenAIOutputItem {
   content?: { type: string; text?: string }[];
 }
 
-interface OpenAIResponseData {
+export interface OpenAIResponseData {
   output?: OpenAIOutputItem[];
   error?: { message?: string };
   status?: string;
@@ -124,7 +124,7 @@ interface OpenAIResponseData {
  * output:[] in the terminal event — the actual items arrive via
  * response.output_item.done, so they are collected along the way.
  */
-async function readResponsesStream(
+export async function readResponsesStream(
   stream: AsyncIterable<Buffer>,
   log?: (line: string) => void,
 ): Promise<OpenAIResponseData> {
@@ -249,7 +249,7 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
     const requestBody = JSON.stringify({
       model: cfg.model,
-      instructions: systemPromptFor(req.language),
+      instructions: systemPromptFor(req.language, req.selectedSkillNames),
       input,
       ...(languageRewriteOnly ? {} : { tools }),
       store: false,

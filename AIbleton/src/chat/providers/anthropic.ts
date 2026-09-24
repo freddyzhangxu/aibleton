@@ -89,7 +89,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     const requestBody = JSON.stringify({
       model,
       max_tokens: claudeEffort ? claudeEffort.maxTokens : 4096,
-      system: systemPromptFor(req.language),
+      system: systemPromptFor(req.language, req.selectedSkillNames),
       ...(languageRewriteOnly ? {} : { tools: chatTools }),
       messages,
       ...(thinking && !suppressThinking ? { thinking } : {}),

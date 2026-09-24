@@ -48,7 +48,8 @@ import { chatGemini } from "./chat/providers/gemini.js";
 import { toolHooks, toolState, type ArtistMemory } from "./state.js";
 import { toBpm, toStrArr } from "./tools/helpers.js";
 import { NO_AUTH_HINT } from "./prompts.js";
-import { loadSkills, matchSkills, skillProblems } from "./skills.js";
+import { lastUserText, loadSkills, matchSkills, skillProblems } from "./skills.js";
+import { selectSkillsForTurn } from "./chat/skill-selector.js";
 import { testConnection, testAudioConnection } from "./chat/testconn.js";
 import { errMessage, friendlyBoundaryError } from "./errors.js";
 import { commonText, resolveTurnLanguage } from "./i18n/index.js";
@@ -364,19 +365,27 @@ async function chat(context: Ctx, req: ChatRequest) {
   const setFp = updateSetContext(context);
   if (setFp) debugLog(context, `SET key=${setFp.key}${setFp.changed ? " CHANGED" : ""}`);
   const cfg = resolveConfig(req);
+  const withSelectedSkills = async (): Promise<ChatRequest> => {
+    const selected = await selectSkillsForTurn(context, cfg, lastUserText());
+    return { ...req, selectedSkillNames: selected.map((skill) => skill.name) };
+  };
   // Custom endpoints may legitimately need no key (Ollama & co.) — they get
   // their own validation (baseUrl + model) inside chatCustom instead.
-  if (cfg.provider === "custom") return chatCustom(context, cfg, req);
+  if (cfg.provider === "custom") {
+    if (!cfg.baseUrl || !cfg.model) return chatCustom(context, cfg, req);
+    return chatCustom(context, cfg, await withSelectedSkills());
+  }
   if (!cfg.authToken && !cfg.refreshToken) {
     const hint = NO_AUTH_HINT[req.language ?? ""] ?? NO_AUTH_HINT.en;
     throw new Error(hint.replace("{p}", PROVIDER_NAMES[cfg.provider]));
   }
   if (cfg.provider === "codex") {
     await ensureCodexAuth(cfg, req.language);
-    return chatOpenAI(context, cfg, req);
+    return chatOpenAI(context, cfg, await withSelectedSkills());
   }
-  if (cfg.provider === "gemini") return chatGemini(context, cfg, req);
-  return chatAnthropic(context, cfg, req);
+  const selectedReq = await withSelectedSkills();
+  if (cfg.provider === "gemini") return chatGemini(context, cfg, selectedReq);
+  return chatAnthropic(context, cfg, selectedReq);
 }
 
 // ---------- HTTP server ----------

@@ -14,11 +14,11 @@
  *   ## Goal / ## Workflow / ## Constraints / ## Tools / ## Verification …
  *
  * Frontmatter is optional: a plain-text SKILL.md still works — the folder
- * name becomes the skill name and the whole file is the body. Matching is
- * server-side keyword matching against the user's
- * message (auto trigger) — it does NOT depend on the model choosing to load
- * a skill, which keeps it reliable on weaker tool-calling relays. Matched
- * bodies append to the system prompt for the whole turn.
+ * name becomes the skill name, metadata may be inferred from labeled Markdown
+ * fields, and the whole file remains the body. Explicit slash/name/trigger
+ * matches are deterministic; if none match, skill-selector.ts asks the
+ * configured provider to select relevant skills from their names and
+ * descriptions. Selected bodies append to the system prompt for the turn.
  *
  * The directory lives under the home dir on both platforms
  * (macOS ~/.aibleton/skills, Windows %USERPROFILE%\.aibleton\skills) and is
@@ -52,8 +52,126 @@ export function skillsDir(): string {
   return path.join(os.homedir(), ".aibleton", "skills");
 }
 
+const DESCRIPTION_LABELS = new Set([
+  "技能描述",
+  "描述",
+  "适用场景",
+  "使用场景",
+  "description",
+  "skill description",
+  "when to use",
+  "use cases",
+]);
+const TRIGGER_LABELS = new Set([
+  "触发关键词",
+  "触发词",
+  "适用关键词",
+  "triggers",
+  "trigger keywords",
+  "trigger terms",
+  "trigger words",
+  "keywords",
+]);
+
+function cleanMarkdownValue(value: string): string {
+  return value
+    .trim()
+    .replace(/^\*\*(.+)\*\*$/, "$1")
+    .replace(/^`(.+)`$/, "$1")
+    .replace(/<br\s*\/?\s*>/gi, " ")
+    .trim();
+}
+
+function metadataLabel(value: string): string {
+  return cleanMarkdownValue(value).replace(/[:：]$/, "").trim().toLowerCase();
+}
+
+function splitTriggerTerms(value: string): string[] {
+  return value
+    .split(/[,，、;；\n]+/)
+    .map((term) => cleanMarkdownValue(term.replace(/^[-*]\s*/, "")))
+    .filter(Boolean);
+}
+
+function markdownTableValue(body: string, labels: Set<string>): string | undefined {
+  for (const line of body.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) continue;
+    const cells = trimmed.slice(1, -1).split("|").map((cell) => cleanMarkdownValue(cell));
+    if (cells.length < 2 || /^:?-{2,}:?$/.test(cells[0])) continue;
+    if (labels.has(metadataLabel(cells[0]))) return cells.slice(1).join(" | ").trim();
+  }
+  return undefined;
+}
+
+function labeledLineValue(body: string, labels: Set<string>): string | undefined {
+  for (const line of body.split(/\r?\n/)) {
+    const match = /^\s*(?:[-*]\s*)?(?:>\s*)?(.*?)\s*[:：]\s*(.+?)\s*$/.exec(line);
+    if (match && labels.has(metadataLabel(match[1]))) return cleanMarkdownValue(match[2]);
+  }
+  return undefined;
+}
+
+function labeledSectionValue(body: string, labels: Set<string>, separator = " "): string | undefined {
+  const lines = body.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(lines[i]);
+    if (!heading || !labels.has(metadataLabel(heading[1]))) continue;
+    const values: string[] = [];
+    for (let j = i + 1; j < lines.length && !/^\s{0,3}#{1,6}\s+/.test(lines[j]); j++) {
+      const line = lines[j].trim();
+      if (line) values.push(line.replace(/^[-*]\s*/, ""));
+    }
+    if (values.length) return values.join(separator);
+  }
+  return undefined;
+}
+
+function inferredDescription(body: string): string {
+  const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/m.exec(body)?.[1];
+  const lines = body.split(/\r?\n/);
+  const headingIndex = heading ? lines.findIndex((line) => /^\s{0,3}#{1,6}\s+/.test(line)) : -1;
+  let paragraph = "";
+  let inParagraph = false;
+  for (let i = Math.max(0, headingIndex + 1); i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) {
+      if (inParagraph) break;
+      continue;
+    }
+    if (/^\s{0,3}#{1,6}\s+/.test(line)) break;
+    if (/^\|.*\|$/.test(line) || /^[-*_]{3,}$/.test(line)) {
+      if (inParagraph) break;
+      continue;
+    }
+    paragraph += `${paragraph ? " " : ""}${line.replace(/^>\s*/, "")}`;
+    inParagraph = true;
+    if (paragraph.length >= 500) break;
+  }
+  const summary = [heading?.trim(), paragraph].filter(Boolean).join(" — ");
+  if (summary) return summary.slice(0, 500);
+  const firstLine = lines.find((line) => line.trim() && !/^\s*---\s*$/.test(line));
+  return firstLine ? cleanMarkdownValue(firstLine.replace(/^>\s*/, "")).slice(0, 500) : "";
+}
+
+function bodyMetadata(body: string): { description: string; triggers: string[] } {
+  const descriptionLabels = DESCRIPTION_LABELS;
+  const triggerLabels = TRIGGER_LABELS;
+  const description =
+    markdownTableValue(body, descriptionLabels) ??
+    labeledLineValue(body, descriptionLabels) ??
+    labeledSectionValue(body, descriptionLabels) ??
+    inferredDescription(body);
+  const triggerText =
+    markdownTableValue(body, triggerLabels) ??
+    labeledLineValue(body, triggerLabels) ??
+    labeledSectionValue(body, triggerLabels, ", ");
+  return { description, triggers: triggerText ? splitTriggerTerms(triggerText) : [] };
+}
+
 /**
- * Minimal frontmatter parser for exactly the three supported fields.
+ * Minimal frontmatter parser for the supported fields, with body metadata
+ * fallback for skills that omit YAML frontmatter.
  * Frontmatter is optional: without it (or without a `name` inside it) the
  * skill falls back to `fallbackName` — the folder name — so a plain-text
  * SKILL.md just works. Returns null only when no name is available at all.
@@ -62,13 +180,16 @@ export function parseSkillMd(raw: string, fallbackName?: string): { name: string
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
   if (!m) {
     if (!fallbackName) return null;
-    return { name: fallbackName, description: "", triggers: [], body: raw.trim() };
+    const body = raw.trim();
+    const metadata = bodyMetadata(body);
+    return { name: fallbackName, ...metadata, body };
   }
   const fm = m[1];
   const body = raw.slice(m[0].length).trim();
+  const metadata = bodyMetadata(body);
   const name = /^name:\s*(.+)$/m.exec(fm)?.[1]?.trim() ?? fallbackName;
   if (!name) return null;
-  const description = /^description:\s*(.+)$/m.exec(fm)?.[1]?.trim() ?? "";
+  const description = /^description:\s*(.+)$/m.exec(fm)?.[1]?.trim() || metadata.description;
   const triggers: string[] = [];
   const trigBlock = /^triggers:\s*\r?\n((?:[ \t]+-[ \t]*.+\r?\n?)+)/m.exec(fm)?.[1];
   if (trigBlock) {
@@ -77,7 +198,7 @@ export function parseSkillMd(raw: string, fallbackName?: string): { name: string
       if (item) triggers.push(item);
     }
   }
-  return { name, description, triggers, body };
+  return { name, description, triggers: triggers.length ? triggers : metadata.triggers, body };
 }
 
 /** A skill folder whose SKILL.md exists but didn't load cleanly. */
@@ -186,8 +307,13 @@ export function lastUserText(): string {
  * it in the system prompt means the instructions survive all rounds of the
  * turn without depending on the model re-reading anything.
  */
-export function skillPromptFor(userText: string): string {
-  const matched = matchSkills(userText);
+export function skillPromptFor(userText: string, selectedNames?: string[]): string {
+  const matched = selectedNames
+    ? (() => {
+        const byName = new Map(loadSkills().map((skill) => [skill.name, skill] as const));
+        return selectedNames.map((name) => byName.get(name)).filter((skill): skill is Skill => Boolean(skill));
+      })()
+    : matchSkills(userText);
   if (!matched.length) return "";
   const parts = matched.map((s) => {
     const body =

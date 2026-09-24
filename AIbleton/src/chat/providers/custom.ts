@@ -47,7 +47,7 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       CUSTOM_INCOMPLETE_HINT[req.language ?? ""] ?? CUSTOM_INCOMPLETE_HINT.en);
   }
   const messages: unknown[] = [
-    { role: "system", content: systemPromptFor(req.language) },
+    { role: "system", content: systemPromptFor(req.language, req.selectedSkillNames) },
     ...historyWithTools(currentSession(), {
       userText: (text) => ({ role: "user", content: text }),
       assistantText: (text) => ({ role: "assistant", content: text }),

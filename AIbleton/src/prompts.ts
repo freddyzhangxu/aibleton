@@ -177,7 +177,7 @@ export function memoryPrompt(): string {
   );
 }
 
-export function systemPromptFor(language?: string): string {
+export function systemPromptFor(language?: string, selectedSkillNames?: string[]): string {
   const name = LANG_NAMES[language ?? ""] ?? "English";
   const code = language && LANG_NAMES[language] ? language : "en";
   // The date anchors "latest/recent" web searches — the model's training
@@ -188,7 +188,7 @@ export function systemPromptFor(language?: string): string {
     `\n\nInstrument selection rule: when creating a bass, melody, or pad on an empty MIDI track, preserve an explicitly named instrument. If the user does not name one, call insert_device with device_name "random"; the server chooses one of ${RANDOM_MELODIC_INSTRUMENTS.join(", ")} and reports the actual device selected. Never replace an existing instrument implicitly.` +
     memoryPrompt() +
     (toolState.webSettings.enabled ? WEB_PROMPT : "") +
-    skillPromptFor(lastUserText()) +
+    skillPromptFor(lastUserText(), selectedSkillNames) +
     // Current-Set identity + one-turn "set changed" warning (see setcontext.ts)
     setContextPrompt() +
     `\n\nToday's date: ${today}.` +

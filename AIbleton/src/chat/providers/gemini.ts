@@ -92,7 +92,7 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
   for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
     const requestBody = JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPromptFor(req.language) }] },
+      systemInstruction: { parts: [{ text: systemPromptFor(req.language, req.selectedSkillNames) }] },
       contents,
       ...(languageRewriteOnly ? {} : { tools }),
       ...(thinkingBudget ? { generationConfig: { thinkingConfig: { thinkingBudget } } } : {}),
