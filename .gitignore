@@ -12,7 +12,7 @@ extensions-sdk-*/
 # 内部文档（不公开）
 .docs/
 .superpowers/
-docs/superpowers/specs/
+docs/superpowers/
 
 # 本地 skill 配置（不入库）
 .baoyu-skills/
