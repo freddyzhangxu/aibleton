@@ -17,7 +17,11 @@ import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
-import { languageCorrectionPrompt, replyNeedsLanguageCorrection } from "../../i18n/language.js";
+import {
+  languageCorrectionPrompt,
+  MAX_REPLY_LANGUAGE_CORRECTIONS,
+  replyNeedsLanguageCorrection,
+} from "../../i18n/language.js";
 
 // ---------- OpenAI-compatible chat/completions (custom endpoint) ----------
 
@@ -141,7 +145,10 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     if (!calls.length) {
       const reply =
         (typeof msg.content === "string" ? msg.content : "").trim() || commonText(req.language, "noTextReply");
-      if (languageCorrections < 1 && replyNeedsLanguageCorrection(reply, req.language)) {
+      if (
+        languageCorrections < MAX_REPLY_LANGUAGE_CORRECTIONS &&
+        replyNeedsLanguageCorrection(reply, req.language)
+      ) {
         languageCorrections++;
         languageRewriteOnly = true;
         messages.push({ role: "assistant", content: reply });

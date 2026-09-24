@@ -12,7 +12,11 @@ import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
-import { languageCorrectionPrompt, replyNeedsLanguageCorrection } from "../../i18n/language.js";
+import {
+  languageCorrectionPrompt,
+  MAX_REPLY_LANGUAGE_CORRECTIONS,
+  replyNeedsLanguageCorrection,
+} from "../../i18n/language.js";
 
 export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
   const { baseUrl, authToken, model } = cfg;
@@ -218,7 +222,10 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     // continuation placeholder — drop it when real text was salvaged earlier.
     const finalText = lastText === "…" && textCarry ? "" : lastText;
     const reply = [textCarry, finalText].filter(Boolean).join("\n") || commonText(req.language, "noTextReply");
-    if (languageCorrections < 1 && replyNeedsLanguageCorrection(reply, req.language)) {
+    if (
+      languageCorrections < MAX_REPLY_LANGUAGE_CORRECTIONS &&
+      replyNeedsLanguageCorrection(reply, req.language)
+    ) {
       languageCorrections++;
       languageRewriteOnly = true;
       messages.push({ role: "assistant", content: reply });

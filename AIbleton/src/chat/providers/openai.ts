@@ -22,7 +22,11 @@ import { errMessage, friendlyApiError, isFriendlyError, settingsPath } from "../
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
-import { languageCorrectionPrompt, replyNeedsLanguageCorrection } from "../../i18n/language.js";
+import {
+  languageCorrectionPrompt,
+  MAX_REPLY_LANGUAGE_CORRECTIONS,
+  replyNeedsLanguageCorrection,
+} from "../../i18n/language.js";
 
 const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 
@@ -336,7 +340,10 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
           .map((c) => c.text ?? "")
           .join("\n")
           .trim() || commonText(req.language, "noTextReply");
-      if (languageCorrections < 1 && replyNeedsLanguageCorrection(reply, req.language)) {
+      if (
+        languageCorrections < MAX_REPLY_LANGUAGE_CORRECTIONS &&
+        replyNeedsLanguageCorrection(reply, req.language)
+      ) {
         languageCorrections++;
         languageRewriteOnly = true;
         input.push(...output);

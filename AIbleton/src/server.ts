@@ -811,11 +811,12 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
     if (req.method === "POST" && req.url === "/api/chat") {
       readBody((parsed) => {
         const text = String(parsed.text ?? "").trim();
+        const attachments = (parsed.attachments as Attachment[] | undefined)?.slice(0, 10) ?? [];
         const languageContext = resolveTurnLanguage({
           text,
           panelLanguage: typeof parsed.language === "string" ? parsed.language : undefined,
         });
-        if (!text) {
+        if (!text && !attachments.length) {
           send(400, JSON.stringify({ error: commonText(languageContext.replyLanguage, "emptyMessage") }));
           return;
         }
@@ -829,7 +830,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         // content); images leave a marker — the base64 itself only rides this
         // turn's API request, never the history file.
         let content = text;
-        for (const a of (parsed.attachments as Attachment[] | undefined)?.slice(0, 10) ?? []) {
+        for (const a of attachments) {
           if (typeof a?.text === "string") {
             content += `\n\n<attachment name=${JSON.stringify(a.name)}>\n${a.text.slice(0, 20000)}\n</attachment>`;
           } else if ((a?.kind === "midi" || a?.kind === "als") && typeof a.data === "string") {
@@ -840,7 +841,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
           }
         }
         session.messages.push({ role: "user", content });
-        if (session.title === "新对话") session.title = text.slice(0, 24);
+        if (session.title === "新对话") session.title = (text || attachments[0]?.name || "Attachment").slice(0, 24);
         session.updatedAt = Date.now();
         saveStore(context);
         // Remember the provider actually chatted with, so a reopened window

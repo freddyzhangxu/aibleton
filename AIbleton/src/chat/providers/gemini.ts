@@ -17,7 +17,11 @@ import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
-import { languageCorrectionPrompt, replyNeedsLanguageCorrection } from "../../i18n/language.js";
+import {
+  languageCorrectionPrompt,
+  MAX_REPLY_LANGUAGE_CORRECTIONS,
+  replyNeedsLanguageCorrection,
+} from "../../i18n/language.js";
 
 // ---------- Gemini generateContent API ----------
 
@@ -152,7 +156,10 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
           .map((p) => p.text!)
           .join("\n")
           .trim() || commonText(req.language, "noTextReply");
-      if (languageCorrections < 1 && replyNeedsLanguageCorrection(reply, req.language)) {
+      if (
+        languageCorrections < MAX_REPLY_LANGUAGE_CORRECTIONS &&
+        replyNeedsLanguageCorrection(reply, req.language)
+      ) {
         languageCorrections++;
         languageRewriteOnly = true;
         contents.push({ role: "model", parts });

@@ -1,5 +1,6 @@
 export {
   SUPPORTED_LANGUAGES,
+  MAX_REPLY_LANGUAGE_CORRECTIONS,
   normalizeLanguage,
   languageCorrectionPrompt,
   replyNeedsLanguageCorrection,

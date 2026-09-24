@@ -2731,7 +2731,7 @@
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-aibleton-language': currentLang },
           body: JSON.stringify({
-            text: text || '(附件)',
+            text,
             provider: currentProvider,
             language: currentLang,
             apiKey: cfgInputs.apiKey.value || undefined,
