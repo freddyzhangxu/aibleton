@@ -178,5 +178,6 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     }
     contents.push({ role: "user", parts: responseParts });
   }
-  throw new Error(commonText(req.language, "tooManyToolRounds", AGENT_MAX_ROUNDS));
+  toolHooks.debugLog(context, `ROUND LIMIT reached (${AGENT_MAX_ROUNDS}); saving ${actions.length} tool actions`);
+  return finishChat(context, actions, commonText(req.language, "roundLimitReached", AGENT_MAX_ROUNDS));
 }

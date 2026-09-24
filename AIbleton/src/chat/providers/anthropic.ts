@@ -234,5 +234,6 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     }
     return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
   }
-  throw new Error(commonText(req.language, "tooManyToolRounds", AGENT_MAX_ROUNDS));
+  toolHooks.debugLog(context, `ROUND LIMIT reached (${AGENT_MAX_ROUNDS}); saving ${actions.length} tool actions`);
+  return finishChat(context, actions, commonText(req.language, "roundLimitReached", AGENT_MAX_ROUNDS));
 }

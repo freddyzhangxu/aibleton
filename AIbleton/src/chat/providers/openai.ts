@@ -369,5 +369,6 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       input.push({ type: "function_call_output", call_id: call.call_id, output: resultJson });
     }
   }
-  throw new Error(commonText(req.language, "tooManyToolRounds", AGENT_MAX_ROUNDS));
+  toolHooks.debugLog(context, `ROUND LIMIT reached (${AGENT_MAX_ROUNDS}); saving ${actions.length} tool actions`);
+  return finishChat(context, actions, commonText(req.language, "roundLimitReached", AGENT_MAX_ROUNDS));
 }

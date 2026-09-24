@@ -39,7 +39,7 @@ interface ChatCompletionsData {
  * flavor every third-party relay, OpenRouter and local server implements —
  * unlike /responses, which most of them lack) with no instructions field and
  * no effort mapping, so Grok- or DeepSeek-style backends accept the request
- * verbatim. Same 12-round tool loop as chatOpenAI.
+ * verbatim. Uses the same bounded provider-round loop as the other providers.
  */
 export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
   if (!cfg.baseUrl || !cfg.model) {
@@ -174,5 +174,6 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       messages.push({ role: "tool", tool_call_id: call.id ?? "", content: resultJson });
     }
   }
-  throw new Error(commonText(req.language, "tooManyToolRounds", AGENT_MAX_ROUNDS));
+  toolHooks.debugLog(context, `ROUND LIMIT reached (${AGENT_MAX_ROUNDS}); saving ${actions.length} tool actions`);
+  return finishChat(context, actions, commonText(req.language, "roundLimitReached", AGENT_MAX_ROUNDS));
 }
