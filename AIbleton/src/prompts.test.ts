@@ -20,6 +20,18 @@ test("injects one explicit reply language for the turn", () => {
   assert.doesNotMatch(prompt, /[\u3400-\u9fff]/u);
 });
 
+test("uses producer BPM memory only when the creation genre is unspecified", () => {
+  assert.match(SYSTEM_PROMPT, /explicitly names a numeric BPM\/tempo[\s\S]*?use it as the target; it overrides all other tempo guidance/);
+  assert.match(SYSTEM_PROMPT, /resolve the genre\/subgenre from the current request or the matched skill/);
+  assert.match(SYSTEM_PROMPT, /choose a BPM for that music type/);
+  assert.match(SYSTEM_PROMPT, /Prefer tempo guidance in the matched skill/);
+  assert.match(SYSTEM_PROMPT, /use a conventional tempo for the requested genre/);
+  assert.match(SYSTEM_PROMPT, /Only when neither the current request nor the matched skill establishes a music type, use the BPM range in artist memory/);
+  assert.match(SYSTEM_PROMPT, /choose its midpoint/);
+  assert.match(SYSTEM_PROMPT, /If artist memory has no BPM, preserve the Live Set's current tempo/);
+  assert.match(SYSTEM_PROMPT, /Do not infer the current music type from artist-memory genres/);
+});
+
 test("makes named device replacement a verified sample-swap workflow", () => {
   assert.match(SYSTEM_PROMPT, /replace or swap a NAMED device\/instrument/);
   assert.match(SYSTEM_PROMPT, /do NOT call set_goal or set_plan/);
