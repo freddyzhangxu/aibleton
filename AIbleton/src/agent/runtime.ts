@@ -804,6 +804,38 @@ function phaseForTool(name: string): string {
   return TOOL_PHASES[name] ?? (READ_ONLY_TOOLS.has(name) ? "reading" : "applying");
 }
 
+/** Localized, non-sensitive activity categories shown while a tool is running. */
+function activityForTool(name: string, input: Record<string, unknown>): { key: string; detail?: string; status: "running" } {
+  const groups: Record<string, string> = {
+    get_song_overview: "activity_inspect",
+    get_clip_notes: "activity_inspect",
+    analyze_song: "activity_analyze",
+    analyze_rendered_track: "activity_analyze",
+    set_goal: "activity_plan",
+    set_plan: "activity_plan",
+    arrange_song: "activity_arrange",
+    write_midi_clip: "activity_edit_clip",
+    write_session_clip: "activity_edit_clip",
+    set_clip_notes: "activity_edit_clip",
+    delete_arrangement_clip: "activity_edit_clip",
+    delete_session_clip: "activity_edit_clip",
+    set_track_mixer: "activity_edit_track",
+    set_track_state: "activity_edit_track",
+    set_tempo: "activity_edit_track",
+    insert_device: "activity_edit_device",
+    replace_device: "activity_edit_device",
+    set_device_parameter: "activity_edit_device",
+    set_device_parameters: "activity_edit_device",
+    generate_audio: "activity_generate",
+    search_samples: "activity_search_samples",
+    web_search: "activity_search_web",
+    web_fetch: "activity_search_web",
+  };
+  const detail = [input.track_name, input.track, input.device_name, input.section, input.scene_name]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+  return { key: groups[name] ?? (READ_ONLY_TOOLS.has(name) ? "activity_inspect" : "activity_edit"), status: "running", ...(detail ? { detail } : {}) };
+}
+
 /** A mutation tool can report that its safety preflight made no Set change.
  * Keep such calls visible to the model, but exclude them from budgets,
  * verification, listen hints, and durable mutation receipts. */
@@ -883,6 +915,7 @@ export async function callTool(
   let result: unknown;
   let executed = true;
   toolState.phase = phaseForTool(name);
+  toolState.activity = activityForTool(name, input);
   try {
     result = await runTool(context, name, input);
     executed = didExecute(result);
@@ -945,6 +978,9 @@ export async function callTool(
   result = sanitizeToolResultLanguage(result, toolState.activeLanguage);
   actions.push({ tool: name, input, result });
   const resultJson = JSON.stringify(result);
+  if (toolState.activity) {
+    toolState.activity = { ...toolState.activity, status: result !== null && typeof result === "object" && "error" in result ? "error" : "done" };
+  }
   toolHooks.debugLog(context, `TOOL ${name} ${JSON.stringify(input)} -> ${rawResultJson.slice(0, 400)}`);
   return truncateResult(resultJson);
 }

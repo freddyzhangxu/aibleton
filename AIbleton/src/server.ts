@@ -765,6 +765,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         error: lastError,
         pending: getPendingConfirm(),
         phase: toolState.phase,
+        activity: toolState.activity,
       }));
       return;
     }
@@ -868,6 +869,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         toolState.activeGlobalIntent = hasGlobalIntent(text);
         toolState.activeMasterIntent = hasMasterIntent(text);
         toolState.phase = "thinking";
+        toolState.activity = null;
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT
         // stop it. Clients poll /api/status and then read /api/history.
@@ -899,6 +901,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             toolState.activeLanguageContext = null;
             toolState.activeDeleteAuthorization = undefined;
             toolState.phase = null;
+            toolState.activity = null;
             // Never leave a confirmation dangling past its task's lifetime.
             answerConfirmation(false);
           }
