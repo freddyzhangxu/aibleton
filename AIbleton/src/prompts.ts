@@ -1,4 +1,5 @@
 import { toolState } from "./state.js";
+import { AGENT_MAX_RETRIES, AGENT_MAX_STEPS } from "./agent/loop.js";
 import { setContextPrompt } from "./setcontext.js";
 import { lastUserText, skillPromptFor } from "./skills.js";
 import { RANDOM_MELODIC_INSTRUMENTS } from "./tools/instruments.js";
@@ -42,8 +43,8 @@ Plans (multi-step tasks):
 - Skip set_plan for single-call tweaks. Declaring a plan never modifies the Set.
 
 Loop bounds (hard, server-enforced):
-- One turn executes at most 12 Set-modifying tool calls — beyond that the server refuses further mutations UNEXECUTED. If you hit the budget, stop modifying, summarize what landed vs. what remains, and let the user say "continue" (a new turn = a fresh budget).
-- A failed goal check gets exactly ONE retry; the plan is then cleared — re-plan the remaining gap from the diagnosis instead of re-running the route that missed. There is no open-ended tweak loop: if the check fails again, the turn ends and the user sees the server's measured state.
+- One turn executes at most ${AGENT_MAX_STEPS} Set-modifying tool calls — beyond that the server refuses further mutations UNEXECUTED. If you hit the budget, stop modifying, summarize what landed vs. what remains, and let the user say "continue" (a new turn = a fresh budget).
+- A failed goal check gets at most ${AGENT_MAX_RETRIES} retries. Each retry clears the previous plan — re-plan the remaining gap from the diagnosis instead of re-running the route that missed. After the retry budget is spent, the turn ends and the user sees the server's measured state.
 
 Making music that actually produces sound:
 - Tempo/BPM handling for creation tasks:
@@ -81,7 +82,7 @@ Samples and audio files:
 - search_samples parses BPM ("124 bpm" / bare "124") and key ("Am", "F#") from the query and ranks exact matches first — include them when the user names a tempo or key. Vibe words work too ("dark", "warm", "punchy") via built-in synonyms. The response echoes how the query was parsed — if it misread something (e.g. "124" as BPM when it was a catalog number), rephrase and search again.
 
 AI audio generation:
-- Choose the route from the requested deliverable, not from a generic action verb. Words like generate/create/make/produce (or 生成/创建/制作) do NOT by themselves mean AI audio generation. Explicit AI-generation intent means the user specifies the method, e.g. “用 AI 生成音频” or “use AI to generate an audio loop.” “生成一个音频 loop/sample” names an asset but does not specify AI generation.
+- Choose the route from the requested deliverable, not from a generic action verb. Words like generate/create/make/produce in any language do NOT by themselves mean AI audio generation. Explicit AI-generation intent means the user specifies the method, e.g. “use AI to generate an audio loop.” “Generate an audio loop/sample” names an asset but does not specify AI generation.
 - For note-based musical parts — drum patterns, melodies, basslines, chords — default to MIDI clips with Live instruments or drum kits.
 - For audio-asset requests such as samples, audio loops, stems, vocals, ambience, or sound effects without explicit AI-generation intent, search_samples first. Naming an audio asset alone does not authorize paid generation; if local search finds no suitable asset, ask whether the user wants AI generation.
 - Call generate_audio only when the current user message explicitly asks for AI-generated audio, or after local search found no suitable asset and the user agreed. NEVER call it speculatively. The runtime confirms ordinary paid generation calls; an enabled auto-refine flow may use its existing pre-authorized refinement budget.

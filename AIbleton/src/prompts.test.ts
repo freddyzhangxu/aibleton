@@ -24,7 +24,7 @@ test("uses producer BPM memory only when the creation genre is unspecified", () 
   assert.match(SYSTEM_PROMPT, /explicitly names a numeric BPM\/tempo[\s\S]*?use it as the target; it overrides all other tempo guidance/);
   assert.match(SYSTEM_PROMPT, /resolve the genre\/subgenre from the current request or the matched skill/);
   assert.match(SYSTEM_PROMPT, /choose a BPM for that music type/);
-  assert.match(SYSTEM_PROMPT, /Prefer tempo guidance in the matched skill/);
+  assert.match(SYSTEM_PROMPT, /prefer tempo guidance in the matched skill/i);
   assert.match(SYSTEM_PROMPT, /use a conventional tempo for the requested genre/);
   assert.match(SYSTEM_PROMPT, /Only when neither the current request nor the matched skill establishes a music type, use the BPM range in artist memory/);
   assert.match(SYSTEM_PROMPT, /choose its midpoint/);

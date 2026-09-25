@@ -33,20 +33,20 @@ test("parses the three frontmatter fields and strips them from the body", () => 
   assert.equal(s.body, "## Goal\nBuild the kit.\n\n## Workflow\n1. load_drum_kit");
 });
 
-test("accepts CRLF and missing description/triggers", () => {
+test("accepts CRLF and infers a missing description from the body", () => {
   const s = parseSkillMd("---\r\nname: minimal\r\n---\r\nbody here\r\n");
   assert.ok(s);
   assert.equal(s.name, "minimal");
-  assert.equal(s.description, "");
+  assert.equal(s.description, "body here");
   assert.deepEqual(s.triggers, []);
   assert.equal(s.body, "body here");
 });
 
-test("falls back to the folder name when frontmatter is missing or nameless", () => {
+test("falls back to the folder name and infers a description when frontmatter is missing", () => {
   const plain = parseSkillMd("just do the thing\nstep by step", "my-folder");
   assert.ok(plain);
   assert.equal(plain.name, "my-folder");
-  assert.equal(plain.description, "");
+  assert.equal(plain.description, "just do the thing step by step");
   assert.deepEqual(plain.triggers, []);
   assert.equal(plain.body, "just do the thing\nstep by step");
 
