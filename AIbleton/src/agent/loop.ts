@@ -22,7 +22,7 @@
  *                       even asked to confirm); the model must summarize and
  *                       let the user say "continue" — a fresh turn is a fresh
  *                       budget, i.e. a human checkpoint.
- *   AGENT_MAX_RETRIES — goal-gate replans. At most two: diagnose the failed
+ *   AGENT_MAX_RETRIES — goal-gate replans. At most three: diagnose the failed
  *                       gate against the plan, clear the plan, repair, and
  *                       judge again. Never an open-ended loop.
  *   AGENT_MAX_REFINEMENTS — generation refinements (PR19). Distinct from a
@@ -53,10 +53,10 @@ export const AGENT_MAX_ROUNDS = 48;
  * is still a change the next call must reckon with); denied/thrown calls
  * never executed and cost nothing.
  */
-export const AGENT_MAX_STEPS = 24;
+export const AGENT_MAX_STEPS = 36;
 
 /** Goal-gate replans per turn. */
-export const AGENT_MAX_RETRIES = 2;
+export const AGENT_MAX_RETRIES = 3;
 
 /** Generation refinements per turn (PR19). Each one is a paid API call, so
  * this remains bounded to six additional generations. */
