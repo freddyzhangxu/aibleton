@@ -67,6 +67,7 @@ export interface FriendlyApiErrorOpts {
 
 const NETWORK_RE =
   /fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|socket hang up|getaddrinfo|NetworkError|timed?\s?out|超时|代理/i;
+const RESPONSE_TIMEOUT_RE = /UND_ERR_(?:HEADERS|BODY)_TIMEOUT|HeadersTimeoutError|BodyTimeoutError/i;
 const QUOTA_RE =
   /insufficient[_ ]quota|exceeded your current quota|credit balance|billing|not enough.{0,20}(quota|credit|balance)|余额不足|欠费/i;
 const RATE_RE = /too frequent|rate.?limit|too many requests|requests per (min|hour|day)|限流/i;
@@ -92,7 +93,9 @@ export function friendlyApiError(opts: FriendlyApiErrorOpts): Error {
   const where = status ? ` (${status})` : "";
 
   let msg: string;
-  if (raw && NETWORK_RE.test(raw) && !status) {
+  if (raw && RESPONSE_TIMEOUT_RE.test(raw) && !status) {
+    msg = apiErrorText(opts.language, "timeout", what);
+  } else if (raw && NETWORK_RE.test(raw) && !status) {
     msg = /代理/.test(raw)
       ? apiErrorText(opts.language, "networkProxy", what, rawShort)
       : apiErrorText(opts.language, "network", what);

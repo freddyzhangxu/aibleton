@@ -79,6 +79,19 @@ test("raw Node network errors become a connectivity hint, not 'fetch failed'", (
   assert.match(e.message, /重试/);
 });
 
+test("Undici response timeouts are not reported as a connectivity failure", () => {
+  for (const code of ["UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]) {
+    const e = friendlyApiError({
+      what: "Claude",
+      settings: AI_ZH,
+      raw: `fetch failed ${code}`,
+      language: "zh",
+    });
+    assert.match(e.message, /等待响应超时/);
+    assert.doesNotMatch(e.message, /连不上/);
+  }
+});
+
 test("proxy failures get the proxy-specific hint", () => {
   const e = friendlyApiError({
     what: "Gemini",

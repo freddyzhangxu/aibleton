@@ -1,11 +1,12 @@
 import { normalizeLanguage, type SupportedLanguage } from "./language.js";
 
-export type ApiErrorKind = "networkProxy" | "network" | "quota" | "rate" | "auth" | "model" | "overloaded" | "generic";
+export type ApiErrorKind = "networkProxy" | "network" | "timeout" | "quota" | "rate" | "auth" | "model" | "overloaded" | "generic";
 
 const COPY: Record<SupportedLanguage, Record<ApiErrorKind, string>> = {
   zh: {
     networkProxy: "连不上 {0}：代理连接失败（{1}）— 确认代理已启动且端口正确，或检查网络后重试。",
     network: "连不上 {0} — 检查网络连接（海外服务可能需要代理）后重试。",
+    timeout: "{0} 等待响应超时 — 请查看任务当前结果，再决定继续或重试。",
     quota: "{0} 账户额度不足 — 到 {0} 控制台充值/升级，或在 {1} 更换 API Key。",
     rate: "请求太频繁，{0} 暂时限流。等 1 分钟再试；持续出现请到 {0} 控制台检查账户用量额度。",
     auth: "{0} 拒绝了请求：API Key 无效或已过期。打开 {1} 重新填写后再试。",
@@ -16,6 +17,7 @@ const COPY: Record<SupportedLanguage, Record<ApiErrorKind, string>> = {
   en: {
     networkProxy: "Couldn't reach {0}: proxy connection failed ({1}) — check that the proxy is running on the right port, then try again.",
     network: "Couldn't reach {0} — check your network connection (an overseas service may need a proxy) and try again.",
+    timeout: "{0} response timed out — check the task's current result before continuing or retrying.",
     quota: "Your {0} account is out of quota — top up in the {0} console, or set a different API key in {1}.",
     rate: "{0} is rate-limiting requests. Wait a minute and retry; if it persists, check your {0} account usage.",
     auth: "{0} rejected the request: the API key is invalid or expired. Open {1} to update it, then try again.",
@@ -26,6 +28,7 @@ const COPY: Record<SupportedLanguage, Record<ApiErrorKind, string>> = {
   de: {
     networkProxy: "{0} ist nicht erreichbar: Proxy-Verbindung fehlgeschlagen ({1}) — Proxy und Port prüfen und erneut versuchen.",
     network: "{0} ist nicht erreichbar — Netzwerkverbindung prüfen und erneut versuchen.",
+    timeout: "Zeitüberschreitung bei der Antwort von {0} — Ergebnis prüfen, bevor Sie fortfahren oder erneut versuchen.",
     quota: "Das {0}-Konto hat kein Kontingent mehr — im {0}-Konto aufladen oder einen anderen API-Schlüssel unter {1} verwenden.",
     rate: "{0} begrenzt die Anfragen. Eine Minute warten und erneut versuchen; bei Wiederholung die Kontonutzung prüfen.",
     auth: "{0} hat die Anfrage abgelehnt: Der API-Schlüssel ist ungültig oder abgelaufen. Unter {1} aktualisieren.",
@@ -36,6 +39,7 @@ const COPY: Record<SupportedLanguage, Record<ApiErrorKind, string>> = {
   fr: {
     networkProxy: "Impossible de joindre {0} : échec de la connexion au proxy ({1}) — vérifiez le proxy et son port, puis réessayez.",
     network: "Impossible de joindre {0} — vérifiez la connexion réseau puis réessayez.",
+    timeout: "La réponse de {0} a expiré — vérifiez le résultat actuel avant de continuer ou de réessayer.",
     quota: "Le compte {0} n'a plus de quota — rechargez-le ou utilisez une autre clé API dans {1}.",
     rate: "{0} limite temporairement les requêtes. Attendez une minute puis réessayez ; si cela persiste, vérifiez l'utilisation du compte.",
     auth: "{0} a refusé la requête : la clé API est invalide ou expirée. Mettez-la à jour dans {1}.",
@@ -46,6 +50,7 @@ const COPY: Record<SupportedLanguage, Record<ApiErrorKind, string>> = {
   ja: {
     networkProxy: "{0} に接続できません：プロキシ接続に失敗しました（{1}）。プロキシとポートを確認して再試行してください。",
     network: "{0} に接続できません。ネットワーク接続を確認して再試行してください。",
+    timeout: "{0} の応答待ちがタイムアウトしました。続行または再試行する前に、現在の結果を確認してください。",
     quota: "{0} アカウントの利用枠がありません。{0} で追加するか、{1} で別の API キーを設定してください。",
     rate: "{0} がリクエストを制限しています。1分待って再試行し、続く場合はアカウント使用量を確認してください。",
     auth: "{0} がリクエストを拒否しました。API キーが無効または期限切れです。{1} で更新してください。",
@@ -56,6 +61,7 @@ const COPY: Record<SupportedLanguage, Record<ApiErrorKind, string>> = {
   es: {
     networkProxy: "No se pudo conectar con {0}: falló la conexión al proxy ({1}). Comprueba el proxy y el puerto y vuelve a intentarlo.",
     network: "No se pudo conectar con {0}. Comprueba la conexión de red y vuelve a intentarlo.",
+    timeout: "Se agotó el tiempo de espera de {0}. Comprueba el resultado actual antes de continuar o reintentar.",
     quota: "La cuenta de {0} no tiene cuota. Recárgala en {0} o usa otra clave API en {1}.",
     rate: "{0} está limitando las solicitudes. Espera un minuto y vuelve a intentarlo; si continúa, revisa el uso de la cuenta.",
     auth: "{0} rechazó la solicitud: la clave API no es válida o ha caducado. Actualízala en {1}.",
@@ -66,6 +72,7 @@ const COPY: Record<SupportedLanguage, Record<ApiErrorKind, string>> = {
   it: {
     networkProxy: "Impossibile raggiungere {0}: connessione al proxy non riuscita ({1}). Controlla proxy e porta e riprova.",
     network: "Impossibile raggiungere {0}. Controlla la connessione di rete e riprova.",
+    timeout: "La risposta di {0} è scaduta. Controlla il risultato attuale prima di continuare o riprovare.",
     quota: "L'account {0} ha esaurito la quota. Ricaricalo oppure usa un'altra chiave API in {1}.",
     rate: "{0} sta limitando le richieste. Attendi un minuto e riprova; se continua, controlla l'utilizzo dell'account.",
     auth: "{0} ha rifiutato la richiesta: la chiave API non è valida o è scaduta. Aggiornala in {1}.",
@@ -82,4 +89,3 @@ function fill(template: string, args: readonly unknown[]): string {
 export function apiErrorText(language: string | undefined, kind: ApiErrorKind, ...args: readonly unknown[]): string {
   return fill(COPY[normalizeLanguage(language)][kind], args);
 }
-

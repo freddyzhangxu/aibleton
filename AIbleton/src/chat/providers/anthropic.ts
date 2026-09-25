@@ -12,6 +12,7 @@ import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
+import { requestAnthropicRound, type AnthropicRoundData } from "./anthropic-transport.js";
 import {
   languageCorrectionPrompt,
   MAX_REPLY_LANGUAGE_CORRECTIONS,
@@ -91,43 +92,57 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     if (authToken.startsWith("sk-ant-oat")) {
       headers["anthropic-beta"] = "oauth-2025-04-20";
     }
-    const requestBody = JSON.stringify({
+    const requestBody = {
       model,
       max_tokens: CLAUDE_MAX_TOKENS,
       system: systemPromptFor(req.language, req.selectedSkillNames),
       ...(languageRewriteOnly ? {} : { tools: chatTools }),
       messages,
       ...(thinking && !suppressThinking ? { thinking } : {}),
-    });
-    let data: {
-      content?: { type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }[];
-      stop_reason?: string;
-      error?: { message?: string };
     };
+    const requestChars = JSON.stringify({ ...requestBody, stream: true }).length;
+    let data: AnthropicRoundData;
     let status = 0;
+    let phase = "headers";
+    const startedAt = Date.now();
+    toolHooks.debugLog(context, `ROUND ${round}: Claude request start chars=${requestChars}`);
     try {
-      const res = await fetch(`${baseUrl}/v1/messages`, {
-        method: "POST",
+      const res = await requestAnthropicRound(
+        `${baseUrl}/v1/messages`,
         headers,
-        body: requestBody,
-        signal: toolState.abortCtl?.signal ?? null,
-      });
+        requestBody,
+        toolState.abortCtl?.signal ?? null,
+        (code, mode) => {
+          phase = "body";
+          toolHooks.debugLog(context, `ROUND ${round}: Claude headers status=${code} mode=${mode} elapsedMs=${Date.now() - startedAt}`);
+        },
+      );
       status = res.status;
-      data = (await res.json()) as typeof data;
+      data = res.data;
+      toolHooks.debugLog(context, `ROUND ${round}: Claude response complete elapsedMs=${Date.now() - startedAt}`);
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
+      const cause = err instanceof Error ? err.cause : undefined;
+      const causeDetail = cause instanceof Error
+        ? `${cause.name} ${String((cause as Error & { code?: string }).code ?? "")} ${cause.message}`
+        : cause === undefined ? "" : String(cause);
+      toolHooks.debugLog(
+        context,
+        `ROUND ${round}: Claude request failed phase=${phase} elapsedMs=${Date.now() - startedAt} ` +
+          `error=${errMessage(err)} cause=${causeDetail.slice(0, 300)}`,
+      );
       throw friendlyApiError({
         what: "Claude",
         settings: settingsPath(req.language, "ai"),
-        raw: errMessage(err),
+        raw: `${errMessage(err)} ${causeDetail}`.trim(),
         model,
         language: req.language,
       });
     }
     if (status < 200 || status >= 300) {
       console.error(
-        `[ai-assistant] API ${status} · 请求 ${requestBody.length} 字符 · ` +
+        `[ai-assistant] API ${status} · 请求 ${requestChars} 字符 · ` +
           `messages=${messages.length} tools=${chatTools.length} · 响应: ${JSON.stringify(data).slice(0, 500)}`,
       );
       throw friendlyApiError({
