@@ -559,21 +559,6 @@ function goalRefineMessage(
   return lines.join("\n");
 }
 
-/** PR20 finding: the relay can HALLUCINATE a failure narrative (it imitated
- * the unmet note's exact format with fabricated numbers). On a real pass the
- * gate previously appended nothing, leaving the model's text as the only
- * verdict the user saw. The measured pass now always lands as a system line
- * with the actual numbers, so a fabricated failure is visibly contradicted. */
-function goalMetNote(ev: GoalEvaluation, language?: string): string {
-  const head = goalText(language, "goalPassed");
-  const passed = ev.checks
-    .filter((c) => c.passed)
-    .map((c) => `${c.id}${c.actual ? ` = ${c.actual}` : ""}`)
-    .join("; ");
-  const tail = goalText(language, "trustMeasured");
-  return `${head}${passed || "—"}${tail}`;
-}
-
 function goalOutcomeSummary(ev: GoalEvaluation, met: boolean): string | undefined {
   if (met) {
     const passed = ev.checks
@@ -714,7 +699,10 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
           (plan ? ` · plan ${plan.executedCount}/${plan.total} steps` : "") +
           (sectionVer ? ` · section ${sectionVer.status}` : ""),
       );
-      return { appendNote: goalMetNote(ev, locale) };
+      // The structured turn outcome and task receipt already carry the
+      // measured pass. Keep internal criterion IDs and role aggregates out
+      // of the user-facing chat reply.
+      return null;
     }
     toolHooks.debugLog(
       context,

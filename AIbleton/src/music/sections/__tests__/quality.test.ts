@@ -23,7 +23,7 @@
  *        passes) · a surgical thinning PASSES
  *   D. Failure → Retry
  *      — a too-small edit fails on NAMED criteria (metric + numbers) · the
- *        loop allows up to two bounded retries · a targeted second edit
+ *        loop allows the configured bounded retries · a targeted second edit
  *        passes the very criteria that failed — never a random re-roll
  *
  * Mock edits are honest: they are second snapshots through the SAME chain,
@@ -33,7 +33,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { AGENT_MAX_STEPS, gateAction, mutationsLeft } from "../../../agent/loop.js";
+import { AGENT_MAX_RETRIES, AGENT_MAX_STEPS, gateAction, mutationsLeft } from "../../../agent/loop.js";
 import { normalizeGoal, type MusicGoal } from "../../../goal/types.js";
 import { buildMusicState } from "../../../musicstate/builder.js";
 import type { SnapshotNote, SongSnapshot } from "../../../musicstate/types.js";
@@ -528,11 +528,12 @@ test("quality D: too-small edit fails on NAMED criteria; the bounded retry fixes
     "judged criteria stay in the headline, never duplicated as hints",
   );
 
-  // 3. The loop bound: two retries with budget left — never an open-ended
+  // 3. The loop bound: retries stay within the configured cap — never an open-ended
   // tweak loop, never a retry that could only apologize.
-  assert.equal(gateAction(false, 0, AGENT_MAX_STEPS - 1), "retry");
-  assert.equal(gateAction(false, 1, AGENT_MAX_STEPS - 1), "retry");
-  assert.equal(gateAction(false, 2, AGENT_MAX_STEPS - 1), "stop");
+  for (let retries = 0; retries < AGENT_MAX_RETRIES; retries++) {
+    assert.equal(gateAction(false, retries, AGENT_MAX_STEPS - 1), "retry");
+  }
+  assert.equal(gateAction(false, AGENT_MAX_RETRIES, AGENT_MAX_STEPS - 1), "stop");
   assert.equal(gateAction(true, 0, AGENT_MAX_STEPS - 1), "pass");
   const readOnly = new Set(["set_goal", "set_plan", "analyze_song"]);
   assert.equal(mutationsLeft(["write_midi_clip"], readOnly), AGENT_MAX_STEPS - 1);
