@@ -67,7 +67,7 @@ YOLO is enabled by default. It works well for operations you already know you wa
 2. Each time AI is about to modify the Live Set, it will show the tool name and key parameters.
 3. After confirming the contents, target tracks, and range, press **Allow**. Press **Deny** to skip that step.
 
-The initial audio generation for a request asks for confirmation whether YOLO is on or off, because it consumes external API credits. The prompt shows the provider and duration, not necessarily a price. Set a spend cap or usage alert with your provider before enabling auto-iteration. If you enable it, you are pre-authorizing up to 3 additional paid generations for the same goal; those later generations will not each show another confirmation.
+The initial audio generation for a request asks for confirmation whether YOLO is on or off, because it consumes external API credits. The prompt shows the provider and duration, not necessarily a price. Set a spend cap or usage alert with your provider before enabling auto-iteration. If you enable it, you are pre-authorizing up to 6 additional paid generations for the same goal; those later generations will not each show another confirmation.
 
 ## 4. Your First Success: From an Empty Track to an Audible Groove
 
@@ -104,7 +104,7 @@ Provide the following as needed; you do not have to include everything every tim
 | Starting point for a mix | `Check the relationship between Kick, Bass, and Pad; make only conservative volume and panning adjustments, and do not add tracks.` |
 | Sound design | `Add Auto Filter to Synth and create a rising feeling from dark to bright; check the parameter ranges first, then make only small changes.` |
 | Find a sample | `Find a 124 BPM, A minor, dark pad loop; list candidates first and do not import anything.` |
-| Generate audio | `Generate an 8-second seamless industrial percussion loop with no vocals, at 124 BPM in A minor, and place it on the Texture audio track at bar 33.` |
+| Generate audio | `Generate a 32-second seamless industrial percussion loop with no vocals, at 120 BPM in A minor, and place it on the Texture audio track at bar 33.` |
 
 ### Ask First, Then Act
 
@@ -178,20 +178,20 @@ Local search checks synced Splice content, the Ableton User Library, Factory Pac
 
 ### F. Generating and Iterating on New Audio
 
-Under **Settings → Audio Generation**, select a provider and enter its key. Start with short, verifiable material:
+Under **Settings → Audio Generation**, select a provider and enter its key. Start with clearly scoped material that is easy to audition:
 
 ```text
-Generate an 8-second seamless loop: 124 BPM, A minor, dry industrial percussion,
+Generate a 32-second seamless loop: 120 BPM, A minor, dry industrial percussion,
 no vocals. After generating, import it directly to the Texture audio track at bar 33.
 ```
 
 - Prompts are currently most reliable in **English** and should include genre, BPM, key, instruments, and mood.
-- Use `seamless loop` for loops; 4–16 seconds is usually enough. Total duration may be 1–190 seconds.
+- If no duration is specified, generation defaults to 30 seconds. Total duration may be 1–190 seconds; specify a longer duration when the musical phrase needs it.
 - `instrumental` can request no vocals; lyrics apply only to MiniMax.
 - Generated files are saved in AIbleton’s folder in the User Library, so you can refer to and refine a previous result.
 - **Cost and retry warning:** generation can still be billed even if the later import fails. The generated file is retained; when possible, retry the import rather than generating the audio again.
 
-“Auto-iteration” is appropriate for generation tasks with a clear, measurable goal. It is not appropriate to enable blindly while you are still exploring a style. Turning it on means pre-authorizing up to 3 additional paid generations for the same goal, with no confirmation for each later generation; set a duration and budget first, then audition every result.
+“Auto-iteration” is appropriate for generation tasks with a clear, measurable goal. It is not appropriate to enable blindly while you are still exploring a style. Turning it on means pre-authorizing up to 6 additional paid generations for the same goal, with no confirmation for each later generation; set a duration and budget first, then audition every result.
 
 ## 7. References, Attachments, Search, and Memory
 
@@ -199,9 +199,9 @@ no vocals. After generating, import it directly to the Texture audio track at ba
 
 You can click, drag and drop, or paste up to 10 attachments:
 
-- Images: PNG, JPEG, WebP, GIF; no more than 2 MB each.
-- Text: txt, md, JSON, CSV, code, YAML, and more; no more than 2 MB each. At most the first 20,000 characters of text are sent to the model.
-- MIDI / Live Sets: `.mid` / `.midi` / `.als`; no more than 5 MB each. The system first parses these into text summaries rather than handing the binary projects to the model as-is.
+- Images: PNG, JPEG, WebP, GIF; no more than 10 MB each.
+- Text: txt, md, JSON, CSV, code, YAML, and more; no more than 10 MB each. At most the first 20,000 characters of text are sent to the model.
+- MIDI / Live Sets: `.mid` / `.midi` / `.als`; no more than 10 MB each. The system first parses these into text summaries rather than handing the binary projects to the model as-is.
 
 Live’s built-in webview may be unable to open the native file picker. In Live, use drag and drop or paste where possible. If you want to analyze reference audio, give AI the absolute local path to the WAV / AIFF file and the section to compare. References are for analyzing gaps and making conservative recommendations; do not ask it to copy an existing work.
 

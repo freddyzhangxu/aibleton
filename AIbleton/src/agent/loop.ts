@@ -15,16 +15,16 @@
  * The model drives; this module owns the BOUNDS. Music is not code: "better"
  * is not deterministic, so an unbounded ReAct loop (tweak → doubt → tweak →
  * re-analyze → tweak) drifts the Set away from anything the user asked for.
- * Three hard limits, all per user turn:
+ * Execution limits, all per user turn:
  *
  *   AGENT_MAX_STEPS   — executed Set-mutating calls. Hit it and further
  *                       mutations are refused UNEXECUTED (before the user is
  *                       even asked to confirm); the model must summarize and
  *                       let the user say "continue" — a fresh turn is a fresh
  *                       budget, i.e. a human checkpoint.
- *   AGENT_MAX_RETRIES — goal-gate replans. Exactly one: diagnose the failed
- *                       gate against the plan, clear the plan, repair, final
- *                       judgement. Never an open-ended loop.
+ *   AGENT_MAX_RETRIES — goal-gate replans. At most two: diagnose the failed
+ *                       gate against the plan, clear the plan, repair, and
+ *                       judge again. Never an open-ended loop.
  *   AGENT_MAX_REFINEMENTS — generation refinements (PR19). Distinct from a
  *                       retry: the plan EXECUTED fine but the artifact missed
  *                       the declared bar, so the loop regenerates with
@@ -53,19 +53,19 @@ export const AGENT_MAX_ROUNDS = 48;
  * is still a change the next call must reckon with); denied/thrown calls
  * never executed and cost nothing.
  */
-export const AGENT_MAX_STEPS = 12;
+export const AGENT_MAX_STEPS = 24;
 
-/** Goal-gate replans per turn. One — see the header. */
-export const AGENT_MAX_RETRIES = 1;
+/** Goal-gate replans per turn. */
+export const AGENT_MAX_RETRIES = 2;
 
 /** Generation refinements per turn (PR19). Each one is a paid API call, so
- * three is the compromise between convergence and the user's credit card. */
-export const AGENT_MAX_REFINEMENTS = 3;
+ * this remains bounded to six additional generations. */
+export const AGENT_MAX_REFINEMENTS = 6;
 
 /** Consecutive identical tool-error classes allowed before the turn is
  * stopped. This protects the round budget from a model repeating one broken
  * route after the server has already explained the same failure. */
-export const AGENT_MAX_CONSECUTIVE_TOOL_ERRORS = 3;
+export const AGENT_MAX_CONSECUTIVE_TOOL_ERRORS = 6;
 
 export interface ConsecutiveToolErrorState {
   key?: string;
@@ -91,7 +91,7 @@ export function nextToolErrorState(
 export type GateAction =
   | "pass" // goal met (or none pending) — let the turn finish
   | "refine" // regenerate the artifact with adjusted parameters (gen_* goals)
-  | "retry" // inject the diagnosis and continue the loop once
+  | "retry" // inject the diagnosis and continue within the retry budget
   | "stop"; // finish with the measured-outcome note
 
 /** Refine eligibility, computed by the server from the gate evaluation. */
@@ -123,7 +123,7 @@ export function refineHasNewArtifact(
  *
  * Precedence: a refineable gap refines (the plan executed; the ARTIFACT
  * missed — replanning the route would not make the snare brighter). Anything
- * else unmet falls back to the single retry. Both require mutation budget:
+ * else unmet falls back to a bounded retry. Both require mutation budget:
  * a budget-less loop could only re-analyze and apologize — that is a stop
  * with the measured note, not another round.
  */

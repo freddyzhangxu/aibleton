@@ -825,7 +825,7 @@ export const TOOLS = [
           description:
             "English, specific: genre, BPM, key, instrumentation, mood. Add 'seamless loop' for loops.",
         },
-        duration_seconds: { type: "number", description: "1–190 (default 8); use 4–16 for loops" },
+        duration_seconds: { type: "number", description: "1–190 seconds (default 30); follow the requested phrase length for loops" },
         instrumental: {
           type: "boolean",
           description: "Guarantee no vocals (ElevenLabs / MiniMax; Stable Audio is always instrumental)",

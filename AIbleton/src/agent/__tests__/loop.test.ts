@@ -1,8 +1,8 @@
 /**
  * loop.test.ts — the PR19 exit decision: refine as a fourth gate outcome.
  * Precedence: pass > budget-stop > refine (gen_* gap, budgeted) > retry > stop.
- * A refine is bounded by AGENT_MAX_REFINEMENTS independently of the single
- * retry, and never fires without mutation budget.
+ * A refine is bounded by AGENT_MAX_REFINEMENTS independently of the retry
+ * budget, and never fires without mutation budget.
  */
 
 import { test } from "node:test";
@@ -21,18 +21,17 @@ import {
 
 const refinable = (used: number): RefineState => ({ available: true, used });
 
-test("provider round backstop leaves room for a final post-tool response", () => {
-  assert.equal(AGENT_MAX_ROUNDS, 22);
+test("provider round backstop remains at 48", () => {
+  assert.equal(AGENT_MAX_ROUNDS, 48);
 });
 
 test("repeated tool-error state resets on success and trips deterministically", () => {
+  assert.equal(AGENT_MAX_CONSECUTIVE_TOOL_ERRORS, 6);
   let state = { count: 0 };
-  state = nextToolErrorState(state, "arrange_song:bad plan");
-  assert.equal(state.count, 1);
-  state = nextToolErrorState(state, "arrange_song:bad plan");
-  assert.equal(state.count, 2);
-  state = nextToolErrorState(state, "arrange_song:bad plan");
-  assert.equal(state.count, AGENT_MAX_CONSECUTIVE_TOOL_ERRORS);
+  for (let count = 1; count <= AGENT_MAX_CONSECUTIVE_TOOL_ERRORS; count++) {
+    state = nextToolErrorState(state, "arrange_song:bad plan");
+    assert.equal(state.count, count);
+  }
   assert.deepEqual(nextToolErrorState(state), { count: 0 });
   assert.deepEqual(nextToolErrorState(state, "arrange_song:other error"), {
     key: "arrange_song:other error",
@@ -61,9 +60,9 @@ test("refine never fires without mutation budget", () => {
   assert.equal(gateAction(false, 0, 0), "stop");
 });
 
-test("unavailable refine falls back to the single retry, then stop", () => {
+test("unavailable refine falls back to two retries, then stops", () => {
   assert.equal(gateAction(false, 0, 5, { available: false, used: 0 }), "retry");
-  assert.equal(gateAction(false, 0, 5), "retry"); // no refine state at all
+  assert.equal(gateAction(false, 1, 5), "retry"); // no refine state at all
   assert.equal(gateAction(false, AGENT_MAX_RETRIES, 5, refinable(AGENT_MAX_REFINEMENTS)), "stop");
 });
 

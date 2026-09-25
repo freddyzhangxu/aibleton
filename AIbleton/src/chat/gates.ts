@@ -50,7 +50,7 @@ export function costlyDetail(
   if (!COSTLY_TOOLS.has(name)) return undefined;
   return {
     provider: toolState.activeAudioConfig ? AUDIO_PROVIDER_NAMES[toolState.activeAudioConfig.provider] : "?",
-    duration: Math.min(190, Math.max(1, Number(input.duration_seconds ?? 8) || 8)),
+    duration: Math.min(190, Math.max(1, Number(input.duration_seconds ?? 30) || 30)),
   };
 }
 

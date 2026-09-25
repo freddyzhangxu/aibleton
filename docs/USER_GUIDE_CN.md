@@ -58,7 +58,7 @@ YOLO 默认开启，适合你已经明确知道要做的、可快速撤销的操
 2. AI 每次准备修改 Live Set 时会显示工具名与关键参数。
 3. 确认内容、目标轨道和范围后按 **允许**；按 **拒绝** 则该步不执行。
 
-首次音频生成无论 YOLO 是否开启都会提示确认，因为它消耗外部 API credits。若开启“自动迭代”，你是在预授权同一个目标后续最多 3 次额外付费生成；这些后续生成不会逐次再弹确认。
+首次音频生成无论 YOLO 是否开启都会提示确认，因为它消耗外部 API credits。若开启“自动迭代”，你是在预授权同一个目标后续最多 6 次额外付费生成；这些后续生成不会逐次再弹确认。
 
 ## 4. 第一次成功：从空轨到可听的 groove
 
@@ -95,7 +95,7 @@ YOLO 默认开启，适合你已经明确知道要做的、可快速撤销的操
 | 混音起点 | `检查 Kick、Bass、Pad 的关系；只做保守的音量和声像调整，不添加轨道。` |
 | 音色设计 | `给 Synth 加 Auto Filter，做一个从暗到亮的上升感；先查看参数范围，再做少量改动。` |
 | 找 sample | `找一个 124 BPM、A minor、dark 的 pad loop，先列出候选，不要导入。` |
-| 生成音频 | `生成 8 秒无 vocal、124 BPM、A minor 的 seamless industrial percussion loop，并放到 Texture 音频轨第 33 小节。` |
+| 生成音频 | `生成 32 秒、120 BPM、A minor、无 vocal 的 seamless industrial percussion loop，并放到 Texture 音频轨第 33 小节。` |
 
 ### 先问、再动手
 
@@ -169,20 +169,20 @@ AI 可操作 Live 内置设备（例如 Operator、Wavetable、Impulse、Reverb�
 
 ### F. 生成和迭代新音频
 
-在 **设置 → 音频生成** 选择 provider 并填好 key。建议从短、可验证的素材开始：
+在 **设置 → 音频生成** 选择 provider 并填好 key。建议先生成目标明确、便于试听的素材：
 
 ```text
-生成 8 秒 seamless loop：124 BPM、A minor、dry industrial percussion，
+生成 32 秒 seamless loop：120 BPM、A minor、dry industrial percussion，
 不要人声。生成后直接导入 Texture 音频轨第 33 小节。
 ```
 
 - prompt 目前以**英文**写得最稳定，包含 genre、BPM、key、乐器和 mood。
-- loop 使用 `seamless loop`；通常 4–16 秒足够。总时长允许 1–190 秒。
+- 未指定时长时默认生成 30 秒。总时长允许 1–190 秒；音乐乐句需要更长时，可明确指定时长。
 - `instrumental` 可要求无 vocal；lyrics 仅适用于 MiniMax。
 - 生成文件保存在 User Library 的 AIbleton 文件夹，并记录 generation id，便于后续按可测指标反复改进。
 - “生成后直接导入”是一次调用中的尽力操作：如果导入失败，生成文件仍保留，可让 AI 改用普通导入重试。
 
-“自动迭代”适合有明确可测目标的生成任务，不适合你还在探索风格时盲开。开启它等于预授权同一目标最多额外 3 次付费生成，后续不会逐次确认；先设定时长与预算，再审听每次结果。
+“自动迭代”适合有明确可测目标的生成任务，不适合你还在探索风格时盲开。开启它等于预授权同一目标最多额外 6 次付费生成，后续不会逐次确认；先设定时长与预算，再审听每次结果。
 
 ## 7. 参考、附件、搜索与记忆
 
@@ -190,9 +190,9 @@ AI 可操作 Live 内置设备（例如 Operator、Wavetable、Impulse、Reverb�
 
 支持点击、拖放或粘贴，最多 10 个附件：
 
-- 图片：PNG、JPEG、WebP、GIF；单个不超过 2 MB。
-- 文本：txt、md、JSON、CSV、代码、YAML 等；单个不超过 2 MB，传入模型的文本最多取前 20,000 字符。
-- MIDI / Live Set：`.mid` / `.midi` / `.als`；单个不超过 5 MB。系统先解析为文字摘要，而不是把二进制工程原样交给模型。
+- 图片：PNG、JPEG、WebP、GIF；单个不超过 10 MB。
+- 文本：txt、md、JSON、CSV、代码、YAML 等；单个不超过 10 MB，传入模型的文本最多取前 20,000 字符。
+- MIDI / Live Set：`.mid` / `.midi` / `.als`；单个不超过 10 MB。系统先解析为文字摘要，而不是把二进制工程原样交给模型。
 
 Live 内置 webview 可能不能弹出原生文件选择框；在 Live 中优先用拖放或粘贴。若希望基于参考音频作分析，告诉 AI 本地 WAV / AIFF 的绝对路径以及要比较的段落；参考只用于分析差距和给出保守建议，不应要求复制一首现有作品。
 

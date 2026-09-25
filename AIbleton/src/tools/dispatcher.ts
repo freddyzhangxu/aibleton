@@ -1166,7 +1166,7 @@ export async function runTool(
       }
       const prompt = String(input.prompt ?? "").trim();
       if (!prompt) throw new Error("prompt 不能为空");
-      const duration = Math.min(190, Math.max(1, Number(input.duration_seconds ?? 8) || 8));
+      const duration = Math.min(190, Math.max(1, Number(input.duration_seconds ?? 30) || 30));
       const file = await generateAudio(
         cfg,
         {

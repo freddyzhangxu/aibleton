@@ -902,7 +902,7 @@
         apiKey: 'API Key', baseUrl: 'API 地址', model: '模型',
         apiKeyPh: '可选，留空跟随本机 CLI 配置',
         audioCfgHint: '在 {site} 申请 key；生成按次计费',
-        audioAutoRefine: '自动迭代（目标未达标时自动重新生成，最多 3 次）',
+        audioAutoRefine: '自动迭代（目标未达标时自动重新生成，最多 6 次）',
         customRequestUrl: 'Request URL',
         customHint: 'POST 该地址；body 模板用 {{prompt}} {{duration}} 占位。响应：bytes=音频流；url/base64/hex=JSON，填字段路径。异步任务填轮询 URL，{taskId} 占位',
         cfgHint: '留空将自动使用本机 CLI 配置与默认值',
@@ -914,7 +914,7 @@
         connUnreachable: '无法连接', connError: '连接出错',
         effortDefault: '默认 Effort',
         effortTitle: '思考强度：更高 = 推理更深但更慢',
-        attachTitle: '上传文件给 AI：图片/文本 ≤2MB，MIDI/Ableton 工程 ≤5MB；点击选择、拖入窗口或 ⌘V 粘贴',
+        attachTitle: '上传文件给 AI：图片、文本、MIDI、Ableton 工程均 ≤10MB；点击选择、拖入窗口或 ⌘V 粘贴',
         modelTitle: '当前模型 · 点击打开设置',
         yoloTitle: 'YOLO 模式：开启 = AI 直接执行所有操作；关闭 = 修改 Set 前需你确认',
         allow: '允许', deny: '拒绝', confirmAsk: 'AI 请求执行', confirmCostly: '消耗 API 额度',
@@ -954,7 +954,7 @@
         apiKey: 'API Key', baseUrl: 'Base URL', model: 'Model',
         apiKeyPh: 'Optional — empty uses local CLI config',
         audioCfgHint: 'Get a key at {site} — billed per generation',
-        audioAutoRefine: 'Auto-refine (regenerate up to 3× when the goal misses)',
+        audioAutoRefine: 'Auto-refine (regenerate up to 6× when the goal misses)',
         customRequestUrl: 'Request URL',
         customHint: 'POSTs the request URL; {{prompt}} {{duration}} in the body template. Response: bytes = raw audio; url/base64/hex = JSON field path. Async: poll URL with {taskId}',
         cfgHint: 'Leave empty to use local CLI config and defaults',
@@ -966,7 +966,7 @@
         connUnreachable: 'Unreachable', connError: 'Connection error',
         effortDefault: 'Default effort',
         effortTitle: 'Reasoning effort: higher = deeper but slower',
-        attachTitle: 'Attach images/text (≤2MB), MIDI/Live sets (≤5MB): click, drag in, or paste',
+        attachTitle: 'Attach images, text, MIDI, or Live sets (≤10MB each): click, drag in, or paste',
         modelTitle: 'Current model · click to open Settings',
         yoloTitle: 'YOLO: on = AI runs every action directly; off = confirm before modifying the Set',
         allow: 'Allow', deny: 'Deny', confirmAsk: 'AI wants to run', confirmCostly: 'uses API credits',
@@ -1012,7 +1012,7 @@
         connUnreachable: 'Nicht erreichbar', connError: 'Verbindungsfehler',
         effortDefault: 'Standard-Effort',
         effortTitle: 'Denktiefe: höher = gründlicher, aber langsamer',
-        attachTitle: 'Dateien anhängen: Bilder/Text ≤2MB, MIDI/Live-Sets ≤5MB — klicken, ziehen oder einfügen',
+        attachTitle: 'Dateien anhängen: Bilder, Text, MIDI und Live-Sets jeweils ≤10MB — klicken, ziehen oder einfügen',
         modelTitle: 'Aktuelles Modell · Klicken öffnet Einstellungen',
         yoloTitle: 'YOLO: ein = KI führt alles direkt aus; aus = Bestätigung vor Set-Änderungen',
         allow: 'Erlauben', deny: 'Ablehnen', confirmAsk: 'KI möchte ausführen', confirmCostly: 'verbraucht API-Guthaben',
@@ -1058,7 +1058,7 @@
         connUnreachable: 'Inaccessible', connError: 'Erreur de connexion',
         effortDefault: 'Effort par défaut',
         effortTitle: 'Intensité de raisonnement : plus haut = plus profond mais plus lent',
-        attachTitle: 'Joindre images/texte (≤2Mo), MIDI/Live Sets (≤5Mo) : cliquer, glisser ou coller',
+        attachTitle: 'Joindre images, texte, MIDI ou Live Sets (≤10 Mo chacun) : cliquer, glisser ou coller',
         modelTitle: 'Modèle actuel · cliquer pour ouvrir les paramètres',
         yoloTitle: 'YOLO : activé = l’IA exécute tout directement ; désactivé = confirmation avant de modifier le Set',
         allow: 'Autoriser', deny: 'Refuser', confirmAsk: 'L’IA veut exécuter', confirmCostly: 'consomme des crédits API',
@@ -1104,7 +1104,7 @@
         connUnreachable: '接続できません', connError: '接続エラー',
         effortDefault: 'デフォルト',
         effortTitle: '思考の強さ：高いほど深く推論しますが遅くなります',
-        attachTitle: 'ファイル添付：画像/テキスト ≤2MB、MIDI/Live Set ≤5MB。クリック、ドラッグ、または貼り付け',
+        attachTitle: 'ファイル添付：画像・テキスト・MIDI・Live Set は各 ≤10MB。クリック、ドラッグ、または貼り付け',
         modelTitle: '現在のモデル · クリックで設定を開く',
         yoloTitle: 'YOLO：オン = AI がすべて直接実行、オフ = Set 変更前に確認',
         allow: '許可', deny: '拒否', confirmAsk: 'AI が実行を要求', confirmCostly: 'API クレジットを消費',
@@ -1150,7 +1150,7 @@
         connUnreachable: 'Inalcanzable', connError: 'Error de conexión',
         effortDefault: 'Effort por defecto',
         effortTitle: 'Intensidad de razonamiento: mayor = más profundo pero más lento',
-        attachTitle: 'Adjuntar imágenes/texto (≤2MB), MIDI/Sets de Live (≤5MB): clic, arrastrar o pegar',
+        attachTitle: 'Adjuntar imágenes, texto, MIDI o Sets de Live (≤10MB cada uno): clic, arrastrar o pegar',
         modelTitle: 'Modelo actual · clic para abrir Ajustes',
         yoloTitle: 'YOLO: activado = la IA ejecuta todo directamente; desactivado = confirmar antes de modificar el Set',
         allow: 'Permitir', deny: 'Denegar', confirmAsk: 'La IA quiere ejecutar', confirmCostly: 'consume créditos de API',
@@ -1196,7 +1196,7 @@
         connUnreachable: 'Irraggiungibile', connError: 'Errore di connessione',
         effortDefault: 'Effort predefinito',
         effortTitle: 'Intensità di ragionamento: più alta = più profonda ma più lenta',
-        attachTitle: 'Allega immagini/testo (≤2MB), MIDI/Live Set (≤5MB): clic, trascina o incolla',
+        attachTitle: 'Allega immagini, testo, MIDI o Live Set (≤10MB ciascuno): clic, trascina o incolla',
         modelTitle: 'Modello attuale · clic per aprire le Impostazioni',
         yoloTitle: 'YOLO: attivo = l’IA esegue tutto direttamente; spento = conferma prima di modificare il Set',
         allow: 'Consenti', deny: 'Nega', confirmAsk: 'L’IA vuole eseguire', confirmCostly: 'consuma crediti API',
@@ -2587,8 +2587,7 @@
     const chips = document.getElementById('chips');
     const fileInput = document.getElementById('fileInput');
     const pendingAttachments = []; // {name, mime, text?|data?, kind?: 'midi'|'als'}
-    const MAX_FILE = 2 * 1024 * 1024;      // images / text
-    const MAX_BIN = 5 * 1024 * 1024;       // .mid / .als (parsed server-side)
+    const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
     const TEXT_EXT = /\.(txt|md|markdown|json|jsonc|csv|tsv|xml|log|js|ts|py|sh|html|css|yml|yaml|ini)$/i;
     const binKind = (name) => /\.midi?$/i.test(name) ? 'midi' : (/\.als$/i.test(name) ? 'als' : null);
     const attIcon = (a) => a.kind === 'midi' ? '🎹' : a.kind === 'als' ? '🎚' : (a.data ? '🖼' : '📄');
@@ -2626,7 +2625,7 @@
       for (const f of files) {
         if (pendingAttachments.length >= 10) break;
         const kind = binKind(f.name);
-        const max = kind ? MAX_BIN : MAX_FILE;
+        const max = MAX_ATTACHMENT_BYTES;
         if (f.size > max) { addMsg('error', `${t('fileTooBig')}${f.name}（>${Math.round(max / 1048576)}MB）`); continue; }
         if (kind) {
           // .mid / .als — uploaded as base64; the extension server parses

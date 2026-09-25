@@ -505,7 +505,7 @@ function goalRetryMessage(
   if (sectionVer && sectionName) lines.push(...presentSectionVerification(sectionVer, sectionName, language));
   if (referenceLines?.length) lines.push(...referenceLines);
   if (replanned) {
-    // The loop's single retry IS the replan: the old route already missed, so
+    // A loop retry can replan: the old route already missed, so
     // it is cleared rather than re-run. A fresh focused plan is invited, not
     // required — a one-call fix may go directly.
     lines.push(goalText(language, "planCleared"));
@@ -753,7 +753,7 @@ export async function goalGate(context: Ctx, language?: string): Promise<GoalGat
       return { inject: goalRefineMessage(held.goal, ev, genGaps, held.refinements, locale) };
     }
     held.retries++;
-    // The single retry IS the replan: the old route already missed, so clear
+    // This retry can replan: the old route already missed, so clear
     // it — the model re-declares a focused plan from the diagnosis (or fixes
     // directly). The report was computed above, before the clear. The section
     // verdict rides along so the retry sees which target-section metric
