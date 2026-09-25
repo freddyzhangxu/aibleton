@@ -104,7 +104,7 @@ Provide the following as needed; you do not have to include everything every tim
 | Starting point for a mix | `Check the relationship between Kick, Bass, and Pad; make only conservative volume and panning adjustments, and do not add tracks.` |
 | Sound design | `Add Auto Filter to Synth and create a rising feeling from dark to bright; check the parameter ranges first, then make only small changes.` |
 | Find a sample | `Find a 124 BPM, A minor, dark pad loop; list candidates first and do not import anything.` |
-| Generate audio | `Generate a 32-second seamless industrial percussion loop with no vocals, at 120 BPM in A minor, and place it on the Texture audio track at bar 33.` |
+| Generate audio | `Use AI to generate a 32-second seamless industrial percussion loop with no vocals, at 120 BPM in A minor, and place it on the Texture audio track at bar 33.` |
 
 ### Ask First, Then Act
 
@@ -180,8 +180,10 @@ Local search checks synced Splice content, the Ableton User Library, Factory Pac
 
 Under **Settings → Audio Generation**, select a provider and enter its key. Start with clearly scoped material that is easy to audition:
 
+To use a paid AI provider, explicitly ask for AI-generated audio—for example, “Use AI to generate…”. A request for a loop or sample without that intent searches local files first. If no suitable sample is found, AIbleton asks before using a paid provider.
+
 ```text
-Generate a 32-second seamless loop: 120 BPM, A minor, dry industrial percussion,
+Use AI to generate a 32-second seamless loop: 120 BPM, A minor, dry industrial percussion,
 no vocals. After generating, import it directly to the Texture audio track at bar 33.
 ```
 

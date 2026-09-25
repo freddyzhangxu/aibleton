@@ -79,7 +79,7 @@ The agent can inspect your Live Set, understand musical context, reason about yo
 
 - Generate MIDI clips and musical patterns
 - Create drum grooves and instrument parts
-- Generate audio with supported AI providers
+- Generate new audio with supported AI providers (explicitly ask for AI generation; sample and loop requests search local files first)
 - Load drum kits and instruments
 - Turn natural-language ideas into musical content
 

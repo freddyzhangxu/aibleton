@@ -79,7 +79,7 @@ AIbleton 可以读取你的 Live Set，理解音乐上下文，对音乐进行�
 
 - 生成 MIDI Clip 和音乐片段
 - 创建鼓组 Groove 和乐器声部
-- 使用支持的 AI Provider 生成音频
+- 使用支持的 AI Provider 生成新音频（需明确要求 AI 生成；sample 和 loop 请求会先搜索本地素材）
 - 加载 Drum Kit 和乐器
 - 将自然语言创意直接转化为音乐内容
 

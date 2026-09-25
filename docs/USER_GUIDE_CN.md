@@ -95,7 +95,7 @@ YOLO 默认开启，适合你已经明确知道要做的、可快速撤销的操
 | 混音起点 | `检查 Kick、Bass、Pad 的关系；只做保守的音量和声像调整，不添加轨道。` |
 | 音色设计 | `给 Synth 加 Auto Filter，做一个从暗到亮的上升感；先查看参数范围，再做少量改动。` |
 | 找 sample | `找一个 124 BPM、A minor、dark 的 pad loop，先列出候选，不要导入。` |
-| 生成音频 | `生成 32 秒、120 BPM、A minor、无 vocal 的 seamless industrial percussion loop，并放到 Texture 音频轨第 33 小节。` |
+| 生成音频 | `用 AI 生成 32 秒、120 BPM、A minor、无 vocal 的 seamless industrial percussion loop，并放到 Texture 音频轨第 33 小节。` |
 
 ### 先问、再动手
 
@@ -171,8 +171,10 @@ AI 可操作 Live 内置设备（例如 Operator、Wavetable、Impulse、Reverb�
 
 在 **设置 → 音频生成** 选择 provider 并填好 key。建议先生成目标明确、便于试听的素材：
 
+要调用付费 AI 音频服务，请明确说“用 AI 生成……”。只说“生成一个 loop/sample”会先搜索本地素材；如果没有合适结果，AIbleton 会先询问你是否改用 AI 生成。
+
 ```text
-生成 32 秒 seamless loop：120 BPM、A minor、dry industrial percussion，
+用 AI 生成 32 秒 seamless loop：120 BPM、A minor、dry industrial percussion，
 不要人声。生成后直接导入 Texture 音频轨第 33 小节。
 ```
 
