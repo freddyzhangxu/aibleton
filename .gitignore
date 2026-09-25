@@ -11,8 +11,9 @@ extensions-sdk-*/
 
 # 内部文档（不公开）
 .docs/
-.superpowers/
-docs/superpowers/
+# Superpowers-generated plans, specs, and related docs (at any depth)
+**/.superpowers/
+**/docs/superpowers/
 
 # 本地 skill 配置（不入库）
 .baoyu-skills/
