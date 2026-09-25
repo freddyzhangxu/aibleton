@@ -69,7 +69,7 @@ export const toolState = {
    * busy. Same per-request lifetime as activeLanguage. */
   phase: null as string | null,
   /** User-facing summary of the tool currently operating on the Live Set. */
-  activity: null as { key: string; detail?: string; status: "running" | "done" | "error" } | null,
+  activity: null as { key: string; detail?: string } | null,
 };
 
 /**

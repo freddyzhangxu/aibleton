@@ -805,7 +805,7 @@ function phaseForTool(name: string): string {
 }
 
 /** Localized, non-sensitive activity categories shown while a tool is running. */
-function activityForTool(name: string, input: Record<string, unknown>): { key: string; detail?: string; status: "running" } {
+function activityForTool(name: string, input: Record<string, unknown>): { key: string; detail?: string } {
   const groups: Record<string, string> = {
     get_song_overview: "activity_inspect",
     get_clip_notes: "activity_inspect",
@@ -833,7 +833,7 @@ function activityForTool(name: string, input: Record<string, unknown>): { key: s
   };
   const detail = [input.track_name, input.track, input.device_name, input.section, input.scene_name]
     .find((value): value is string => typeof value === "string" && value.trim().length > 0);
-  return { key: groups[name] ?? (READ_ONLY_TOOLS.has(name) ? "activity_inspect" : "activity_edit"), status: "running", ...(detail ? { detail } : {}) };
+  return { key: groups[name] ?? (READ_ONLY_TOOLS.has(name) ? "activity_inspect" : "activity_edit"), ...(detail ? { detail } : {}) };
 }
 
 /** A mutation tool can report that its safety preflight made no Set change.
@@ -978,10 +978,15 @@ export async function callTool(
   result = sanitizeToolResultLanguage(result, toolState.activeLanguage);
   actions.push({ tool: name, input, result });
   const resultJson = JSON.stringify(result);
-  if (toolState.activity) {
-    toolState.activity = { ...toolState.activity, status: result !== null && typeof result === "object" && "error" in result ? "error" : "done" };
-  }
   toolHooks.debugLog(context, `TOOL ${name} ${JSON.stringify(input)} -> ${rawResultJson.slice(0, 400)}`);
+  const completedActivity = toolState.activity;
+  if (completedActivity) {
+    // The UI polls /api/status every 900ms. Keep this activity briefly after
+    // a fast tool returns so the next poll can still render it.
+    setTimeout(() => {
+      if (toolState.activity === completedActivity) toolState.activity = null;
+    }, 1800);
+  }
   return truncateResult(resultJson);
 }
 
