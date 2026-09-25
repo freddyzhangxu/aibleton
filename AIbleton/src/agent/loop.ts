@@ -42,10 +42,8 @@
 
 import { commonText } from "../i18n/common.js";
 
-/** Provider-round backstop — replaces the per-loop literal. Twenty rounds
- * cover the planned goal/refine cycle; two more leave room for the final
- * post-tool response or measured goal check after a legitimate repair. */
-export const AGENT_MAX_ROUNDS = 22;
+/** Maximum provider calls per user turn across all chat providers. */
+export const AGENT_MAX_ROUNDS = 48;
 
 /**
  * Hard cap on EXECUTED Set-mutating calls per turn. Deliberately small: a

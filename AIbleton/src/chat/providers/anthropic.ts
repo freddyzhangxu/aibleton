@@ -52,15 +52,15 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     ];
   });
 
-  // Effort selector (5 levels, Claude Code style) → extended thinking budget.
-  // max_tokens must exceed the budget; empty effort = no thinking field at all,
-  // so plain relays that reject it keep working at the default level.
-  const CLAUDE_EFFORT: Record<string, { budget: number; maxTokens: number }> = {
-    low:    { budget: 1024,  maxTokens: 4096 },
-    medium: { budget: 4096,  maxTokens: 8192 },
-    high:   { budget: 8192,  maxTokens: 16384 },
-    xhigh:  { budget: 16384, maxTokens: 32768 },
-    max:    { budget: 32768, maxTokens: 49152 },
+  // Effort controls extended thinking only; keep the output allowance the
+  // same across levels. max_tokens must exceed the largest thinking budget.
+  const CLAUDE_MAX_TOKENS = 49152;
+  const CLAUDE_EFFORT: Record<string, { budget: number }> = {
+    low:    { budget: 1024 },
+    medium: { budget: 4096 },
+    high:   { budget: 8192 },
+    xhigh:  { budget: 16384 },
+    max:    { budget: 32768 },
   };
   const claudeEffort = CLAUDE_EFFORT[cfg.effort ?? ""];
   const thinking = claudeEffort
@@ -68,7 +68,8 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     : undefined;
   const chatTools = activeTools();
 
-  // Bounded retries when max_tokens truncates a text-only answer (see below).
+  // Continue text-only answers until they finish or this turn reaches the
+  // provider-round safety limit.
   let continuations = 0;
   // Visible text salvaged from truncated rounds — without this the user only
   // ever sees the LAST round's text and earlier partials are silently lost.
@@ -92,7 +93,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     }
     const requestBody = JSON.stringify({
       model,
-      max_tokens: claudeEffort ? claudeEffort.maxTokens : 4096,
+      max_tokens: CLAUDE_MAX_TOKENS,
       system: systemPromptFor(req.language, req.selectedSkillNames),
       ...(languageRewriteOnly ? {} : { tools: chatTools }),
       messages,
@@ -173,10 +174,8 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
       continue;
     }
 
-    // Pure text truncation (a long thinking block ate the budget): echo the
-    // partial text and ask the model to pick up where it stopped, bounded so
-    // a runaway can't burn the whole round budget. Salvaged partials ride in
-    // textCarry so the final reply assembles ALL rounds, not just the last.
+    // When text hits max_tokens, ask the model to pick up where it stopped.
+    // textCarry keeps each partial for the final reply.
     if (data.stop_reason === "max_tokens") {
       const partial = content
         .filter((b) => b.type === "text")
@@ -184,9 +183,12 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
         .join("\n")
         .trim();
       if (partial) textCarry = textCarry ? textCarry + "\n" + partial : partial;
-      if (continuations < 2) {
+      if (round + 1 < AGENT_MAX_ROUNDS) {
         continuations++;
-        toolHooks.debugLog(context, `ROUND ${round}: max_tokens — auto-continue ${continuations}/2`);
+        toolHooks.debugLog(
+          context,
+          `ROUND ${round}: max_tokens — auto-continue ${continuations} (round ${round + 1}/${AGENT_MAX_ROUNDS})`,
+        );
         if (!partial) {
           // Zero visible text = the entire budget went to thinking. Force the
           // model to act now, and never use "…" as the placeholder — the model
@@ -242,5 +244,6 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     return finishChat(context, actions, gate ? reply + gate.appendNote : reply);
   }
   toolHooks.debugLog(context, `ROUND LIMIT reached (${AGENT_MAX_ROUNDS}); saving ${actions.length} tool actions`);
-  return finishChat(context, actions, commonText(req.language, "roundLimitReached", AGENT_MAX_ROUNDS));
+  const roundLimit = commonText(req.language, "roundLimitReached", AGENT_MAX_ROUNDS);
+  return finishChat(context, actions, [textCarry, roundLimit].filter(Boolean).join("\n\n"));
 }
