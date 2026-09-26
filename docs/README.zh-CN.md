@@ -65,13 +65,9 @@ AIbleton 可以读取你的 Live Set，理解音乐上下文，对音乐进行�
 
 ## 截图
 
-| Live 中的 AI Agent 对话框 | AIbletonBar 浮动侧边栏 |
+| Live 内界面 | AIbletonBar 侧边栏 |
 |:---:|:---:|
-| ![AIbleton Live 中的 AI Agent 对话框](screenshots/aibleton-dialog.png) | ![AIbletonBar 侧边栏](screenshots/aibletonbar-sidebar.png) |
-
-| AI 搜索 Samples 并通过 Wi-Fi 发送到 Move | Samples 已传输到设备 |
-|:---:|:---:|
-| ![AIbleton 向 Ableton Move 上传 Samples](screenshots/move-upload-samples.png) | ![Ableton Move 中的 Samples](screenshots/move-samples-webui.png) |
+| <img src="screenshots/aibleton-dialog.png" alt="AIbleton Live 中的 AI Agent 对话框" width="450"> | <img src="screenshots/aibletonbar-sidebar-desktop.png" alt="AIbletonBar 侧边栏" width="450"> |
 
 ## 核心能力
 

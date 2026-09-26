@@ -65,13 +65,9 @@ The agent can inspect your Live Set, understand musical context, reason about yo
 
 ## Screenshots
 
-| AI agent dialog inside Live | AIbletonBar floating sidebar |
+| Inside Live | AIbletonBar sidebar |
 |:---:|:---:|
-| ![AIbleton chat dialog inside Ableton Live](docs/screenshots/aibleton-dialog.png) | ![AIbletonBar sidebar docked next to Ableton Live](docs/screenshots/aibletonbar-sidebar.png) |
-
-| AI finds samples and pushes them to Move over Wi-Fi | Samples on the device |
-|:---:|:---:|
-| ![AIbleton uploading samples to Ableton Move](docs/screenshots/move-upload-samples.png) | ![Samples on Ableton Move](docs/screenshots/move-samples-webui.png) |
+| <img src="docs/screenshots/aibleton-dialog.png" alt="AIbleton chat dialog inside Ableton Live" width="450"> | <img src="docs/screenshots/aibletonbar-sidebar-desktop.png" alt="AIbletonBar sidebar docked next to Ableton Live" width="450"> |
 
 ## Core Capabilities
 

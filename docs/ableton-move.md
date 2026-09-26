@@ -104,6 +104,15 @@ AI:   [generate_audio] → [move_upload_sample] → kick.wav is in Move's Sample
       folder and can be loaded onto a drum pad.
 ```
 
+### Sample upload example
+
+AIbleton can find a sample in Live's library and upload it to Move over WiFi. The
+screenshots show the upload in AIbleton and the resulting files on Move.
+
+| Upload from AIbleton | Samples on Move |
+|:---:|:---:|
+| ![AIbleton finding and uploading samples to Move over WiFi](screenshots/move-upload-samples.png) | ![Samples uploaded to Ableton Move](screenshots/move-samples-webui.png) |
+
 Notes:
 
 - Move and computer must be on the **same WiFi**; the host defaults to

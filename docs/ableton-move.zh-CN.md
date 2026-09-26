@@ -96,6 +96,15 @@ AI:  [generate_audio] → [move_upload_sample] → kick.wav 已在 Move 的
      Samples 文件夹，装上鼓垫就能用
 ```
 
+### 上传示例
+
+AIbleton 可以从 Live 的采样库中找到 Sample，并通过 WiFi 上传到 Move。下图展示了
+AIbleton 中的上传过程，以及文件出现在 Move 上的结果。
+
+| 从 AIbleton 上传 | Move 上的 Samples |
+|:---:|:---:|
+| ![AIbleton 通过 WiFi 查找并上传 Samples 到 Move](screenshots/move-upload-samples.png) | ![已上传到 Ableton Move 的 Samples](screenshots/move-samples-webui.png) |
+
 说明：
 
 - Move 和电脑必须在**同一 WiFi**；主机名默认 `move.local`（改过名的话在
