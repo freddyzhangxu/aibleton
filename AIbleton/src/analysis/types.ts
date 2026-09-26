@@ -148,6 +148,8 @@ export interface TrackAnalysis {
     clips: number;
     bars: number;
     files?: string[];
+    /** Standard Integrated LUFS measured per source file; omitted if unavailable. */
+    lufs?: { file: string; integrated: number }[];
     /** Source-file audio features (present only when analyze_song ran with
      * audio:true). rms/crest/dyn/loud in dBFS, centroid in Hz, trans in
      * onsets/sec, bands as energy fractions summing to ≈1. */

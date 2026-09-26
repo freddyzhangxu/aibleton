@@ -106,7 +106,7 @@ export const TOOLS = [
   {
     name: "analyze_song",
     description:
-      "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content), and a flat clip map (every arrangement clip's track/clip_index/bar/length + every session clip's track/scene_index — the coordinates arrange_song plans against). By default audio clips contribute filename + duration; pass audio:true to decode WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A (AAC or ALAC) clip source files for per-track loudness/crest/dynamic-range/6-band balance and audio-derived issues (weak transients, thin low end, squashed dynamics, dull/harsh top) — features describe the source FILE, pre-warp/pre-gain/pre-device. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview. Optional focus narrows the read to what matters for the question.",
+      "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content), and a flat clip map (every arrangement clip's track/clip_index/bar/length + every session clip's track/scene_index — the coordinates arrange_song plans against). By default audio clips contribute filename + duration; pass audio:true to decode WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A (AAC or ALAC) clip source files for per-track loudness/crest/dynamic-range/6-band balance, per-file Integrated LUFS when measurable, and audio-derived issues (weak transients, thin low end, squashed dynamics, dull/harsh top) — features describe the source FILE, pre-warp/pre-gain/pre-device. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview. Optional focus narrows the read to what matters for the question.",
     input_schema: {
       type: "object",
       properties: {
@@ -118,7 +118,7 @@ export const TOOLS = [
         audio: {
           type: "boolean",
           description:
-            "Optional: decode audio clip source files (WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A AAC or ALAC) and add per-track audio features (rms/crest/dynamic-range/loudness/6-band energy/transient density) plus audio-derived issues. Slower on first run (file reads + decode + FFT), cached afterwards. Features describe the source file, pre-warp/pre-gain/pre-device — not the audible result through the device chain.",
+            "Optional: decode audio clip source files (WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A AAC or ALAC) and add per-track audio features (rms/crest/dynamic-range/loudness/6-band energy/transient density), per-file Integrated LUFS when measurable (absent for silence or <400 ms), plus audio-derived issues. Slower on first run (file reads + decode + FFT), cached afterwards. Features describe the source file, pre-warp/pre-gain/pre-device — not the audible result through the device chain.",
         },
       },
     },
@@ -126,7 +126,7 @@ export const TOOLS = [
   {
     name: "analyze_rendered_track",
     description:
-      "Render one Audio Track's arrangement range through Live, then measure the rendered pre-FX audio (RMS, peak, crest, loudness approximation, dynamic range, spectral centroid, transients and 6-band balance). Use when the user explicitly asks about a track's arranged audio rather than its source file. This is read-only and may take time. Pre-FX means it reflects clip timing/content but NOT the track device chain or master processing. Pass start_bar and end_bar together for a precise inclusive range; omit both to render from the track's earliest to latest arrangement Audio Clip.",
+      "Render one Audio Track's arrangement range through Live, then measure the rendered pre-FX audio (RMS, peak, crest, Integrated LUFS when measurable, dynamic range, spectral centroid, transients and 6-band balance). LUFS is absent for silence or audio shorter than 400 ms. Use when the user explicitly asks about a track's arranged audio rather than its source file. This is read-only and may take time. Pre-FX means it reflects clip timing/content but NOT the track device chain or master processing. Pass start_bar and end_bar together for a precise inclusive range; omit both to render from the track's earliest to latest arrangement Audio Clip.",
     input_schema: {
       type: "object",
       properties: {

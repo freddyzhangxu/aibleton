@@ -32,6 +32,7 @@ import { decoder as mp4Decoder } from "@audio/decode-mp4";
 import { decoder as mp3Decoder } from "@audio/decode-mp3";
 import { decoder as flacDecoder } from "@audio/decode-flac";
 import { decoder as vorbisDecoder } from "@audio/decode-vorbis";
+import integratedLufsFn from "@audio/loudness-lufs";
 
 // ---------------------------------------------------------------- types ----
 
@@ -48,6 +49,8 @@ export interface AudioFeatures {
   crestDb: number;
   /** K-weighting-inspired mono approx, ungated — NOT BS.1770 LUFS. */
   loudnessDb: number;
+  /** Integrated loudness per ITU-R BS.1770-4; absent for silence or <400 ms. */
+  integratedLufs?: number;
   /** p95 − p10 of short-term RMS (dB), LRA-style; undefined when < 8 frames. */
   dynamicRangeDb?: number;
   spectralCentroidHz: number;
@@ -62,6 +65,8 @@ export interface MonoPcm {
   sampleRate: number;
   channels: number;
   samples: Float32Array; // mono mix, −1..1
+  /** Original channel PCM for standard channel-weighted loudness measurement. */
+  channelData?: Float32Array[];
 }
 
 export type DecodeOutcome =
@@ -126,6 +131,7 @@ async function decodeCompressed(
 ): Promise<DecodeOutcome> {
   let decoder: StreamingDecoder | undefined;
   const monoChunks: Float32Array[] = [];
+  const channelChunks: Float32Array[][] = [];
   let sampleRate = 0;
   let channels = 0;
   let frameCount = 0;
@@ -149,6 +155,9 @@ async function decodeCompressed(
         mono[i] = sum / channelCount;
       }
       monoChunks.push(mono);
+      for (let c = 0; c < channelCount; c++) {
+        (channelChunks[c] ??= []).push(chunk.channelData[c].slice(0, keep));
+      }
       frameCount += keep;
     }
     if (keep < n) truncated = true;
@@ -186,7 +195,16 @@ async function decodeCompressed(
     samples.set(chunk, write);
     write += chunk.length;
   }
-  return { pcm: { sampleRate, channels, samples }, truncated };
+  const channelData = channelChunks.map((chunks) => {
+    const data = new Float32Array(frameCount);
+    let offset = 0;
+    for (const chunk of chunks) {
+      data.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return data;
+  });
+  return { pcm: { sampleRate, channels, samples, channelData }, truncated };
 }
 
 /** decode + analyze in one call; sets partial when truncated. */
@@ -198,7 +216,10 @@ export async function featuresFromBuffer(
   const dec = await decodeAudioBuffer(fileName, buf, opts);
   if ("error" in dec) return { error: dec.error };
   const features = analyzePcm(dec.pcm);
-  if (dec.truncated) features.partial = true;
+  if (dec.truncated) {
+    features.partial = true;
+    delete features.integratedLufs; // an incomplete file segment is not integrated programme loudness
+  }
   return { features };
 }
 
@@ -265,6 +286,7 @@ export function decodeWav(buf: Buffer, opts?: { maxSeconds?: number }): DecodeOu
   if (frames <= 0) return { error: "WAV data chunk is empty" };
 
   const samples = new Float32Array(frames);
+  const channelData = Array.from({ length: channels }, () => new Float32Array(frames));
   for (let f = 0; f < frames; f++) {
     const base = dataOff + f * frameBytes;
     let acc = 0;
@@ -283,11 +305,12 @@ export function decodeWav(buf: Buffer, opts?: { maxSeconds?: number }): DecodeOu
       } else {
         v = buf.readInt32LE(o) / 2147483648;
       }
+      channelData[c][f] = v;
       acc += v;
     }
     samples[f] = acc / channels; // hard-panned sources read ~3 dB low — acceptable
   }
-  return { pcm: { sampleRate, channels, samples }, truncated, totalFrames: declaredFrames };
+  return { pcm: { sampleRate, channels, samples, channelData }, truncated, totalFrames: declaredFrames };
 }
 
 /** 80-bit IEEE-754 extended float (AIFF sample rate). */
@@ -355,6 +378,7 @@ export function decodeAiff(buf: Buffer, opts?: { maxSeconds?: number }): DecodeO
   if (frames <= 0) return { error: "AIFF sound data is empty" };
 
   const samples = new Float32Array(frames);
+  const channelData = Array.from({ length: channels }, () => new Float32Array(frames));
   for (let f = 0; f < frames; f++) {
     const base = dataOff + f * frameBytes;
     let acc = 0;
@@ -368,11 +392,12 @@ export function decodeAiff(buf: Buffer, opts?: { maxSeconds?: number }): DecodeO
         if (x & 0x800000) x -= 0x1000000;
         v = x / 8388608;
       }
+      channelData[c][f] = v;
       acc += v;
     }
     samples[f] = acc / channels;
   }
-  return { pcm: { sampleRate, channels, samples }, truncated, totalFrames: declaredFrames };
+  return { pcm: { sampleRate, channels, samples, channelData }, truncated, totalFrames: declaredFrames };
 }
 
 // ---------------------------------------------------------------- FFT ------
@@ -549,6 +574,7 @@ export function analyzePcm(pcm: MonoPcm): AudioFeatures {
   let wSumSq = 0;
   for (let i = 0; i < n; i++) wSumSq += weighted[i] * weighted[i];
   const loudnessDb = -0.691 + 10 * Math.log10(Math.max(wSumSq / Math.max(1, n), 1e-10));
+  const integratedLufs = integratedLufsFn(pcm.channelData ?? [samples], { fs: sampleRate });
 
   // STFT: band power, spectral centroid, spectral flux.
   const win = hannWindow(FFT_N);
@@ -625,6 +651,7 @@ export function analyzePcm(pcm: MonoPcm): AudioFeatures {
     peakDb,
     crestDb,
     loudnessDb,
+    ...(integratedLufs !== null ? { integratedLufs } : {}),
     ...(dynamicRangeDb !== undefined ? { dynamicRangeDb } : {}),
     spectralCentroidHz,
     bands,

@@ -170,10 +170,23 @@ export function presentAnalysis(
       if (ent !== null) base.ent = ent;
       base.uniq = feats.uniq;
     } else if (audioClips.length > 0) {
+      const seenLufs = new Set<string>();
+      const sourceLufs = track.mute || track.mutedViaSolo
+        ? []
+        : ts.clips.flatMap((cs) => {
+            const clip = cs.clip;
+            const value = cs.audio?.features?.integratedLufs;
+            if (clip.kind !== "audio" || clip.start === null || clip.muted || value === undefined) return [];
+            const file = clip.filePath ?? clip.file ?? clip.name;
+            if (seenLufs.has(file)) return [];
+            seenLufs.add(file);
+            return [{ file: clip.file ?? clip.name, integrated: round1(value) }];
+          }).slice(0, 4);
       base.audio = {
         clips: audioClips.length,
         bars: round1(audioClips.reduce((a, c) => a + Math.max(0, c.duration), 0) / barBeats),
         files: audioClips.map((c) => c.file ?? c.name).filter(Boolean).slice(0, 4),
+        ...(sourceLufs.length ? { lufs: sourceLufs } : {}),
       };
       const a = ma.trackAudio?.[idx];
       if (a) {
