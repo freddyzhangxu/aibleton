@@ -112,6 +112,7 @@ export function audioFeatures(overrides: Partial<AudioFeatures> = {}): AudioFeat
     rmsDb: -18,
     peakDb: -6,
     crestDb: 12,
+    truePeakDb: -5.8,
     loudnessDb: -20,
     spectralCentroidHz: 2000,
     bands: { sub: 0.1, bass: 0.2, lowMid: 0.15, mid: 0.25, highMid: 0.2, high: 0.1 },

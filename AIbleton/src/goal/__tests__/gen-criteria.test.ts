@@ -22,6 +22,7 @@ function features(over: Partial<AudioFeatures> = {}): AudioFeatures {
     rmsDb: -18,
     peakDb: -3,
     crestDb: 5,
+    truePeakDb: -2.8,
     loudnessDb: -20,
     dynamicRangeDb: 9,
     spectralCentroidHz: 2500,

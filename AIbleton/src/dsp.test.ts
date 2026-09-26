@@ -65,6 +65,49 @@ test("integrated LUFS is unavailable for silence or audio shorter than a gating 
   assert.equal(short.integratedLufs, undefined);
 });
 
+test("true peak recovers the inter-sample overshoot a sample peak misses", () => {
+  // fs/4 sine phased so every sample reads ±√2/2: sample peak −3.01 dBFS,
+  // but the reconstructed waveform reaches 0 dBFS between samples.
+  const sampleRate = 48000;
+  const samples = new Float32Array(sampleRate);
+  for (let i = 0; i < samples.length; i++) samples[i] = Math.sin((Math.PI * i) / 2 + Math.PI / 4);
+  const features = analyzePcm({ sampleRate, channels: 1, samples, channelData: [samples] });
+  assert.ok(Math.abs(features.peakDb - -3.01) < 0.05, `sample peak ${features.peakDb}`);
+  assert.ok(Math.abs(features.truePeakDb) < 0.2, `true peak ${features.truePeakDb}`);
+});
+
+test("true peak is never below the sample peak", () => {
+  const features = analyzePcm(sinePcm(1));
+  assert.ok(features.truePeakDb >= features.peakDb - 0.01, `tp ${features.truePeakDb} < peak ${features.peakDb}`);
+});
+
+test("short-term LUFS max matches integrated for a steady calibrated sine", () => {
+  const features = analyzePcm(sinePcm(4));
+  assert.ok(features.shortTermMaxLufs !== undefined && features.integratedLufs !== undefined);
+  assert.ok(
+    Math.abs(features.shortTermMaxLufs! - features.integratedLufs!) < 0.5,
+    `short-term ${features.shortTermMaxLufs} vs integrated ${features.integratedLufs}`,
+  );
+});
+
+test("short-term LUFS range captures a quiet-to-loud jump", () => {
+  // 4 s at amp 0.05 then 4 s at amp 0.5 (20 dB step, 1 kHz).
+  const sampleRate = 48000;
+  const n = sampleRate * 8;
+  const samples = new Float32Array(n);
+  for (let i = 0; i < n; i++) samples[i] = (i < n / 2 ? 0.05 : 0.5) * Math.sin((2 * Math.PI * 1000 * i) / sampleRate);
+  const features = analyzePcm({ sampleRate, channels: 1, samples, channelData: [samples] });
+  assert.ok(features.shortTermRangeLu !== undefined && features.shortTermMaxLufs !== undefined);
+  assert.ok(features.shortTermRangeLu! > 15 && features.shortTermRangeLu! < 21, `range ${features.shortTermRangeLu}`);
+  assert.ok(Math.abs(features.shortTermMaxLufs! - -9) < 1, `max ${features.shortTermMaxLufs}`);
+});
+
+test("short-term LUFS is undefined below one 3 s window or in silence", () => {
+  assert.equal(analyzePcm(sinePcm(2.5)).shortTermMaxLufs, undefined);
+  const silence = { ...sinePcm(4), samples: new Float32Array(48000 * 4), channelData: [new Float32Array(48000 * 4)] };
+  assert.equal(analyzePcm(silence).shortTermMaxLufs, undefined);
+});
+
 function stereoPcm(seconds: number, mkLeft: (i: number, fs: number) => number, mkRight: (i: number, fs: number) => number) {
   const sampleRate = 48000;
   const n = Math.floor(sampleRate * seconds);

@@ -8,6 +8,16 @@
  * Feature semantics (all dB values are dBFS, floor −100):
  *   rmsDb/peakDb/crestDb — global signal stats; crest = peak − rms is the
  *     "punch" proxy: a squashed, over-limited kick reads < 3 dB.
+ *   truePeakDb — inter-sample (true) peak in dBTP, via 8x windowed-sinc
+ *     interpolation around near-max samples; always ≥ the sample peak.
+ *     Streaming delivery targets ≤ −1 dBTP: inter-sample overs clip the DAC
+ *     reconstruction stage even when every sample sits below 0 dBFS.
+ *   shortTermMaxLufs / shortTermRangeLu — gated 3 s short-term loudness
+ *     (BS.1770 K-weighting, 0.5 s hop, −70 LUFS absolute gate): the max, and
+ *     the p95−p10 spread (intro/drop contrast; > 8–10 LU means streaming
+ *     normalisation will squash the loud part). Undefined when the programme
+ *     is shorter than one 3 s window or fully gated out; range needs ≥ 8
+ *     gated windows.
  *   loudnessDb — K-weighting-INSPIRED mono approximation (RBJ high-shelf +
  *     high-pass, ungated). NOT BS.1770 LUFS — do not quote as LUFS.
  *   dynamicRangeDb — p95 − p10 of short-term (2048/1024) RMS in dB
@@ -55,10 +65,16 @@ export interface AudioFeatures {
   rmsDb: number;
   peakDb: number;
   crestDb: number;
+  /** Inter-sample true peak (dBTP), 8x sinc interpolation; ≥ peakDb. */
+  truePeakDb: number;
   /** K-weighting-inspired mono approx, ungated — NOT BS.1770 LUFS. */
   loudnessDb: number;
   /** Integrated loudness per ITU-R BS.1770-4; absent for silence or <400 ms. */
   integratedLufs?: number;
+  /** Max gated 3 s short-term loudness; absent when < 3 s or fully gated. */
+  shortTermMaxLufs?: number;
+  /** p95 − p10 of gated short-term values (LU); absent with < 8 windows. */
+  shortTermRangeLu?: number;
   /** p95 − p10 of short-term RMS (dB), LRA-style; undefined when < 8 frames. */
   dynamicRangeDb?: number;
   spectralCentroidHz: number;
@@ -576,6 +592,105 @@ function applyBiquadInPlace(x: Float64Array, f: Biquad): void {
   }
 }
 
+/** BS.1770 K-weighting: stage-1 high shelf + stage-2 high-pass. */
+function kWeightFilters(fs: number): Biquad[] {
+  return [
+    highShelf(1681.9744509555319, 3.99984385397, 0.7071752369554193, fs),
+    highPass(38.13547087613982, 0.5003270373253953, fs),
+  ];
+}
+
+// ------------------------------------------------------ true peak (dBTP) ---
+
+/** Windowed-sinc kernel half-width (samples each side of the tap point). */
+const TP_KERNEL_HALF = 16;
+/** Inter-sample positions evaluated per sample interval. */
+const TP_OVERSAMPLE = 8;
+
+function blackmanWindow(k: number, size: number): number {
+  return 0.42 - 0.5 * Math.cos((2 * Math.PI * k) / size) + 0.08 * Math.cos((4 * Math.PI * k) / size);
+}
+
+/** Band-limited interpolation of x at fractional position t. */
+function sincAt(x: ArrayLike<number>, t: number): number {
+  const center = Math.round(t);
+  let sum = 0;
+  for (let k = -TP_KERNEL_HALF; k <= TP_KERNEL_HALF; k++) {
+    const idx = center + k;
+    if (idx < 0 || idx >= x.length) continue;
+    const d = t - idx;
+    const sinc = Math.abs(d) < 1e-9 ? 1 : Math.sin(Math.PI * d) / (Math.PI * d);
+    sum += x[idx] * sinc * blackmanWindow(k + TP_KERNEL_HALF, 2 * TP_KERNEL_HALF);
+  }
+  return sum;
+}
+
+/** Max |x| over inter-sample positions. Full-file oversampling is O(n·taps),
+ * so the search runs only around samples within 6 dB of the sample peak —
+ * inter-sample overshoot beyond that does not occur in practice. */
+function truePeakLinear(chans: Float32Array[]): number {
+  let sampleMax = 0;
+  for (const x of chans) {
+    for (let i = 0; i < x.length; i++) {
+      const a = Math.abs(x[i]);
+      if (a > sampleMax) sampleMax = a;
+    }
+  }
+  if (sampleMax <= 0) return 0;
+  const threshold = sampleMax * 10 ** (-6 / 20);
+  let max = sampleMax;
+  for (const x of chans) {
+    for (let i = 0; i < x.length; i++) {
+      if (Math.abs(x[i]) < threshold) continue;
+      const lo = Math.max(0, i - 1);
+      const hi = Math.min(x.length - 1, i + 1);
+      const span = hi - lo;
+      for (let s = 0; s <= span * TP_OVERSAMPLE; s++) {
+        const a = Math.abs(sincAt(x, lo + s / TP_OVERSAMPLE));
+        if (a > max) max = a;
+      }
+    }
+  }
+  return max;
+}
+
+// -------------------------------------------- short-term loudness (3 s) ---
+
+const SHORT_TERM_SEC = 3;
+const SHORT_TERM_HOP_SEC = 0.5;
+const ABSOLUTE_GATE_LUFS = -70;
+
+/** Gated 3 s short-term loudness stats (BS.1770 K-weighting, 0.5 s hop,
+ * −70 LUFS absolute gate). Prefix sums make each window O(1). */
+function shortTermLoudness(
+  chans: Float32Array[],
+  fs: number,
+): { max: number; range?: number } | undefined {
+  const window = Math.round(SHORT_TERM_SEC * fs);
+  const n = Math.min(...chans.map((c) => c.length));
+  if (n < window) return undefined;
+  const filters = kWeightFilters(fs);
+  const prefix = new Float64Array(n + 1);
+  for (const c of chans) {
+    const w = new Float64Array(n);
+    for (let i = 0; i < n; i++) w[i] = c[i];
+    for (const f of filters) applyBiquadInPlace(w, f);
+    for (let i = 0; i < n; i++) prefix[i + 1] += w[i] * w[i];
+  }
+  for (let i = 0; i < n; i++) prefix[i + 1] += prefix[i];
+  const hop = Math.round(SHORT_TERM_HOP_SEC * fs);
+  const values: number[] = [];
+  for (let start = 0; start + window <= n; start += hop) {
+    const ms = (prefix[start + window] - prefix[start]) / window;
+    const lufs = -0.691 + 10 * Math.log10(Math.max(ms, 1e-10));
+    if (lufs >= ABSOLUTE_GATE_LUFS) values.push(lufs);
+  }
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const pick = (p: number): number => sorted[Math.min(sorted.length - 1, Math.round(p * (sorted.length - 1)))];
+  return { max: sorted[sorted.length - 1], ...(values.length >= 8 ? { range: pick(0.95) - pick(0.1) } : {}) };
+}
+
 // -------------------------------------------------------------- analyze ----
 
 export function analyzePcm(pcm: MonoPcm): AudioFeatures {
@@ -613,12 +728,14 @@ export function analyzePcm(pcm: MonoPcm): AudioFeatures {
   // Loudness: K-inspired weighting on a Float64 copy.
   const weighted = new Float64Array(n);
   for (let i = 0; i < n; i++) weighted[i] = samples[i];
-  applyBiquadInPlace(weighted, highShelf(1681.9744509555319, 3.99984385397, 0.7071752369554193, sampleRate));
-  applyBiquadInPlace(weighted, highPass(38.13547087613982, 0.5003270373253953, sampleRate));
+  for (const f of kWeightFilters(sampleRate)) applyBiquadInPlace(weighted, f);
   let wSumSq = 0;
   for (let i = 0; i < n; i++) wSumSq += weighted[i] * weighted[i];
   const loudnessDb = -0.691 + 10 * Math.log10(Math.max(wSumSq / Math.max(1, n), 1e-10));
-  const integratedLufs = integratedLufsFn(pcm.channelData ?? [samples], { fs: sampleRate });
+  const peakChannels = pcm.channelData && pcm.channelData.length > 0 ? pcm.channelData : [samples];
+  const integratedLufs = integratedLufsFn(peakChannels, { fs: sampleRate });
+  const truePeakDb = toDb(truePeakLinear(peakChannels));
+  const shortTerm = shortTermLoudness(peakChannels, sampleRate);
 
   // Stereo correlation on the first two channels (L/R). The low-band split
   // reuses the biquad machinery at 150 Hz — kick/bass mono-compatibility.
@@ -720,8 +837,11 @@ export function analyzePcm(pcm: MonoPcm): AudioFeatures {
     rmsDb,
     peakDb,
     crestDb,
+    truePeakDb,
     loudnessDb,
     ...(integratedLufs !== null ? { integratedLufs } : {}),
+    ...(shortTerm !== undefined ? { shortTermMaxLufs: shortTerm.max } : {}),
+    ...(shortTerm?.range !== undefined ? { shortTermRangeLu: shortTerm.range } : {}),
     ...(dynamicRangeDb !== undefined ? { dynamicRangeDb } : {}),
     spectralCentroidHz,
     bands,

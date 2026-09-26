@@ -79,8 +79,11 @@ export async function analyzeRenderedTrack(context: Ctx, input: Record<string, u
         channels: f.channels,
         features: {
           rms_db: round(f.rmsDb), peak_db: round(f.peakDb), crest_db: round(f.crestDb),
+          true_peak_dbtp: round(f.truePeakDb),
           loudness_db: round(f.loudnessDb), spectral_centroid_hz: round(f.spectralCentroidHz),
           ...(f.integratedLufs !== undefined ? { integrated_lufs: round(f.integratedLufs) } : {}),
+          ...(f.shortTermMaxLufs !== undefined ? { short_term_max_lufs: round(f.shortTermMaxLufs) } : {}),
+          ...(f.shortTermRangeLu !== undefined ? { short_term_range_lu: round(f.shortTermRangeLu) } : {}),
           ...(f.dynamicRangeDb !== undefined ? { dynamic_range_db: round(f.dynamicRangeDb) } : {}),
           ...(f.transientDensity !== undefined ? { transient_density: round(f.transientDensity, 3) } : {}),
           ...(f.correlation !== undefined ? { correlation: round(f.correlation, 3) } : {}),
