@@ -31,11 +31,11 @@
 
 ## 下载
 
-**当前版本：v0.9.17**
+**当前版本：v0.9.18**
 
 | 文件 | 说明 |
 |---|---|
-| [下载 AIbleton-0.9.17.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.17/AIbleton-0.9.17.ablx) | Live 扩展，**必需**。通过 **Live → 设置 → 扩展** 安装。 |
+| [下载 AIbleton-0.9.18.ablx](https://github.com/freddyzhangxu/aibleton/releases/download/v0.9.18/AIbleton-0.9.18.ablx) | Live 扩展，**必需**。通过 **Live → 设置 → 扩展** 安装。 |
 | [下载 AIbletonBar-macOS.zip](https://github.com/freddyzhangxu/aibleton/releases/latest/download/AIbletonBar-macOS.zip) | 可选的浮动侧边栏。**需先安装上面的 `.ablx` 扩展才能使用**——它只是加载扩展提供的界面。**无需更新**——把 `.ablx` 保持最新即可。⚠️ **首次打开会被 macOS 拦截**（应用未公证）：在终端执行一次 `xattr -cr /Applications/AIbletonBar.app`——或右键点击 App → **打开** → **打开**。之后即可正常双击启动。 |
 | [下载 AIbletonBar-Windows.zip](https://github.com/freddyzhangxu/aibleton/releases/latest/download/AIbletonBar-Windows.zip) | 可选的浮动侧边栏。**需先安装上面的 `.ablx` 扩展才能使用**——它只是加载扩展提供的界面。**无需更新**——更新 `.ablx` 即可。 |
 
