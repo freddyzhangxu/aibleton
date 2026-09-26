@@ -35,7 +35,7 @@ const CAVEAT_MIDI_ONLY =
   "(material x repeats). Track indices match get_song_overview.";
 
 const CAVEAT_WITH_AUDIO =
-  "Audio features (loudness/crest/dynamic-range/bands/transients) describe " +
+  "Audio features (loudness/crest/dynamic-range/correlation/bands/transients) describe " +
   "clip SOURCE FILES — pre-warp, pre-gain, pre-device; the audible result " +
   "may differ. Loop repeats estimated virtually (material x repeats). " +
   "Track indices match get_song_overview.";
@@ -197,6 +197,8 @@ export function presentAnalysis(
           loud: round1(a.loudnessDb),
           centroid: Math.round(a.spectralCentroidHz),
           ...(a.transientDensity !== undefined ? { trans: round2(a.transientDensity) } : {}),
+          ...(a.correlation !== undefined ? { corr: round2(a.correlation) } : {}),
+          ...(a.lowCorrelation !== undefined ? { corrLow: round2(a.lowCorrelation) } : {}),
           bands: {
             sub: round3(a.bands.sub),
             bass: round3(a.bands.bass),

@@ -22,6 +22,14 @@
  *   transientDensity — onsets/sec via spectral flux (positive half-wave
  *     magnitude delta, adaptive median threshold, ~70ms refractory);
  *     undefined for clips shorter than 0.5 s.
+ *   correlation — stereo L/R Pearson correlation (−1..+1) on the first two
+ *     channels; +1 = mono-compatible, negative = out of phase (disappears in
+ *     mono). Undefined for mono files or silence. lowCorrelation is the same
+ *     measure below 150 Hz (kick/bass mono-compatibility); undefined under
+ *     100 ms, or when the <150 Hz band carries < 5% of channel energy —
+ *     there the filtered signal is noise floor and the estimate is garbage.
+ *     NOTE the energy test is per-CHANNEL, not on the mono mix: anti-phase
+ *     low content cancels in the mix but is exactly what this must catch.
  *
  * FFT 2048 @ 44.1 kHz = 21.5 Hz/bin, so `sub` (20–60 Hz) is ~2 bins — coarse
  * but sufficient for balance judgments; documented, not silently widened.
@@ -57,6 +65,11 @@ export interface AudioFeatures {
   bands: AudioBands;
   /** Onsets/sec from spectral flux; undefined when duration < 0.5 s. */
   transientDensity?: number;
+  /** L/R Pearson correlation (−1..+1); undefined for mono or silence. */
+  correlation?: number;
+  /** Correlation below 150 Hz; undefined for mono, silence, < 100 ms, or a
+   * <150 Hz band carrying < 5% of channel energy (noise-floor estimate). */
+  lowCorrelation?: number;
   /** Analysis was truncated by maxSeconds. */
   partial?: true;
 }
@@ -516,6 +529,37 @@ function highPass(fc: number, q: number, fs: number): Biquad {
   };
 }
 
+/** RBJ low-pass (for the low-band correlation split). */
+function lowPass(fc: number, q: number, fs: number): Biquad {
+  const w0 = (2 * Math.PI * fc) / fs;
+  const cosw = Math.cos(w0);
+  const alpha = Math.sin(w0) / (2 * q);
+  const a0 = 1 + alpha;
+  return {
+    b0: ((1 - cosw) / 2) / a0,
+    b1: (1 - cosw) / a0,
+    b2: ((1 - cosw) / 2) / a0,
+    a1: (-2 * cosw) / a0,
+    a2: (1 - alpha) / a0,
+  };
+}
+
+/** Zero-mean Pearson correlation over the shared length; undefined for silence. */
+function channelCorrelation(a: ArrayLike<number>, b: ArrayLike<number>): number | undefined {
+  const n = Math.min(a.length, b.length);
+  if (n === 0) return undefined;
+  let ab = 0;
+  let a2 = 0;
+  let b2 = 0;
+  for (let i = 0; i < n; i++) {
+    ab += a[i] * b[i];
+    a2 += a[i] * a[i];
+    b2 += b[i] * b[i];
+  }
+  const den = Math.sqrt(a2 * b2);
+  return den > 1e-12 ? ab / den : undefined;
+}
+
 function applyBiquadInPlace(x: Float64Array, f: Biquad): void {
   let x1 = 0;
   let x2 = 0;
@@ -575,6 +619,32 @@ export function analyzePcm(pcm: MonoPcm): AudioFeatures {
   for (let i = 0; i < n; i++) wSumSq += weighted[i] * weighted[i];
   const loudnessDb = -0.691 + 10 * Math.log10(Math.max(wSumSq / Math.max(1, n), 1e-10));
   const integratedLufs = integratedLufsFn(pcm.channelData ?? [samples], { fs: sampleRate });
+
+  // Stereo correlation on the first two channels (L/R). The low-band split
+  // reuses the biquad machinery at 150 Hz — kick/bass mono-compatibility.
+  let correlation: number | undefined;
+  let lowCorrelation: number | undefined;
+  const ch = pcm.channelData;
+  if (channels >= 2 && ch && ch.length >= 2) {
+    correlation = channelCorrelation(ch[0], ch[1]);
+    if (durationSec >= 0.1) {
+      const lp = lowPass(150, Math.SQRT1_2, sampleRate);
+      const lo0 = Float64Array.from(ch[0]);
+      const lo1 = Float64Array.from(ch[1]);
+      applyBiquadInPlace(lo0, lp);
+      applyBiquadInPlace(lo1, lp);
+      // Gate on per-channel low-band energy: anti-phase lows cancel in the
+      // mono mix, so a mix-based test would miss the worst case — and on
+      // low-free material the filtered signal is noise floor.
+      let loE = 0;
+      let totE = 0;
+      for (let i = 0; i < n; i++) {
+        loE += lo0[i] * lo0[i] + lo1[i] * lo1[i];
+        totE += ch[0][i] * ch[0][i] + ch[1][i] * ch[1][i];
+      }
+      if (loE / Math.max(totE, 1e-12) >= 0.05) lowCorrelation = channelCorrelation(lo0, lo1);
+    }
+  }
 
   // STFT: band power, spectral centroid, spectral flux.
   const win = hannWindow(FFT_N);
@@ -656,5 +726,7 @@ export function analyzePcm(pcm: MonoPcm): AudioFeatures {
     spectralCentroidHz,
     bands,
     ...(transientDensity !== undefined ? { transientDensity } : {}),
+    ...(correlation !== undefined ? { correlation } : {}),
+    ...(lowCorrelation !== undefined ? { lowCorrelation } : {}),
   };
 }

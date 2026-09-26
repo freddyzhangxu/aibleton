@@ -533,6 +533,8 @@ export function aggregateTrackAudio(ts: TrackState, secPerBeat: number): TrackAu
 
   const dynamicRangeDb = dmeanOpt((f) => f.dynamicRangeDb);
   const transientDensity = dmeanOpt((f) => f.transientDensity);
+  const correlation = dmeanOpt((f) => f.correlation);
+  const lowCorrelation = dmeanOpt((f) => f.lowCorrelation);
   return {
     clips: contributors.length,
     failedClips,
@@ -551,6 +553,8 @@ export function aggregateTrackAudio(ts: TrackState, secPerBeat: number): TrackAu
       high: emean((f) => f.bands.high),
     },
     ...(transientDensity !== undefined ? { transientDensity } : {}),
+    ...(correlation !== undefined ? { correlation } : {}),
+    ...(lowCorrelation !== undefined ? { lowCorrelation } : {}),
     ...(contributors.some((c) => c.f.partial) ? { partial: true as const } : {}),
   };
 }
@@ -714,6 +718,22 @@ function detectIssues(ctx: {
       issues.push({
         code: "SQUASHED_DYNAMICS",
         message: `"${pt.track.name}" loudness range ${round2(a.dynamicRangeDb)} dB — over-compressed/flat ${AUDIO_CAVEAT}`,
+        tracks: [pt.track.index],
+      });
+    }
+    if (a.correlation !== undefined && a.correlation < 0) {
+      issues.push({
+        code: "OUT_OF_PHASE",
+        message: `"${pt.track.name}" stereo correlation ${round2(a.correlation)} — out of phase, disappears in mono ${AUDIO_CAVEAT}`,
+        tracks: [pt.track.index],
+      });
+    }
+    // lowCorrelation is already gated in dsp.ts on per-channel low-band
+    // energy (a mono-mix test would miss anti-phase lows, which cancel).
+    if (a.lowCorrelation !== undefined && a.lowCorrelation < 0.5) {
+      issues.push({
+        code: "WIDE_LOW_END",
+        message: `"${pt.track.name}" low-band (<150 Hz) correlation ${round2(a.lowCorrelation)} — the low end collapses in mono ${AUDIO_CAVEAT}`,
         tracks: [pt.track.index],
       });
     }

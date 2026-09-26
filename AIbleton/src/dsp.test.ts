@@ -65,6 +65,63 @@ test("integrated LUFS is unavailable for silence or audio shorter than a gating 
   assert.equal(short.integratedLufs, undefined);
 });
 
+function stereoPcm(seconds: number, mkLeft: (i: number, fs: number) => number, mkRight: (i: number, fs: number) => number) {
+  const sampleRate = 48000;
+  const n = Math.floor(sampleRate * seconds);
+  const left = new Float32Array(n);
+  const right = new Float32Array(n);
+  const samples = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    left[i] = mkLeft(i, sampleRate);
+    right[i] = mkRight(i, sampleRate);
+    samples[i] = (left[i] + right[i]) / 2;
+  }
+  return { sampleRate, channels: 2, samples, channelData: [left, right] };
+}
+
+const sineAt = (freq: number, amp = 0.1) => (i: number, fs: number) => amp * Math.sin((2 * Math.PI * freq * i) / fs);
+
+test("stereo correlation is +1 for identical channels, −1 for inverted, ~0 for decorrelated", () => {
+  const sine = sineAt(1000);
+  const inverted = analyzePcm(stereoPcm(1, sine, (i, fs) => -sine(i, fs)));
+  const identical = analyzePcm(stereoPcm(1, sine, sine));
+  const decorrelated = analyzePcm(stereoPcm(1, sineAt(1000), sineAt(1737)));
+  assert.ok(Math.abs(identical.correlation! - 1) < 1e-3, `got ${identical.correlation}`);
+  assert.ok(Math.abs(inverted.correlation! + 1) < 1e-3, `got ${inverted.correlation}`);
+  assert.ok(Math.abs(decorrelated.correlation!) < 0.05, `got ${decorrelated.correlation}`);
+});
+
+test("correlation is undefined for mono sources", () => {
+  assert.equal(analyzePcm(sinePcm(1)).correlation, undefined);
+  assert.equal(analyzePcm(sinePcm(1)).lowCorrelation, undefined);
+});
+
+test("low-band correlation is suppressed when the <150 Hz band is empty", () => {
+  // Two decorrelated high sines, no low content: corrLow would be a
+  // noise-floor estimate and must be withheld; overall corr still reports.
+  const features = analyzePcm(stereoPcm(1, sineAt(5000), sineAt(7351)));
+  assert.equal(features.lowCorrelation, undefined);
+  assert.ok(features.correlation !== undefined);
+});
+
+test("low-band correlation survives anti-phase lows that cancel in the mono mix", () => {
+  // 80 Hz fully anti-phase + in-phase 3 kHz: the low end vanishes from the
+  // mono mix (bands read ~0) but corrLow must still report −1.
+  const low = sineAt(80, 0.1);
+  const high = sineAt(3000, 0.2);
+  const features = analyzePcm(stereoPcm(1, (i, fs) => low(i, fs) + high(i, fs), (i, fs) => -low(i, fs) + high(i, fs)));
+  assert.ok(Math.abs(features.lowCorrelation! + 1) < 0.02, `got ${features.lowCorrelation}`);
+});
+
+test("low-band correlation isolates the <150 Hz band", () => {
+  // In-phase 80 Hz + out-of-phase 5 kHz: overall correlation drops, low stays +1.
+  const low = sineAt(80);
+  const high = sineAt(5000);
+  const features = analyzePcm(stereoPcm(1, (i, fs) => low(i, fs) + high(i, fs), (i, fs) => low(i, fs) - high(i, fs)));
+  assert.ok(Math.abs(features.lowCorrelation! - 1) < 0.02, `got ${features.lowCorrelation}`);
+  assert.ok(Math.abs(features.correlation!) < 0.05, `got ${features.correlation}`);
+});
+
 function stereoSineWav(): Buffer {
   const sampleRate = 48000;
   const frames = sampleRate;

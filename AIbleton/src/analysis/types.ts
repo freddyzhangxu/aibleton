@@ -56,7 +56,8 @@ export type IssueCode =
   | "NO_LOW_END" | "NO_HIGH_END" | "FLAT_DYNAMICS" | "MONOTONE_BASS"
   | "MUTED_CONTENT"
   | "WEAK_TRANSIENTS" | "THIN_LOW_END" | "SQUASHED_DYNAMICS"
-  | "DULL_HIGH_END" | "HARSH_HIGH_END";
+  | "DULL_HIGH_END" | "HARSH_HIGH_END"
+  | "OUT_OF_PHASE" | "WIDE_LOW_END";
 
 export interface MusicIssue {
   code: IssueCode;
@@ -83,6 +84,8 @@ export interface TrackAudioAnalysis {
   spectralCentroidHz: number;
   bands: AudioBands;
   transientDensity?: number;
+  correlation?: number; // undefined when no contributing clip had it (mono sources)
+  lowCorrelation?: number;
   partial?: true; // any contributing clip was truncated
 }
 
@@ -152,7 +155,8 @@ export interface TrackAnalysis {
     lufs?: { file: string; integrated: number }[];
     /** Source-file audio features (present only when analyze_song ran with
      * audio:true). rms/crest/dyn/loud in dBFS, centroid in Hz, trans in
-     * onsets/sec, bands as energy fractions summing to ≈1. */
+     * onsets/sec, corr/corrLow as −1..+1 (absent for mono sources), bands as
+     * energy fractions summing to ≈1. */
     feat?: {
       rms: number;
       crest: number;
@@ -160,6 +164,8 @@ export interface TrackAnalysis {
       loud: number;
       centroid: number;
       trans?: number;
+      corr?: number;
+      corrLow?: number;
       bands: AudioBands;
       partial?: true;
     };

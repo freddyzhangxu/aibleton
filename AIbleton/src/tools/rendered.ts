@@ -83,6 +83,8 @@ export async function analyzeRenderedTrack(context: Ctx, input: Record<string, u
           ...(f.integratedLufs !== undefined ? { integrated_lufs: round(f.integratedLufs) } : {}),
           ...(f.dynamicRangeDb !== undefined ? { dynamic_range_db: round(f.dynamicRangeDb) } : {}),
           ...(f.transientDensity !== undefined ? { transient_density: round(f.transientDensity, 3) } : {}),
+          ...(f.correlation !== undefined ? { correlation: round(f.correlation, 3) } : {}),
+          ...(f.lowCorrelation !== undefined ? { low_correlation: round(f.lowCorrelation, 3) } : {}),
           bands: Object.fromEntries(Object.entries(f.bands).map(([band, value]) => [band, round(value, 3)])),
           ...(f.partial ? { partial: true } : {}),
         },
