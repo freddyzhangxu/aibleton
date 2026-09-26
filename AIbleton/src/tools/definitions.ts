@@ -106,7 +106,7 @@ export const TOOLS = [
   {
     name: "analyze_song",
     description:
-      "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content), and a flat clip map (every arrangement clip's track/clip_index/bar/length + every session clip's track/scene_index — the coordinates arrange_song plans against). By default audio clips contribute filename + duration; pass audio:true to decode WAV/AIFF/MP3/FLAC clip source files for per-track loudness/crest/dynamic-range/6-band balance and audio-derived issues (weak transients, thin low end, squashed dynamics, dull/harsh top) — features describe the source FILE, pre-warp/pre-gain/pre-device. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview. Optional focus narrows the read to what matters for the question.",
+      "Deep read-only musical analysis of the Set: detected key (Krumhansl, duration-weighted, drums excluded) vs Live's scale setting, per-track roles (kick/bass/pad/…) with note/velocity/density/polyphony stats, section structure (cue points, else 8-bar energy blocks), session-view summary, rule-based issues (flat dynamics, low contrast, off-key notes, monotone bass, duplicate tracks, muted content), and a flat clip map (every arrangement clip's track/clip_index/bar/length + every session clip's track/scene_index — the coordinates arrange_song plans against). By default audio clips contribute filename + duration; pass audio:true to decode WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A (AAC or ALAC) clip source files for per-track loudness/crest/dynamic-range/6-band balance and audio-derived issues (weak transients, thin low end, squashed dynamics, dull/harsh top) — features describe the source FILE, pre-warp/pre-gain/pre-device. Call before suggesting structural changes or when you need key/role context. Track indices match get_song_overview. Optional focus narrows the read to what matters for the question.",
     input_schema: {
       type: "object",
       properties: {
@@ -118,7 +118,7 @@ export const TOOLS = [
         audio: {
           type: "boolean",
           description:
-            "Optional: decode audio clip source files (WAV/AIFF/MP3/FLAC) and add per-track audio features (rms/crest/dynamic-range/loudness/6-band energy/transient density) plus audio-derived issues. Slower on first run (file reads + decode + FFT), cached afterwards. Features describe the source file, pre-warp/pre-gain/pre-device — not the audible result through the device chain.",
+            "Optional: decode audio clip source files (WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A AAC or ALAC) and add per-track audio features (rms/crest/dynamic-range/loudness/6-band energy/transient density) plus audio-derived issues. Slower on first run (file reads + decode + FFT), cached afterwards. Features describe the source file, pre-warp/pre-gain/pre-device — not the audible result through the device chain.",
         },
       },
     },
@@ -180,13 +180,13 @@ export const TOOLS = [
         reference: {
           type: "object",
           description:
-            "Optional REFERENCE TRACK (local WAV/AIFF/MP3/FLAC file) the goal's target section should be compared against. " +
+            "Optional REFERENCE TRACK (local WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A AAC or ALAC file) the goal's target section should be compared against. " +
             "The server analyzes it LOCALLY (never uploaded) and returns a reference block: the aligned reference section, " +
             "measured gaps (energy/density/rhythm/impact…, delta = reference − current), and conservative action hints. " +
             "Reference is EVIDENCE, not the goal: still write your own successCriteria — the gate judges your criteria, " +
             "reference progress is supporting evidence only. Never try to copy or clone the reference.",
           properties: {
-            path: { type: "string", description: "Absolute path to the reference audio file (WAV/AIFF/MP3/FLAC)" },
+            path: { type: "string", description: "Absolute path to the reference audio file (WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A AAC or ALAC)" },
             section: {
               type: "string",
               description: "Optional: pin the reference section to compare against (id from a previous reference block, e.g. \"reference:section:3\")",

@@ -1,9 +1,9 @@
 /**
- * dsp.ts — pure audio DSP: WAV/AIFF/MP3/FLAC decode + feature extraction.
+ * dsp.ts — pure audio DSP: WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A decode + feature extraction.
  *
  * No I/O, no project imports: Buffer in, numbers out. WAV PCM (16/24/32-bit
- * int, 32-bit float), AIFF PCM (16/24-bit), MP3 and FLAC are supported;
- * everything else returns a structured error.
+ * int, 32-bit float), AIFF PCM (16/24-bit), MP3, FLAC, OGG Vorbis and M4A
+ * (AAC/ALAC) are supported; everything else returns a structured error.
  *
  * Feature semantics (all dB values are dBFS, floor −100):
  *   rmsDb/peakDb/crestDb — global signal stats; crest = peak − rms is the
@@ -28,8 +28,10 @@
  */
 
 import { Buffer } from "node:buffer";
+import { decoder as mp4Decoder } from "@audio/decode-mp4";
 import { decoder as mp3Decoder } from "@audio/decode-mp3";
 import { decoder as flacDecoder } from "@audio/decode-flac";
+import { decoder as vorbisDecoder } from "@audio/decode-vorbis";
 
 // ---------------------------------------------------------------- types ----
 
@@ -96,11 +98,10 @@ export async function decodeAudioBuffer(
   const ext = (/\.([^.]+)$/.exec(fileName)?.[1] ?? "").toLowerCase();
   if (ext === "wav") return decodeWav(buf, opts);
   if (ext === "aif" || ext === "aiff") return decodeAiff(buf, opts);
-  if (ext === "mp3" || ext === "flac") return decodeCompressed(buf, ext, opts);
-  if (["ogg", "m4a"].includes(ext)) {
-    return { error: `unsupported format ".${ext}" (WAV/AIFF/MP3/FLAC supported)` };
+  if (ext === "mp3" || ext === "flac" || ext === "ogg" || ext === "m4a") {
+    return decodeCompressed(buf, ext, opts);
   }
-  return { error: `unknown audio extension ".${ext}" (WAV/AIFF/MP3/FLAC supported)` };
+  return { error: `unknown audio extension ".${ext}" (WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A supported)` };
 }
 
 type StreamingDecoder = {
@@ -120,7 +121,7 @@ const COMPRESSED_CHUNK_BYTES = 64 * 1024;
 /** Decode compressed audio incrementally so maxSeconds also caps PCM memory. */
 async function decodeCompressed(
   buf: Buffer,
-  format: "mp3" | "flac",
+  format: "mp3" | "flac" | "ogg" | "m4a",
   opts?: { maxSeconds?: number },
 ): Promise<DecodeOutcome> {
   let decoder: StreamingDecoder | undefined;
@@ -155,7 +156,13 @@ async function decodeCompressed(
   };
 
   try {
-    decoder = (format === "mp3" ? await mp3Decoder() : await flacDecoder()) as StreamingDecoder;
+    decoder = (format === "mp3"
+      ? await mp3Decoder()
+      : format === "flac"
+        ? await flacDecoder()
+        : format === "ogg"
+          ? await vorbisDecoder()
+          : await mp4Decoder()) as StreamingDecoder;
     let reachedLimit = false;
     let offset = 0;
     while (offset < buf.length && !reachedLimit) {
