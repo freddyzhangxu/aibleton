@@ -1,10 +1,9 @@
 /**
- * dsp.ts — pure audio DSP: WAV/AIFF decode + feature extraction.
+ * dsp.ts — pure audio DSP: WAV/AIFF/MP3/FLAC decode + feature extraction.
  *
- * No I/O, no project imports: Buffer in, numbers out. Decode scope is
- * deliberately narrow — WAV PCM (16/24/32-bit int, 32-bit float) and AIFF
- * PCM (16/24-bit) cover what Live users actually keep in their libraries;
- * everything else returns a structured error instead of throwing.
+ * No I/O, no project imports: Buffer in, numbers out. WAV PCM (16/24/32-bit
+ * int, 32-bit float), AIFF PCM (16/24-bit), MP3 and FLAC are supported;
+ * everything else returns a structured error.
  *
  * Feature semantics (all dB values are dBFS, floor −100):
  *   rmsDb/peakDb/crestDb — global signal stats; crest = peak − rms is the
@@ -29,6 +28,8 @@
  */
 
 import { Buffer } from "node:buffer";
+import { decoder as mp3Decoder } from "@audio/decode-mp3";
+import { decoder as flacDecoder } from "@audio/decode-flac";
 
 // ---------------------------------------------------------------- types ----
 
@@ -87,27 +88,107 @@ const BAND_EDGES: [number, number][] = [
 // ---------------------------------------------------------------- decode ---
 
 /** Dispatch on the file extension; unsupported formats return an error, never throw. */
-export function decodeAudioBuffer(
+export async function decodeAudioBuffer(
   fileName: string,
   buf: Buffer,
   opts?: { maxSeconds?: number },
-): DecodeOutcome {
+): Promise<DecodeOutcome> {
   const ext = (/\.([^.]+)$/.exec(fileName)?.[1] ?? "").toLowerCase();
   if (ext === "wav") return decodeWav(buf, opts);
   if (ext === "aif" || ext === "aiff") return decodeAiff(buf, opts);
-  if (["mp3", "flac", "ogg", "m4a"].includes(ext)) {
-    return { error: `unsupported format ".${ext}" (WAV/AIFF only)` };
+  if (ext === "mp3" || ext === "flac") return decodeCompressed(buf, ext, opts);
+  if (["ogg", "m4a"].includes(ext)) {
+    return { error: `unsupported format ".${ext}" (WAV/AIFF/MP3/FLAC supported)` };
   }
-  return { error: `unknown audio extension ".${ext}" (WAV/AIFF only)` };
+  return { error: `unknown audio extension ".${ext}" (WAV/AIFF/MP3/FLAC supported)` };
+}
+
+type StreamingDecoder = {
+  decode(data: Uint8Array): Promise<DecodedChunk> | DecodedChunk;
+  flush?: () => Promise<DecodedChunk> | DecodedChunk;
+  free(): void;
+};
+
+type DecodedChunk = {
+  channelData: Float32Array[];
+  sampleRate: number;
+  errors?: Array<{ message: string }>;
+};
+
+const COMPRESSED_CHUNK_BYTES = 64 * 1024;
+
+/** Decode compressed audio incrementally so maxSeconds also caps PCM memory. */
+async function decodeCompressed(
+  buf: Buffer,
+  format: "mp3" | "flac",
+  opts?: { maxSeconds?: number },
+): Promise<DecodeOutcome> {
+  let decoder: StreamingDecoder | undefined;
+  const monoChunks: Float32Array[] = [];
+  let sampleRate = 0;
+  let channels = 0;
+  let frameCount = 0;
+  let truncated = false;
+
+  const append = (chunk: DecodedChunk): boolean => {
+    if (chunk.sampleRate > 0) sampleRate = chunk.sampleRate;
+    const channelCount = chunk.channelData.length;
+    if (channelCount) channels = channelCount;
+    if (!channelCount || !sampleRate) return false;
+    const n = Math.min(...chunk.channelData.map((channel) => channel.length));
+    const limit = opts?.maxSeconds && opts.maxSeconds > 0
+      ? Math.floor(sampleRate * opts.maxSeconds)
+      : Number.POSITIVE_INFINITY;
+    const keep = Math.max(0, Math.min(n, limit - frameCount));
+    if (keep > 0) {
+      const mono = new Float32Array(keep);
+      for (let i = 0; i < keep; i++) {
+        let sum = 0;
+        for (let c = 0; c < channelCount; c++) sum += chunk.channelData[c][i];
+        mono[i] = sum / channelCount;
+      }
+      monoChunks.push(mono);
+      frameCount += keep;
+    }
+    if (keep < n) truncated = true;
+    return Number.isFinite(limit) && frameCount >= limit;
+  };
+
+  try {
+    decoder = (format === "mp3" ? await mp3Decoder() : await flacDecoder()) as StreamingDecoder;
+    let reachedLimit = false;
+    let offset = 0;
+    while (offset < buf.length && !reachedLimit) {
+      const end = Math.min(buf.length, offset + COMPRESSED_CHUNK_BYTES);
+      const chunk = await decoder.decode(new Uint8Array(buf.buffer, buf.byteOffset + offset, end - offset));
+      offset = end;
+      reachedLimit = append(chunk);
+    }
+    if (reachedLimit && offset < buf.length) truncated = true;
+    if (offset === buf.length && !reachedLimit && decoder.flush) append(await decoder.flush());
+  } catch (error) {
+    return { error: `${format.toUpperCase()} decode failed: ${error instanceof Error ? error.message : String(error)}` };
+  } finally {
+    decoder?.free();
+  }
+
+  if (!sampleRate || !frameCount) return { error: `no audio samples decoded from ${format.toUpperCase()} file` };
+  const samples = new Float32Array(frameCount);
+  let write = 0;
+  for (const chunk of monoChunks) {
+    samples.set(chunk, write);
+    write += chunk.length;
+  }
+  return { pcm: { sampleRate, channels, samples }, truncated };
 }
 
 /** decode + analyze in one call; sets partial when truncated. */
-export function featuresFromBuffer(
+export async function featuresFromBuffer(
   fileName: string,
   buf: Buffer,
   opts?: { maxSeconds?: number },
-): { features: AudioFeatures } | { error: string } {
-  const dec = decodeAudioBuffer(fileName, buf, opts);
+): Promise<{ features: AudioFeatures } | { error: string }> {
+  const dec = await decodeAudioBuffer(fileName, buf, opts);
   if ("error" in dec) return { error: dec.error };
   const features = analyzePcm(dec.pcm);
   if (dec.truncated) features.partial = true;

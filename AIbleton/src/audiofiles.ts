@@ -60,7 +60,7 @@ function cacheHit(p: string, mtimeMs: number, size: number | null): FeatureOutco
   return e.outcome;
 }
 
-function analyzeAudioFile(p: string): { outcome: FeatureOutcome; fromCache: boolean } {
+async function analyzeAudioFile(p: string): Promise<{ outcome: FeatureOutcome; fromCache: boolean }> {
   const st = statOf(p);
   const mtimeMs = st?.mtimeMs ?? 0;
   if (st && st.size > MAX_READ_BYTES) {
@@ -81,7 +81,7 @@ function analyzeAudioFile(p: string): { outcome: FeatureOutcome; fromCache: bool
   }
 
   const maxSeconds = buf.length > TRUNCATE_BYTES ? TRUNCATE_SECONDS : MAX_SECONDS_FULL;
-  const outcome = featuresFromBuffer(p, buf, { maxSeconds });
+  const outcome = await featuresFromBuffer(p, buf, { maxSeconds });
   featureCache.set(p, { mtimeMs, size: buf.length, outcome });
   return { outcome, fromCache: false };
 }
@@ -124,7 +124,7 @@ export async function enrichMusicStateWithAudio(
           continue;
         }
         try {
-          const r = analyzeAudioFile(p);
+          const r = await analyzeAudioFile(p);
           outcome = r.outcome;
           if ("error" in outcome) stats.failed++;
           else if (r.fromCache) stats.cached++;

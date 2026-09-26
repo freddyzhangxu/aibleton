@@ -205,7 +205,7 @@ You can click, drag and drop, or paste up to 10 attachments:
 - Text: txt, md, JSON, CSV, code, YAML, and more; no more than 10 MB each. At most the first 20,000 characters of text are sent to the model.
 - MIDI / Live Sets: `.mid` / `.midi` / `.als`; no more than 10 MB each. The system first parses these into text summaries rather than handing the binary projects to the model as-is.
 
-Live’s built-in webview may be unable to open the native file picker. In Live, use drag and drop or paste where possible. If you want to analyze reference audio, give AI the absolute local path to the WAV / AIFF file and the section to compare. References are for analyzing gaps and making conservative recommendations; do not ask it to copy an existing work.
+Live’s built-in webview may be unable to open the native file picker. In Live, use drag and drop or paste where possible. If you want to analyze reference audio, give AI the absolute local path to the WAV / AIFF / MP3 / FLAC file and the section to compare. References are for analyzing gaps and making conservative recommendations; do not ask it to copy an existing work.
 
 ### Web Search
 

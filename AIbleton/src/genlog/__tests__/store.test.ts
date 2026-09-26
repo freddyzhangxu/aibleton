@@ -53,12 +53,12 @@ function fakeRecord(id: string): GenerationRecord {
   };
 }
 
-test("recordGeneration decodes features and persists the record", () => {
+test("recordGeneration decodes features and persists the record", async () => {
   const dir = tmpDir();
   const file = path.join(dir, "gen-2026-09-10_12-00-00-abcd.wav");
   fs.writeFileSync(file, sineWav());
 
-  const rec = recordGeneration(
+  const rec = await recordGeneration(
     { file, provider: "stable-audio", prompt: "test tone", params: { seconds: 1 } },
     dir,
   );
@@ -75,14 +75,14 @@ test("recordGeneration decodes features and persists the record", () => {
   assert.ok(loaded[0].features);
 });
 
-test("undecodable files are recorded with featuresError, never thrown", () => {
+test("undecodable files are recorded with featuresError, never thrown", async () => {
   const dir = tmpDir();
   const file = path.join(dir, "gen-x.mp3");
   fs.writeFileSync(file, Buffer.from("not real mp3"));
 
-  const rec = recordGeneration({ file, provider: "elevenlabs", prompt: "p", params: { seconds: 8 } }, dir);
+  const rec = await recordGeneration({ file, provider: "elevenlabs", prompt: "p", params: { seconds: 8 } }, dir);
   assert.equal(rec.features, undefined);
-  assert.match(rec.featuresError!, /unsupported format/);
+  assert.match(rec.featuresError!, /no audio samples decoded/);
   assert.equal(loadGenLog(dir).length, 1);
 });
 

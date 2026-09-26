@@ -12,16 +12,16 @@ import type { ReferenceSource } from "../types.js";
 
 const SRC: ReferenceSource = { type: "audio_file", path: "/tmp/ref.wav" };
 
-test("deterministic: same buffer → byte-identical analysis", () => {
+test("deterministic: same buffer → byte-identical analysis", async () => {
   const buf = wavOf(pcmOfSegments([[0.02, 8], [0.5, 8], [0.02, 8]]));
-  const a = analyzeReferenceBuffer(SRC, buf);
-  const b = analyzeReferenceBuffer(SRC, buf);
+  const a = await analyzeReferenceBuffer(SRC, buf);
+  const b = await analyzeReferenceBuffer(SRC, buf);
   assert.deepEqual(a, b);
 });
 
-test("energy contrast: a loud segment reads more energetic than a quiet one", () => {
+test("energy contrast: a loud segment reads more energetic than a quiet one", async () => {
   const buf = wavOf(pcmOfSegments([[0.01, 9], [0.6, 9]]));
-  const out = analyzeReferenceBuffer(SRC, buf);
+  const out = await analyzeReferenceBuffer(SRC, buf);
   assert.ok("analysis" in out);
   assert.equal(out.analysis.sections.length, 2);
   const [quiet, loud] = out.analysis.sections;
@@ -32,14 +32,14 @@ test("energy contrast: a loud segment reads more energetic than a quiet one", ()
   assert.equal(loud.label, "Drop 1");
 });
 
-test("tempo: a 120 BPM click track estimates ~120 and yields beat-axis fields", () => {
+test("tempo: a 120 BPM click track estimates ~120 and yields beat-axis fields", async () => {
   const pcm = clickTrack(120, 12);
   const est = estimateTempo(computeReferenceCurves(pcm).flux, computeReferenceCurves(pcm).hopSec);
   assert.ok(est !== undefined);
   assert.ok(Math.abs(est.bpm - 120) <= 3, `estimated ${est.bpm}`);
   assert.ok(est.confidence > 0);
 
-  const out = analyzeReferenceBuffer(SRC, wavOf(pcm));
+  const out = await analyzeReferenceBuffer(SRC, wavOf(pcm));
   assert.ok("analysis" in out);
   assert.ok(out.analysis.tempo !== undefined);
   assert.ok(Math.abs(out.analysis.tempo!.value - 120) <= 3);
@@ -48,17 +48,17 @@ test("tempo: a 120 BPM click track estimates ~120 and yields beat-axis fields", 
   assert.ok(out.analysis.features.rhythmicActivity !== undefined);
 });
 
-test("explicit tempo hint wins over estimation and reads confidence 1", () => {
-  const out = analyzeReferenceBuffer(SRC, wavOf(clickTrack(120, 8)), { tempoBpm: 128 });
+test("explicit tempo hint wins over estimation and reads confidence 1", async () => {
+  const out = await analyzeReferenceBuffer(SRC, wavOf(clickTrack(120, 8)), { tempoBpm: 128 });
   assert.ok("analysis" in out);
   assert.equal(out.analysis.tempo?.value, 128);
   assert.equal(out.analysis.tempo?.confidence, 1);
 });
 
-test("no tempo evidence → tempo and beat-axis features stay undefined (no fabrication)", () => {
+test("no tempo evidence → tempo and beat-axis features stay undefined (no fabrication)", async () => {
   // Steady noise: no onset periodicity at all.
   const pcm = { sampleRate: 44100, channels: 1, samples: noise(44100 * 10, 0.3, 5) };
-  const out = analyzeReferenceBuffer(SRC, wavOf(pcm));
+  const out = await analyzeReferenceBuffer(SRC, wavOf(pcm));
   assert.ok("analysis" in out);
   assert.equal(out.analysis.tempo, undefined);
   assert.equal(out.analysis.durationBeats, undefined);
@@ -71,50 +71,50 @@ test("no tempo evidence → tempo and beat-axis features stay undefined (no fabr
   assert.ok(out.analysis.sections.length >= 1);
 });
 
-test("empty/silent audio → reference_empty", () => {
+test("empty/silent audio → reference_empty", async () => {
   const silent = { sampleRate: 44100, channels: 1, samples: new Float32Array(44100 * 4) };
-  const out = analyzeReferenceBuffer(SRC, wavOf(silent));
+  const out = await analyzeReferenceBuffer(SRC, wavOf(silent));
   assert.ok("error" in out);
   assert.equal(out.error, "reference_empty");
 });
 
-test("very short audio (< one FFT frame) → reference_empty", () => {
+test("very short audio (< one FFT frame) → reference_empty", async () => {
   const tiny = { sampleRate: 44100, channels: 1, samples: noise(1000, 0.5, 9) };
-  const out = analyzeReferenceBuffer(SRC, wavOf(tiny));
+  const out = await analyzeReferenceBuffer(SRC, wavOf(tiny));
   assert.ok("error" in out);
   assert.equal(out.error, "reference_empty");
 });
 
-test("undecodable bytes → reference_analysis_failed", () => {
-  const out = analyzeReferenceBuffer(SRC, Buffer.from("definitely not a wav file"));
+test("undecodable bytes → reference_analysis_failed", async () => {
+  const out = await analyzeReferenceBuffer(SRC, Buffer.from("definitely not a wav file"));
   assert.ok("error" in out);
   assert.equal(out.error, "reference_analysis_failed");
 });
 
-test("unsupported container (mp3) → reference_analysis_failed with message", () => {
-  const out = analyzeReferenceBuffer({ type: "audio_file", path: "/tmp/ref.mp3" }, Buffer.alloc(2048, 1));
+test("invalid MP3 data → reference_analysis_failed with message", async () => {
+  const out = await analyzeReferenceBuffer({ type: "audio_file", path: "/tmp/ref.mp3" }, Buffer.alloc(2048, 1));
   assert.ok("error" in out);
   assert.equal(out.error, "reference_analysis_failed");
-  assert.match(out.message ?? "", /unsupported format/);
+  assert.match(out.message ?? "", /no audio samples decoded/);
 });
 
-test("live_audio source → reference_unavailable (reserved, not faked)", () => {
-  const out = analyzeReferenceBuffer({ type: "live_audio", trackId: "3" }, Buffer.alloc(2048));
+test("live_audio source → reference_unavailable (reserved, not faked)", async () => {
+  const out = await analyzeReferenceBuffer({ type: "live_audio", trackId: "3" }, Buffer.alloc(2048));
   assert.ok("error" in out);
   assert.equal(out.error, "reference_unavailable");
 });
 
-test("truncation by maxSeconds → partial + honest duration coverage", () => {
+test("truncation by maxSeconds → partial + honest duration coverage", async () => {
   const buf = wavOf(pcmOfSegments([[0.3, 10]]));
-  const out = analyzeReferenceBuffer(SRC, buf, { maxSeconds: 5 });
+  const out = await analyzeReferenceBuffer(SRC, buf, { maxSeconds: 5 });
   assert.ok("analysis" in out);
   assert.equal(out.analysis.partial, true);
   assert.ok(out.analysis.coverage.duration > 0.4 && out.analysis.coverage.duration < 0.6);
   assert.equal(out.analysis.durationSeconds, 5);
 });
 
-test("coverage values stay within 0..1 and section ids are deterministic", () => {
-  const out = analyzeReferenceBuffer(SRC, wavOf(pcmOfSegments([[0.02, 8], [0.5, 8], [0.02, 8]])));
+test("coverage values stay within 0..1 and section ids are deterministic", async () => {
+  const out = await analyzeReferenceBuffer(SRC, wavOf(pcmOfSegments([[0.02, 8], [0.5, 8], [0.02, 8]])));
   assert.ok("analysis" in out);
   const c = out.analysis.coverage;
   for (const v of [c.duration, c.analyzedBeats, c.featureCoverage, c.sectionCoverage]) {

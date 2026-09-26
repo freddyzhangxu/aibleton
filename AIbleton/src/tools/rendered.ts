@@ -39,7 +39,7 @@ function renderRange(track: AudioTrack<"1.0.0">, input: Record<string, unknown>,
 }
 
 /** Render an arrangement range through Live's pre-FX renderer, then run the
- * existing WAV/AIFF DSP pipeline. It is intentionally separate from
+ * shared audio DSP pipeline. It is intentionally separate from
  * analyze_song: rendering is expensive and always user-requested. */
 export async function analyzeRenderedTrack(context: Ctx, input: Record<string, unknown>): Promise<unknown> {
   const ref = resolveTrack(context, input, "track_index");
@@ -66,7 +66,7 @@ export async function analyzeRenderedTrack(context: Ctx, input: Record<string, u
       if (signal.aborted) throw new Error("用户已取消渲染分析");
       const bytes = readHomeBinary(filePath);
       if (!bytes) throw new Error("渲染文件无法读取；请检查 Extension Host 的临时目录访问权限");
-      const outcome = featuresFromBuffer(filePath, bytes, { maxSeconds: 180 });
+      const outcome = await featuresFromBuffer(filePath, bytes, { maxSeconds: 180 });
       if ("error" in outcome) throw new Error(`渲染文件无法分析：${outcome.error}`);
       const f = outcome.features;
       return trackResult(ref, {

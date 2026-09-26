@@ -188,17 +188,17 @@ function wholeFileFeatures(audio: AudioFeatures, tempoBpm?: number) {
  * a structured ReferenceError so the agent flow degrades to plain
  * MusicIntelligence (§62).
  */
-export function analyzeReferenceBuffer(
+export async function analyzeReferenceBuffer(
   source: ReferenceSource,
   buf: Buffer,
   opts?: { maxSeconds?: number; tempoBpm?: number },
-): ReferenceAnalysisOutcome {
+): Promise<ReferenceAnalysisOutcome> {
   if (source.type !== "audio_file") {
     // Reserved source type (§6): the runtime cannot reliably obtain rendered
     // track audio — say so instead of pretending.
     return { error: "reference_unavailable", message: "live_audio sources are not supported" };
   }
-  const dec = decodeAudioBuffer(source.path, buf, { maxSeconds: opts?.maxSeconds ?? REFERENCE_MAX_SECONDS });
+  const dec = await decodeAudioBuffer(source.path, buf, { maxSeconds: opts?.maxSeconds ?? REFERENCE_MAX_SECONDS });
   if ("error" in dec) return { error: "reference_analysis_failed", message: dec.error };
 
   const { pcm, truncated } = dec;

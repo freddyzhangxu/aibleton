@@ -69,13 +69,13 @@ export interface RecordGenerationInput {
  * the sandbox escape, decode features immediately (later refine rounds then
  * diff from the log without re-reading audio) — and append it.
  *
- * Decode failures are recorded (featuresError), not thrown: an mp3 from
- * ElevenLabs is a perfectly good generation, just not analyzable by dsp.ts.
+ * Decode failures are recorded (featuresError), not thrown: generated audio
+ * may be in any format the shared DSP decoder does not support.
  */
-export function recordGeneration(
+export async function recordGeneration(
   input: RecordGenerationInput,
   dir: string = generatedAudioDir(),
-): GenerationRecord {
+): Promise<GenerationRecord> {
   const record: GenerationRecord = {
     id: path.basename(input.file).replace(/\.[^.]+$/, ""),
     file: input.file,
@@ -89,7 +89,7 @@ export function recordGeneration(
   if (!buf) {
     record.featuresError = "unreadable (missing or denied)";
   } else {
-    const outcome = featuresFromBuffer(input.file, buf);
+    const outcome = await featuresFromBuffer(input.file, buf);
     if ("features" in outcome) record.features = outcome.features;
     else record.featuresError = outcome.error;
   }

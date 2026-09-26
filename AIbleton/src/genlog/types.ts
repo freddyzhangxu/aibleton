@@ -6,8 +6,8 @@
  * generation so a later refine round never re-reads the bytes).
  *
  * Honesty rule (same as the reference-gap layer): features are absent when
- * the file could not be decoded — ElevenLabs returns mp3, which dsp.ts does
- * not decode — and featuresError says why. Absent means UNKNOWN, never zero.
+ * the file could not be decoded and featuresError says why. Absent means
+ * UNKNOWN, never zero.
  *
  * iterationOf is the lineage hook reserved for the refine loop (PR19):
  * iterations of one goal share a lineage id; standalone generations leave it

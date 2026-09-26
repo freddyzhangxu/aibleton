@@ -1184,7 +1184,7 @@ export async function runTool(
       // Never let it fail the generation itself.
       let generationId: string | undefined;
       try {
-        generationId = recordGeneration({
+        generationId = (await recordGeneration({
           file,
           provider: cfg.provider,
           prompt,
@@ -1193,7 +1193,7 @@ export async function runTool(
             ...(typeof input.instrumental === "boolean" ? { instrumental: input.instrumental } : {}),
             ...(typeof input.lyrics === "string" ? { lyrics: input.lyrics } : {}),
           },
-        }).id;
+        })).id;
       } catch {
         generationId = undefined;
       }

@@ -158,15 +158,15 @@ let pendingGoal: {
 interface ReferenceCacheEntry {
   mtimeMs: number;
   size: number;
-  outcome: { analysis: ReferenceAnalysis } | { error: ReferenceError; message?: string };
+  outcome: Promise<{ analysis: ReferenceAnalysis } | { error: ReferenceError; message?: string }>;
 }
 
 const referenceCache = new Map<string, ReferenceCacheEntry>();
 
-export function loadReferenceAnalysis(
+export async function loadReferenceAnalysis(
   path: string,
   tempoBpm?: number,
-): ReferenceCacheEntry["outcome"] {
+): Promise<Awaited<ReferenceCacheEntry["outcome"]>> {
   let mtimeMs = 0;
   let size: number | null = null;
   try {
@@ -179,12 +179,12 @@ export function loadReferenceAnalysis(
   }
   const hit = referenceCache.get(path);
   if (hit && hit.mtimeMs === mtimeMs && (size === null || hit.size === size) && tempoBpm === undefined) {
-    return hit.outcome;
+    return await hit.outcome;
   }
   const buf = readHomeBinary(path);
   if (!buf) {
     const outcome = { error: "reference_unavailable" as const, message: "unreadable (missing or denied)" };
-    referenceCache.set(path, { mtimeMs, size: size ?? 0, outcome });
+    referenceCache.set(path, { mtimeMs, size: size ?? 0, outcome: Promise.resolve(outcome) });
     return outcome;
   }
   const source: ReferenceSource = { type: "audio_file", path };
@@ -192,7 +192,7 @@ export function loadReferenceAnalysis(
   if (tempoBpm === undefined) {
     referenceCache.set(path, { mtimeMs, size: buf.length, outcome });
   }
-  return outcome;
+  return await outcome;
 }
 
 
@@ -353,7 +353,7 @@ export async function handleSetGoal(context: Ctx, input: Record<string, unknown>
   // gate re-derives gaps against the after-state WITHOUT re-decoding (§60).
   // A failure degrades to a warning; the plain goal flow is untouched (§62).
   if (referencePath) {
-    const outcome = loadReferenceAnalysis(referencePath, referenceTempo);
+    const outcome = await loadReferenceAnalysis(referencePath, referenceTempo);
     if ("analysis" in outcome) {
       pendingGoal.referenceAnalysis = outcome.analysis;
       pendingGoal.referenceError = undefined;
