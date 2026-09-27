@@ -141,14 +141,17 @@ export const TOOLS = [
   {
     name: "set_goal",
     description:
-      "Declare the user's current task as a goal with MACHINE-CHECKABLE success criteria — call it FIRST, " +
-      "before any Set-modifying tool, whenever the user asks for a musical change (create/edit/arrange/mix/sound_design/fix). " +
+      "Declare a measurable or explicitly verifiable musical task as a goal with MACHINE-CHECKABLE success criteria — call it FIRST, " +
+      "before any Set-modifying tool, when the user specifies a measurable outcome, hard boundary, or asks you to verify a measurable result. " +
+      "For open-ended aesthetic direction without measurable acceptance conditions, skip set_goal and set_plan; make a focused creative pass " +
+      "and let the user judge the result by listening. Never invent metric proxies just to create criteria. " +
       "The server snapshots the Set as the baseline when you declare; when you stop calling tools it evaluates every " +
       "criterion against the new state, and unmet ones come back as a 目标校验 message (keep working, or explain the " +
       "blocker — never claim completion while criteria are unmet). Criteria are a CLOSED vocabulary: pick a kind and " +
-      "fill its parameters — never invent kinds. Use analyze_song first to learn section names, then write 1–4 " +
-      "criteria that actually define the outcome (\"make the drop harder\" → section_energy_gt Drop vs Intro + " +
-      "role_present low_end in Drop). Skip set_goal for questions, analysis requests, and single-parameter tweaks " +
+      "fill its parameters — never invent kinds. When section criteria are needed, use analyze_song to learn exact names, then write 1–4 " +
+      "criteria only for genuinely measurable outcome parts (\"raise Drop note density above its baseline and keep low end audible\" → section_energy_gt Drop vs baseline:Drop + " +
+      "role_present low_end in Drop). If the task has hard constraints but a subjective outcome, successCriteria may be empty; " +
+      "keep those boundaries in constraints. Skip set_goal for questions, analysis requests, and single-parameter tweaks " +
       "(those results are already verified per-call). The result carries a music block — measured features, " +
       "contrasts and evidence-backed observations relevant to your declared goal; base your criteria thresholds " +
       "and set_plan steps on those numbers, never on guesses.",
@@ -203,7 +206,9 @@ export const TOOLS = [
     name: "set_plan",
     description:
       "Declare your step-by-step plan for the declared goal — call it AFTER set_goal, BEFORE any Set-modifying " +
-      "tool, whenever the task needs 2+ tool calls or multiple stages. Each step names the tool you expect to " +
+      "tool, only for multi-step tasks whose expected effects fit the plan's measured vocabulary. Skip it for subjective " +
+      "creative passes, including when set_goal only carries explicit hard boundaries. " +
+      "Each step names the tool you expect to " +
       "call and the expectedEffects it should produce, so you always know WHY you call a tool and WHAT should " +
       "change afterwards. Effects are a CLOSED vocabulary (see the schema): pick a metric and fill its " +
       "parameters — never invent metrics. The server tracks which steps actually execute (matched from your " +
