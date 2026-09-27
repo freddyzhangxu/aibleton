@@ -25,9 +25,12 @@ export const DELETE_TOOL_KINDS: Readonly<Record<string, DeleteKind>> = {
 
 export type DeleteAuthorization = ReadonlySet<DeleteKind>;
 
-const DELETE_VERB = /(?:\b(?:delete|remove|erase|trash)\b|删除|删掉|删去|移除)/i;
+const DELETE_VERB = /(?:\b(?:delete|remove|erase|trash|get\s+rid\s+of|take\s+out)\b|删除|删掉|删去|移除|去掉|拿掉)/i;
+const CLEAR_CLIP_VERB = /(?:\b(?:clear(?:\s+out)?|empty)\b|清空|清除)/i;
+const EXPLICIT_ARRANGEMENT_CLIP = /(?:\barrangement\s+clips?\b|编排(?:区)?\s*片段)/i;
+const EXPLICIT_SESSION_CLIP = /(?:\bsession\s+clips?\b|会话(?:视图)?\s*片段)/i;
 const NEGATED_DESTRUCTIVE_ACTION = new RegExp([
-  String.raw`\b(?:do not|don't|dont|never)\s+(?:delete|remove|erase|trash|replace|swap|switch)\b`,
+  String.raw`\b(?:do not|don't|dont|never)\s+(?:delete|remove|erase|trash|clear|empty|replace|swap|switch|get\s+rid\s+of|take\s+out)\b`,
   String.raw`\bno\s+(?:reemplaz\w*|sustitu\w*|cambi\w*|elimin\w*|borr\w*)\b`,
   String.raw`\bne\s+(?:pas\s+)?(?:remplac\w*|substitu\w*|chang\w*|supprim\w*)\b`,
   String.raw`\b(?:remplac\w*|substitu\w*|chang\w*|supprim\w*)\b[\s\S]{0,40}\b(?:pas|jamais)\b`,
@@ -35,13 +38,13 @@ const NEGATED_DESTRUCTIVE_ACTION = new RegExp([
   String.raw`\b(?:ersetz\w*|austausch\w*|tausch\w*|wechsel\w*|lösch\w*)\b[\s\S]{0,40}\b(?:nicht|kein(?:e|en|er|es)?)\b`,
   String.raw`\b(?:não|nao)\s+(?:substitu\w*|troc\w*|mud\w*|remov\w*|exclu\w*)\b`,
   String.raw`\bnon\s+(?:sostitui\w*|cambi\w*|scambi\w*|elimin\w*)\b`,
-  String.raw`(?:不要|別|别|不)[\s\S]{0,80}?(?:删除|删掉|删去|移除|替换|替代|换成|改成|改用)`,
+  String.raw`(?:不要|別|别|不)[\s\S]{0,80}?(?:删除|删掉|删去|移除|去掉|拿掉|清空|清除|替换|替代|换成|改成|改用)`,
   String.raw`(?:置き換え|差し替え|入れ替え|交換|変更|切り替え|削除)[^。.!?\n]{0,40}(?:ない|ません|しない|禁止)`,
   String.raw`(?:교체|대체|바꾸|변경|삭제)[^.!?\n]{0,40}(?:않|말|마|금지)`,
 ].join("|"), "iu");
 const DEVICE_SOURCE_PATTERN =
   /(?:\b(?:devices?|instruments?|plugins?|effects?|analog|operator|wavetable|drift|meld|collision|tension|simpler|sampler|impulse|drum rack|instrument rack|audio effect rack|midi effect rack|eq eight|auto filter|compressor|reverb|delay)\b|设备|插件|效果器|乐器)/i;
-const DEVICE_REPLACEMENT_REQUEST = new RegExp([
+const REPLACEMENT_REQUEST = new RegExp([
   String.raw`\b(?:replace|replacing|replaced|swap|swapping|switch|switching|substitute|substituting|change|changing|convert|converting|turn)\b[\s\S]{0,160}\b(?:with|to|for|into|by)\b\s*\S`,
   String.raw`\b(?:reemplaz\w*|sustitu\w*|cambi\w*|intercambi\w*)\b[\s\S]{0,160}\b(?:con|por|a)\b\s*\S`,
   String.raw`\b(?:remplac\w*|substitu\w*|chang\w*|échang\w*)\b[\s\S]{0,160}\b(?:par|avec|pour|en)\b\s*\S`,
@@ -72,8 +75,10 @@ export function deleteAuthorizationFor(userText: string): DeleteAuthorization {
   if (NEGATED_DESTRUCTIVE_ACTION.test(userText)) return new Set();
   const kinds = new Set<DeleteKind>();
   const deviceMentioned = DEVICE_SOURCE_PATTERN.test(userText);
-  const replacementRequested = deviceMentioned && DEVICE_REPLACEMENT_REQUEST.test(userText);
-  if (DELETE_VERB.test(userText)) {
+  const replacementRequested = REPLACEMENT_REQUEST.test(userText);
+  const explicitClipClear = CLEAR_CLIP_VERB.test(userText) &&
+    (EXPLICIT_ARRANGEMENT_CLIP.test(userText) || EXPLICIT_SESSION_CLIP.test(userText));
+  if (DELETE_VERB.test(userText) || explicitClipClear) {
     for (const [kind, pattern] of Object.entries(KIND_PATTERNS) as [DeleteKind, RegExp][]) {
       // In a direct device replacement, track/scene/clip words describe the
       // device's owner or location, not additional deletion targets.
@@ -81,7 +86,16 @@ export function deleteAuthorizationFor(userText: string): DeleteAuthorization {
       if (pattern.test(userText)) kinds.add(kind);
     }
   }
-  if (replacementRequested) kinds.add("device");
+  if (replacementRequested && deviceMentioned) {
+    // Track/scene/clip words often identify where the device lives. A named
+    // device replacement authorizes that device only.
+    kinds.add("device");
+  } else if (replacementRequested) {
+    // Replacing a specifically typed clip requires removing its old clip.
+    // Do not infer track/scene deletion from generic replacement wording.
+    if (EXPLICIT_ARRANGEMENT_CLIP.test(userText)) kinds.add("arrangement_clip");
+    if (EXPLICIT_SESSION_CLIP.test(userText)) kinds.add("session_clip");
+  }
   return kinds;
 }
 

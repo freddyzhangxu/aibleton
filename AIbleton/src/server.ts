@@ -38,6 +38,7 @@ import {
 } from "./chat/session.js";
 import { answerConfirmation, getPendingConfirm } from "./chat/gates.js";
 import { deleteAuthorizationFor } from "./chat/deleteauth.js";
+import { explicitEditScopeFor } from "./selectionguard.js";
 import { resolveConfig, type Attachment, type ChatRequest } from "./chat/config.js";
 import { resetTurnState } from "./agent/runtime.js";
 import { clearRightClickFocus, clearSelectionContext, updateSetContext } from "./setcontext.js";
@@ -58,7 +59,7 @@ import { commonText, resolveTurnLanguage } from "./i18n/index.js";
  * narrow, explicit whole-Set requests — a vague "make it bigger" must not
  * escape the selection. */
 function hasGlobalIntent(text: string): boolean {
-  return /(?:整首歌|整曲|全曲|全局|整个项目|整个工程|whole\s+(?:song|track|set)|entire\s+(?:song|track|set)|full\s+(?:song|track|set)|globally|across\s+the\s+(?:song|set))/i.test(text);
+  return /(?:整首歌|整曲|全曲|全局|整个项目|整个工程|whole\s+(?:song|set)|entire\s+(?:song|set)|full\s+(?:song|set)|globally|across\s+the\s+(?:song|set))/i.test(text);
 }
 function hasMasterIntent(text: string): boolean {
   return /(?:调(?:整)?\s*master|母带|总线|master(?:ing|\s+bus)?)/i.test(text);
@@ -867,6 +868,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         toolState.activeLanguageContext = languageContext;
         toolState.activeDeleteAuthorization = deleteAuthorizationFor(text);
         toolState.activeGlobalIntent = hasGlobalIntent(text);
+        toolState.activeExplicitEditScope = explicitEditScopeFor(context, text);
         toolState.activeMasterIntent = hasMasterIntent(text);
         toolState.phase = "thinking";
         toolState.activity = null;
@@ -900,6 +902,8 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             toolState.activeLanguage = undefined;
             toolState.activeLanguageContext = null;
             toolState.activeDeleteAuthorization = undefined;
+            toolState.activeGlobalIntent = false;
+            toolState.activeExplicitEditScope = { trackIndices: [], arrangementRanges: [] };
             toolState.phase = null;
             toolState.activity = null;
             // Never leave a confirmation dangling past its task's lifetime.

@@ -35,6 +35,98 @@ const MUTATING_TOOLS = new Set([
   "create_cue_point", "rename_cue_point", "delete_cue_point",
 ]);
 
+export interface ExplicitEditScope {
+  /** Track names or all-track language stated in the current request. */
+  trackIndices: number[];
+  /** Explicitly named Arrangement bar ranges, represented as beat ranges. */
+  arrangementRanges: { startBeat: number; endBeat: number }[];
+}
+
+function mentionIsNegated(text: string, start: number): boolean {
+  const before = text.slice(0, start);
+  const boundaries = [
+    before.lastIndexOf(","), before.lastIndexOf(";"), before.lastIndexOf("."),
+    before.lastIndexOf("!"), before.lastIndexOf("?"), before.lastIndexOf("\n"),
+    before.lastIndexOf("，"), before.lastIndexOf("；"), before.lastIndexOf("。"), before.lastIndexOf("！"), before.lastIndexOf("？"),
+    ...[...before.matchAll(/\b(?:but|however)\b|但是|不过|但/giu)].map((match) => match.index ?? -1),
+  ];
+  const clause = before.slice(Math.max(...boundaries) + 1);
+  return /\b(?:don't|do not|dont|never|avoid|leave|without|except(?:\s+for)?|excluding|but\s+not)\b|不要|别|不许|不(?:动|改|调整|修改|碰|删|清)|勿|除了|不包括|但不含/iu.test(clause);
+}
+
+/** Resolve only concrete track and bar scopes present in the current request. */
+export function explicitEditScopeFor(context: Ctx, text: string): ExplicitEditScope {
+  const trackIndices = new Set<number>();
+  const excludesScope = /(?:\b(?:except|except\s+for|excluding|but\s+not)\b|除了|不包括|但不含)/iu.test(text);
+  if (!excludesScope && /(?:\ball\s+tracks?\b|\bevery\s+track\b|\beach\s+track\b|\bacross\s+all\s+tracks\b|所有(?:轨道|音轨)|全部(?:轨道|音轨)|每条(?:轨道|音轨)|每个(?:轨道|音轨))/i.test(text)) {
+    context.application.song.tracks.forEach((_track, index) => trackIndices.add(index));
+  } else {
+    const tracks = context.application.song.tracks;
+    const nameCounts = new Map<string, number>();
+    for (const track of tracks) {
+      const key = track.name.trim().replace(/\s+/g, " ").toLowerCase();
+      nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+    }
+    const mentions: { index: number; start: number; end: number; length: number }[] = [];
+    for (const [index, track] of tracks.entries()) {
+      const name = track.name.trim();
+      if (!name) continue;
+      const key = name.replace(/\s+/g, " ").toLowerCase();
+      if (nameCounts.get(key) !== 1) continue; // A name shared by tracks cannot identify one target.
+      const escaped = name.split(/\s+/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");
+      const pattern = /^[\p{L}\p{N}_ -]+$/u.test(name)
+        ? new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escaped}(?:$|[^\\p{L}\\p{N}_])`, "iu")
+        : new RegExp(escaped, "iu");
+      const globalPattern = new RegExp(pattern.source, `${pattern.flags}g`);
+      for (const match of text.matchAll(globalPattern)) {
+        const start = match.index ?? 0;
+        if (!mentionIsNegated(text, start)) mentions.push({ index, start, end: start + match[0].length, length: match[0].length });
+      }
+    }
+    for (const mention of mentions) {
+      const isPartOfLongerName = mentions.some((other) => other.index !== mention.index && other.length > mention.length &&
+        other.start <= mention.start && other.end >= mention.end);
+      if (!isPartOfLongerName) trackIndices.add(mention.index);
+    }
+  }
+  // User-facing track ordinals are 1-based; translate them to tool indices.
+  for (const match of text.matchAll(/\btrack\s+#?\s*(\d+)\b/gi)) {
+    if (mentionIsNegated(text, match.index ?? 0)) continue;
+    const index = Number(match[1]) - 1;
+    if (index >= 0 && index < context.application.song.tracks.length) trackIndices.add(index);
+  }
+  for (const match of text.matchAll(/第\s*(\d+)\s*(?:号)?(?:轨道|音轨|轨)/gu)) {
+    if (mentionIsNegated(text, match.index ?? 0)) continue;
+    const index = Number(match[1]) - 1;
+    if (index >= 0 && index < context.application.song.tracks.length) trackIndices.add(index);
+  }
+
+  const beatsPerBar = barBeats(context);
+  const arrangementRanges: ExplicitEditScope["arrangementRanges"] = [];
+  const addRange = (first: number, last: number) => {
+    if (Number.isInteger(first) && Number.isInteger(last) && first >= 1 && last >= first) {
+      arrangementRanges.push({ startBeat: (first - 1) * beatsPerBar, endBeat: last * beatsPerBar });
+    }
+  };
+  for (const match of text.matchAll(/\b(?:bars?|measures?)\s*(\d+)\s*(?:-|–|to)\s*(\d+)\b/gi)) {
+    if (mentionIsNegated(text, match.index ?? 0)) continue;
+    addRange(Number(match[1]), Number(match[2]));
+  }
+  for (const match of text.matchAll(/\bbar\s*(\d+)\b/gi)) {
+    if (mentionIsNegated(text, match.index ?? 0)) continue;
+    addRange(Number(match[1]), Number(match[1]));
+  }
+  for (const match of text.matchAll(/(?:第\s*)?(\d+)\s*(?:-|–|到|至)\s*(\d+)\s*小节/gu)) {
+    if (mentionIsNegated(text, match.index ?? 0)) continue;
+    addRange(Number(match[1]), Number(match[2]));
+  }
+  for (const match of text.matchAll(/(?:第\s*)?(\d+)\s*小节/gu)) {
+    if (mentionIsNegated(text, match.index ?? 0)) continue;
+    addRange(Number(match[1]), Number(match[1]));
+  }
+  return { trackIndices: [...trackIndices], arrangementRanges };
+}
+
 function num(value: unknown): number | null {
   const n = typeof value === "number" ? value : Number.NaN;
   return Number.isFinite(n) ? n : null;
@@ -78,14 +170,15 @@ function selectionDescription(selection: ResolvedSelection): string {
 }
 
 function failure(selection: ResolvedSelection, what: string): string {
-  return `${what} 超出当前${selectionDescription(selection)}。请在选区内操作；只有用户在本轮明确要求“整首歌/全局/whole song”时才能越界。`;
+  return `${what} 超出当前${selectionDescription(selection)}和本轮明确指定的轨道/小节范围。请在这些范围内操作；要越过它们，请明确要求整首歌或全局操作。`;
 }
 
-function checkTrack(selection: ResolvedSelection, trackIndex: number | null): string | null {
+function checkTrack(selection: ResolvedSelection, trackIndex: number | null, scope: ExplicitEditScope): string | null {
   if (trackIndex === null) return null; // Dispatcher will report malformed tool input.
-  const allowed = selection.kind === "arrangement"
+  const selected = selection.kind === "arrangement"
     ? selection.tracks.some((track) => track.index === trackIndex)
     : selection.slots.some((slot) => slot.trackIndex === trackIndex);
+  const allowed = selected || scope.trackIndices.includes(trackIndex);
   return allowed ? null : failure(selection, `目标轨道 ${trackIndex}`);
 }
 
@@ -93,23 +186,31 @@ function checkSessionSlot(
   selection: Extract<ResolvedSelection, { kind: "session" }>,
   trackIndex: number | null,
   sceneIndex: number | null,
+  scope: ExplicitEditScope,
 ): string | null {
   if (trackIndex === null || sceneIndex === null) return null;
-  return selection.slots.some((slot) => slot.trackIndex === trackIndex && slot.sceneIndex === sceneIndex)
+  return selection.slots.some((slot) => slot.trackIndex === trackIndex && slot.sceneIndex === sceneIndex) || scope.trackIndices.includes(trackIndex)
     ? null
     : failure(selection, `目标 Session 槽（轨道 ${trackIndex} / 场景 ${sceneIndex}）`);
+}
+
+function rangeIsExplicit(scope: ExplicitEditScope, start: number, end: number): boolean {
+  return scope.arrangementRanges.some((range) => start >= range.startBeat - 1e-9 && end <= range.endBeat + 1e-9);
 }
 
 function checkArrangementRange(
   context: Ctx,
   selection: Extract<ResolvedSelection, { kind: "arrangement" }>,
   input: Record<string, unknown>,
+  scope: ExplicitEditScope,
 ): string | null {
   const start = num(input.start_beat);
   if (start === null) return null;
   const length = num(input.length_beats) ?? num(input.duration_beats);
   if (length === null || length <= 0) return null;
-  return isWithin(selection, start, start + length) ? null : failure(selection, `目标时间范围 beat ${start}–${start + length}`);
+  return isWithin(selection, start, start + length) || rangeIsExplicit(scope, start, start + length)
+    ? null
+    : failure(selection, `目标时间范围 beat ${start}–${start + length}`);
 }
 
 function checkExistingArrangementClip(
@@ -117,14 +218,17 @@ function checkExistingArrangementClip(
   selection: Extract<ResolvedSelection, { kind: "arrangement" }>,
   trackIndex: number | null,
   input: Record<string, unknown>,
+  scope: ExplicitEditScope,
 ): string | null {
-  const trackError = checkTrack(selection, trackIndex);
+  const trackError = checkTrack(selection, trackIndex, scope);
   if (trackError || trackIndex === null) return trackError;
   const clipIndex = num(input.clip_index);
   if (clipIndex === null || !Number.isInteger(clipIndex)) return null;
   const clip = context.application.song.tracks[trackIndex]?.arrangementClips[clipIndex];
   if (!clip) return null;
-  return isWithin(selection, Number(clip.startTime), Number(clip.endTime))
+  const start = Number(clip.startTime);
+  const end = Number(clip.endTime);
+  return isWithin(selection, start, end) || scope.trackIndices.includes(trackIndex) || rangeIsExplicit(scope, start, end)
     ? null
     : failure(selection, `目标编排 Clip「${clip.name}」`);
 }
@@ -133,12 +237,13 @@ function checkArrangeSong(
   context: Ctx,
   selection: ResolvedSelection,
   input: Record<string, unknown>,
+  scope: ExplicitEditScope,
 ): string | null {
   const placements = Array.isArray(input.placements) ? input.placements : [];
   for (const placement of placements) {
     const spec = record(placement);
     if (!spec) continue;
-    const trackError = checkTrack(selection, targetTrackIndex(context, spec));
+    const trackError = checkTrack(selection, targetTrackIndex(context, spec), scope);
     if (trackError) return trackError;
     if (selection.kind === "arrangement") {
       const startBar = num(spec.start_bar);
@@ -146,7 +251,7 @@ function checkArrangeSong(
       if (startBar !== null && lengthBars !== null && lengthBars > 0) {
         const start = (startBar - 1) * barBeats(context);
         const end = start + lengthBars * barBeats(context);
-        if (!isWithin(selection, start, end)) return failure(selection, `placement 的时间范围 beat ${start}–${end}`);
+        if (!isWithin(selection, start, end) && !rangeIsExplicit(scope, start, end)) return failure(selection, `placement 的时间范围 beat ${start}–${end}`);
       }
     }
   }
@@ -156,47 +261,48 @@ function checkArrangeSong(
     if (first !== null && last !== null && last >= first) {
       const start = (first - 1) * barBeats(context);
       const end = last * barBeats(context);
-      if (!isWithin(selection, start, end)) return failure(selection, `清除范围 beat ${start}–${end}`);
+      if (!isWithin(selection, start, end) && !rangeIsExplicit(scope, start, end)) return failure(selection, `清除范围 beat ${start}–${end}`);
     }
   }
   return null;
 }
 
 /** Return an actionable error string when the call would leave the current
- * selection, otherwise null. `globalIntent` is derived only from this user
- * turn, never from earlier chat history. */
+ * selection and explicit current-turn track/bar scope, otherwise null. Global
+ * and named scopes are derived from this user turn, never chat history. */
 export function selectionGuard(
   context: Ctx,
   selection: ResolvedSelection | null,
   globalIntent: boolean,
   name: string,
   input: Record<string, unknown>,
+  scope: ExplicitEditScope = { trackIndices: [], arrangementRanges: [] },
 ): string | null {
   if (!selection || globalIntent || !MUTATING_TOOLS.has(name) || NO_COORDINATE_TOOLS.has(name)) return null;
-  if (name === "arrange_song") return checkArrangeSong(context, selection, input);
+  if (name === "arrange_song") return checkArrangeSong(context, selection, input, scope);
 
   if (name === "generate_audio") {
     const importTo = record(input.importTo);
-    return importTo ? selectionGuard(context, selection, false, "import_audio_clip", importTo) : null;
+    return importTo ? selectionGuard(context, selection, false, "import_audio_clip", importTo, scope) : null;
   }
 
   const trackIndex = targetTrackIndex(context, input);
   if (selection.kind === "session") {
     const sceneIndex = num(input.scene_index);
-    if (sceneIndex !== null) return checkSessionSlot(selection, trackIndex, sceneIndex);
-    return checkTrack(selection, trackIndex);
+    if (sceneIndex !== null) return checkSessionSlot(selection, trackIndex, sceneIndex, scope);
+    return checkTrack(selection, trackIndex, scope);
   }
 
   // Arrangement selection: first ensure the target track belongs to the
   // selected lanes, then check direct timeline operations when coordinates
   // are available.
   if (["get_clip_notes", "set_clip_notes", "delete_arrangement_clip", "set_audio_clip_warp"].includes(name)) {
-    return checkExistingArrangementClip(context, selection, trackIndex, input);
+    return checkExistingArrangementClip(context, selection, trackIndex, input, scope);
   }
-  const trackError = checkTrack(selection, trackIndex);
+  const trackError = checkTrack(selection, trackIndex, scope);
   if (trackError) return trackError;
   if (["write_midi_clip", "import_audio_clip", "write_take_midi_clip", "import_take_audio_clip"].includes(name) && input.scene_index === undefined) {
-    return checkArrangementRange(context, selection, input);
+    return checkArrangementRange(context, selection, input, scope);
   }
   return null;
 }

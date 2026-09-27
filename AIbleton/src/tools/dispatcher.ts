@@ -293,7 +293,12 @@ export async function runTool(
   // Keep destructive and selection boundaries protected even if runtime is
   // bypassed by a future non-agent caller.
   const selectionRefusal = selectionGuard(
-    context, resolvedSelection(context), toolState.activeGlobalIntent, name, input,
+    context,
+    resolvedSelection(context),
+    toolState.activeGlobalIntent,
+    name,
+    input,
+    toolState.activeExplicitEditScope,
   );
   if (selectionRefusal) throw new Error(selectionRefusal);
   if (isDeleteTool(name) && !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization)) {

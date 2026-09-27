@@ -4,6 +4,7 @@ import type { DeleteAuthorization } from "./chat/deleteauth.js";
 import type { LocalConfig, Provider } from "./config/local.js";
 import type { SampleEntry } from "./samplemeta.js";
 import type { TurnLanguageContext } from "./i18n/language.js";
+import type { ExplicitEditScope } from "./selectionguard.js";
 
 export type Ctx = ExtensionContext<"1.0.0">;
 
@@ -56,6 +57,8 @@ export const toolState = {
   /** The CURRENT user explicitly asked to operate on the entire Set. This is
    * deliberately per-turn: it must never grant scope beyond this request. */
   activeGlobalIntent: false,
+  /** Exact track/bar scope explicitly named in the CURRENT request. */
+  activeExplicitEditScope: { trackIndices: [], arrangementRanges: [] } as ExplicitEditScope,
   /** Master writes require an explicit current-turn mastering intent. */
   activeMasterIntent: false,
   abortCtl: null as AbortController | null,

@@ -364,7 +364,7 @@ export const TOOLS = [
   { name: "duplicate_track", description: "Duplicate a Track immediately after it. The copy keeps Live's default name.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC } }, required: ["track_index"] } },
   {
     name: "delete_track",
-    description: "Permanently remove one regular track from the Set. Call ONLY when the CURRENT user message explicitly asks to delete a track; broad cleanup wording is not authorization. Live Undo can restore it.",
+    description: "Permanently remove one regular track from the Set. Call ONLY when the CURRENT user message explicitly asks to delete/remove that track; vague clear or cleanup wording is not authorization. Live Undo can restore it.",
     input_schema: {
       type: "object",
       properties: {
@@ -533,7 +533,7 @@ export const TOOLS = [
   },
   {
     name: "delete_device",
-    description: "Remove one built-in device from a regular track. Call ONLY when the CURRENT user message explicitly asks to delete a device, or explicitly replaces/swaps a named device or instrument with another sound source. In a replacement, delete only the named source device. Live Undo can restore it.",
+    description: "Remove one built-in device from a regular track. Call ONLY when the CURRENT user message explicitly asks to delete/remove a device, or explicitly replaces/swaps a named device or instrument with another sound source. In a replacement, delete only the named source device. Live Undo can restore it.",
     input_schema: {
       type: "object",
       properties: {
@@ -632,7 +632,7 @@ export const TOOLS = [
   { name: "set_drum_pad_mixer", description: "Set one Drum Rack pad chain's volume, pan and/or sends. Values are clamped to Live's parameter range.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, volume: { type: "number" }, pan: { type: "number" }, sends: { type: "array", items: { type: "object" } } }, required: ["track_index", "pad_note"] } },
   { name: "insert_drum_pad_device", description: "Append a built-in Live device to one Drum Rack pad's chain. Third-party plug-ins are unsupported.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_name: { type: "string" } }, required: ["track_index", "pad_note", "device_name"] } },
   { name: "duplicate_drum_pad_device", description: "Duplicate a device on one Drum Rack pad chain immediately after itself.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_index: { type: "number" }, device_name: { type: "string" } }, required: ["track_index", "pad_note"] } },
-  { name: "delete_drum_pad_device", description: "Remove one device from a Drum Rack pad chain. Call ONLY when the CURRENT user message explicitly asks to delete a device; Live Undo can restore it.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_index: { type: "number" }, device_name: { type: "string" } }, required: ["track_index", "pad_note"] } },
+  { name: "delete_drum_pad_device", description: "Remove one device from a Drum Rack pad chain. Call ONLY when the CURRENT user message explicitly asks to delete/remove a device; Live Undo can restore it.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_index: { type: "number" }, device_name: { type: "string" } }, required: ["track_index", "pad_note"] } },
   { name: "get_drum_pad_device_parameters", description: "List parameters for one device inside a Drum Rack pad chain: values, min/max, defaults, and enum choices. Use filter for large devices. This is read-only.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_index: { type: "number" }, device_name: { type: "string" }, filter: { type: "string", description: "Optional case-insensitive parameter-name filter" } }, required: ["track_index", "pad_note"] } },
   { name: "set_drum_pad_device_parameter", description: "Set one device parameter inside a Drum Rack pad chain. parameter accepts a name, unique partial name, or numeric index; value accepts a number, enum name, or default.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_index: { type: "number" }, device_name: { type: "string" }, parameter: { type: "string" }, value: { type: "string" } }, required: ["track_index", "pad_note", "parameter", "value"] } },
   { name: "set_drum_pad_device_parameters", description: "Set up to 24 parameters on one Drum Rack pad-chain device. Each item is independent: valid items apply even when another item fails.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC }, rack_index: { type: "number" }, rack_name: { type: "string" }, pad_note: { type: "number" }, device_index: { type: "number" }, device_name: { type: "string" }, params: { type: "array", items: { type: "object", properties: { parameter: { type: "string" }, value: { type: "string" } }, required: ["parameter", "value"] } } }, required: ["track_index", "pad_note", "params"] } },
@@ -925,7 +925,7 @@ export const TOOLS = [
   },
   {
     name: "delete_arrangement_clip",
-    description: "Delete one Arrangement View clip from a regular track. Call ONLY when the CURRENT user message explicitly asks to delete an arrangement clip; Live Undo can restore it.",
+    description: "Delete one Arrangement View clip from a regular track. Call ONLY when the CURRENT user message explicitly asks to delete/remove an Arrangement clip, explicitly clears that clip, or directly replaces an Arrangement clip; Live Undo can restore it.",
     input_schema: {
       type: "object",
       properties: {
@@ -938,7 +938,7 @@ export const TOOLS = [
   },
   {
     name: "delete_session_clip",
-    description: "Delete the clip in one Session View slot. Call ONLY when the CURRENT user message explicitly asks to delete a Session clip; Live Undo can restore it.",
+    description: "Delete the clip in one Session View slot. Call ONLY when the CURRENT user message explicitly asks to delete/remove a Session clip, explicitly clears that clip, or directly replaces a Session clip; Live Undo can restore it.",
     input_schema: {
       type: "object",
       properties: {
@@ -1006,7 +1006,7 @@ export const TOOLS = [
   { name: "duplicate_scene", description: "Duplicate a Scene immediately after it. The copy keeps Live's default name.", input_schema: { type: "object", properties: { index: { type: "number" } }, required: ["index"] } },
   {
     name: "delete_scene",
-    description: "Delete one Session View scene. Call ONLY when the CURRENT user message explicitly asks to delete a scene; Live Undo can restore it.",
+    description: "Delete one Session View scene. Call ONLY when the CURRENT user message explicitly asks to delete/remove a scene; vague clear or cleanup wording is not authorization. Live Undo can restore it.",
     input_schema: {
       type: "object",
       properties: { scene_index: { type: "number", description: "0-based scene index" } },

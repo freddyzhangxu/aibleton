@@ -847,7 +847,14 @@ export async function callTool(
   // transient Live selection immediately before every mutation so an agent
   // cannot accidentally write beyond the range/slots the user selected.
   if (!READ_ONLY_TOOLS.has(name)) {
-    const refusal = selectionGuard(context, resolvedSelection(context), toolState.activeGlobalIntent, name, input);
+    const refusal = selectionGuard(
+      context,
+      resolvedSelection(context),
+      toolState.activeGlobalIntent,
+      name,
+      input,
+      toolState.activeExplicitEditScope,
+    );
     if (refusal) {
       const refused = { error: friendlyToolError(refusal, toolState.activeLanguage) };
       actions.push({ tool: name, input, result: refused });

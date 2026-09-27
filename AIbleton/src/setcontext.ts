@@ -327,7 +327,7 @@ function refreshSelection(context: Ctx): void {
     const tracks = current.tracks.map((track) => `${track.index} “${track.name}”`).join(", ");
     selectionLine =
       `\nCurrent Arrangement selection: tracks ${tracks}, beats ${current.startBeat}–${current.endBeat} (end exclusive). ` +
-      "Treat it as the default edit boundary; only leave it when the current user explicitly asks for the whole song/set.";
+      "Treat it as the default edit boundary. The current request may explicitly expand scope to named tracks or bar ranges; use only those named targets outside the selection. Go beyond those only when the user explicitly asks for the whole song/set.";
     return;
   }
   const slots = current.slots.map((slot) =>
@@ -335,7 +335,7 @@ function refreshSelection(context: Ctx): void {
   ).join("; ");
   selectionLine =
     `\nCurrent Session selection: ${slots}. Treat these slots (and their tracks) as the default edit boundary; ` +
-    "only leave it when the current user explicitly asks for the whole song/set.";
+    "the current request may explicitly expand scope to named tracks; use only those named targets outside the selection. Go beyond those only when the user explicitly asks for the whole song/set.";
 }
 
 function refreshFocus(context: Ctx): void {
