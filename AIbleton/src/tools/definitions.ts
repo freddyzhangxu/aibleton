@@ -139,6 +139,28 @@ export const TOOLS = [
     },
   },
   {
+    name: "analyze_vocal_pair",
+    description:
+      "Read-only comparison of one recorded vocal's source file with an isolated reference vocal source file. " +
+      "Use a reference Audio Track (for example, a Live-created vocal stem) or an absolute local reference_path, never both. " +
+      "Multiple arrangement clips require explicit clip indices so matching passages are not guessed. " +
+      "Results are source-file measurements: pre-warp, pre-gain and pre-device; they do not diagnose vocal quality, pitch accuracy or note-level timing. " +
+      "A full mix is not an isolated vocal reference; ask the user to separate or supply vocals before comparison.",
+    input_schema: {
+      type: "object",
+      properties: {
+        recorded_track_index: { type: "number", description: "Recorded vocal Audio Track index, 0-based" },
+        recorded_track_name: { type: "string", description: "Recorded vocal track name; authoritative when the index has shifted" },
+        recorded_clip_index: { type: "number", description: "0-based arrangement Audio Clip index; required if the track has multiple readable clips" },
+        reference_track_index: { type: "number", description: "Reference vocal Audio Track index, 0-based; mutually exclusive with reference_path" },
+        reference_track_name: { type: "string", description: "Reference vocal track name; authoritative when its index has shifted" },
+        reference_clip_index: { type: "number", description: "0-based reference arrangement Audio Clip index; use with a reference track" },
+        reference_path: { type: "string", description: "Absolute local path of an isolated vocal audio file; mutually exclusive with reference track fields" },
+      },
+      required: ["recorded_track_index"],
+    },
+  },
+  {
     name: "set_goal",
     description:
       "Declare a measurable or explicitly verifiable musical task as a goal with MACHINE-CHECKABLE success criteria — call it FIRST, " +

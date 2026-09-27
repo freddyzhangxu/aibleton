@@ -13,6 +13,7 @@ export const READ_ONLY_TOOLS = new Set([
   "get_song_overview",
   "analyze_song",
   "analyze_rendered_track",
+  "analyze_vocal_pair",
   "set_goal",
   "set_plan",
   "update_memory",

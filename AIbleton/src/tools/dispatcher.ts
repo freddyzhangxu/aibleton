@@ -70,6 +70,7 @@ import {
 } from "./helpers.js";
 import { arrangeSong } from "./arrange.js";
 import { analyzeRenderedTrack } from "./rendered.js";
+import { analyzeVocalPair } from "./vocal-pair.js";
 import { presentTakeLanes, takeLaneAt } from "./take-lanes.js";
 import { parseWarpMode, presentWarp, resolveAudioClip } from "./warp.js";
 import { chainDeviceAt, drumPadAt, drumRackAt, presentPad, presentPads, setParamValue as setChainParam } from "./drum-rack.js";
@@ -348,6 +349,9 @@ export async function runTool(
     }
     case "analyze_rendered_track": {
       return analyzeRenderedTrack(context, input);
+    }
+    case "analyze_vocal_pair": {
+      return analyzeVocalPair(context, input);
     }
     case "set_goal": {
       return toolHooks.handleSetGoal(context, input);
