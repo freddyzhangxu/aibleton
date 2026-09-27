@@ -37,7 +37,8 @@ const CAVEAT_MIDI_ONLY =
 const CAVEAT_WITH_AUDIO =
   "Audio features (loudness/crest/dynamic-range/correlation/bands/transients) describe " +
   "clip SOURCE FILES — pre-warp, pre-gain, pre-device; the audible result " +
-  "may differ. Loop repeats estimated virtually (material x repeats). " +
+  "may differ. Vocal cues are screening metrics for isolated vocals, not diagnoses. " +
+  "Loop repeats estimated virtually (material x repeats). " +
   "Track indices match get_song_overview.";
 
 const caveatText = (audioRan: boolean): string => (audioRan ? CAVEAT_WITH_AUDIO : CAVEAT_MIDI_ONLY);
@@ -207,6 +208,13 @@ export function presentAnalysis(
             highMid: round3(a.bands.highMid),
             high: round3(a.bands.high),
           },
+          ...(a.vocalCues ? { vocal: {
+            nearFullScalePct: round3(a.vocalCues.nearFullScalePercent),
+            ...(a.vocalCues.activeRangeDb !== undefined ? { activeRangeDb: round1(a.vocalCues.activeRangeDb) } : {}),
+            ...(a.vocalCues.sibilanceCandidatePercent !== undefined
+              ? { sibilanceCandidatePct: round1(a.vocalCues.sibilanceCandidatePercent) } : {}),
+            ...(a.vocalCues.lowBurstCount !== undefined ? { lowBurstCount: a.vocalCues.lowBurstCount } : {}),
+          } } : {}),
           ...(a.partial ? { partial: true as const } : {}),
         };
       }

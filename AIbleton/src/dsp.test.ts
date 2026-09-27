@@ -197,3 +197,53 @@ test("featuresFromBuffer reports calibrated stereo Integrated LUFS", async () =>
   assert.ok(result.features.integratedLufs !== undefined);
   assert.ok(Math.abs(result.features.integratedLufs! - -20) < 0.2, `got ${result.features.integratedLufs}`);
 });
+
+function vocalPcm(seconds: number, sample: (time: number) => number) {
+  const sampleRate = 48000;
+  const samples = new Float32Array(Math.round(seconds * sampleRate));
+  for (let i = 0; i < samples.length; i++) samples[i] = sample(i / sampleRate);
+  return { sampleRate, channels: 1, samples, channelData: [samples] };
+}
+
+test("vocal active range excludes recording pauses", () => {
+  const f = analyzePcm(vocalPcm(1.5, (t) => t < 0.4 ? 0 : 0.1 * Math.sin(2 * Math.PI * 1000 * t)));
+  assert.ok(f.dynamicRangeDb !== undefined && f.dynamicRangeDb > 40);
+  assert.ok(f.vocalCues?.activeRangeDb !== undefined && f.vocalCues.activeRangeDb < 2);
+  assert.equal(f.vocalCues?.sibilanceCandidatePercent, 0);
+});
+
+test("vocal cues count high-frequency hiss and low-frequency bursts separately", () => {
+  const baseline = (t: number) => 0.05 * Math.sin(2 * Math.PI * 1000 * t);
+  const plain = analyzePcm(vocalPcm(1.3, baseline));
+  const sibilant = analyzePcm(vocalPcm(1.3, (t) =>
+    baseline(t) + (t >= 0.5 && t < 0.8 ? 0.25 * Math.sin(2 * Math.PI * 8000 * t) : 0)));
+  const plosive = analyzePcm(vocalPcm(1.3, (t) =>
+    baseline(t) + (t >= 0.5 && t < 0.65 ? 0.35 * Math.sin(2 * Math.PI * 90 * t) : 0)));
+  assert.equal(plain.vocalCues?.sibilanceCandidatePercent, 0);
+  assert.equal(plain.vocalCues?.lowBurstCount, 0);
+  assert.ok((sibilant.vocalCues?.sibilanceCandidatePercent ?? 0) > 5);
+  assert.equal(sibilant.vocalCues?.lowBurstCount, 0);
+  assert.ok((plosive.vocalCues?.lowBurstCount ?? 0) >= 1);
+  assert.equal(plosive.vocalCues?.sibilanceCandidatePercent, 0);
+});
+
+test("vocal cues report near-full-scale samples without calling them clipping", () => {
+  const healthy = analyzePcm(vocalPcm(0.6, (t) => 0.2 * Math.sin(2 * Math.PI * 1000 * t)));
+  const saturated = analyzePcm(vocalPcm(0.6, (t) =>
+    Math.max(-1, Math.min(1, 2 * Math.sin(2 * Math.PI * 1000 * t)))));
+  assert.equal(healthy.vocalCues?.nearFullScalePercent, 0);
+  assert.ok((saturated.vocalCues?.nearFullScalePercent ?? 0) > 10);
+});
+
+test("near-full-scale cue checks stereo channels even when the mono mix cancels", () => {
+  const sampleRate = 48000;
+  const left = new Float32Array(sampleRate / 2);
+  const right = new Float32Array(left.length);
+  const mono = new Float32Array(left.length);
+  for (let i = 0; i < left.length; i++) {
+    left[i] = Math.max(-1, Math.min(1, 2 * Math.sin(2 * Math.PI * 1000 * i / sampleRate)));
+    right[i] = -left[i];
+  }
+  const f = analyzePcm({ sampleRate, channels: 2, samples: mono, channelData: [left, right] });
+  assert.ok((f.vocalCues?.nearFullScalePercent ?? 0) > 10);
+});

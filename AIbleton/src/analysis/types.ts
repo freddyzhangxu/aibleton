@@ -9,7 +9,7 @@
  * content: numbers rounded, issues stringified, tail cut by fitBudget.
  */
 
-import type { AudioBands } from "../dsp.js";
+import type { AudioBands, VocalCues } from "../dsp.js";
 
 // ---------------------------------------------------------------------------
 // Interpretation output (MusicState -> MusicAnalysis, interpret.ts)
@@ -84,6 +84,7 @@ export interface TrackAudioAnalysis {
   spectralCentroidHz: number;
   bands: AudioBands;
   transientDensity?: number;
+  vocalCues?: VocalCues;
   correlation?: number; // undefined when no contributing clip had it (mono sources)
   lowCorrelation?: number;
   partial?: true; // any contributing clip was truncated
@@ -167,6 +168,13 @@ export interface TrackAnalysis {
       corr?: number;
       corrLow?: number;
       bands: AudioBands;
+      /** Signal clues only; meaningful for an isolated vocal recording. */
+      vocal?: {
+        nearFullScalePct: number;
+        activeRangeDb?: number;
+        sibilanceCandidatePct?: number;
+        lowBurstCount?: number;
+      };
       partial?: true;
     };
   };

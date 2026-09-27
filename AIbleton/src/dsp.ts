@@ -40,6 +40,12 @@
  *     there the filtered signal is noise floor and the estimate is garbage.
  *     NOTE the energy test is per-CHANNEL, not on the mono mix: anti-phase
  *     low content cancels in the mix but is exactly what this must catch.
+ *   vocalCues — screening measurements for an isolated vocal recording:
+ *     near-full-scale sample share across source channels; p90−p10 RMS range
+ *     among active frames (threshold: max(−50 dBFS, active p90−24 dB)); share
+ *     of active frames dominated by 5–10 kHz energy (only at ≥22.05 kHz);
+ *     and rising 20–180 Hz burst candidates. These are not proof of clipping,
+ *     sibilance or plosives, and are not meaningful on a mixed instrumental.
  *
  * FFT 2048 @ 44.1 kHz = 21.5 Hz/bin, so `sub` (20–60 Hz) is ~2 bins — coarse
  * but sufficient for balance judgments; documented, not silently widened.
@@ -57,6 +63,18 @@ import integratedLufsFn from "@audio/loudness-lufs";
 export const AUDIO_BAND_NAMES = ["sub", "bass", "lowMid", "mid", "highMid", "high"] as const;
 export type AudioBandName = (typeof AUDIO_BAND_NAMES)[number];
 export type AudioBands = Record<AudioBandName, number>;
+
+/** Signal clues for an isolated vocal recording, not perceptual diagnoses. */
+export interface VocalCues {
+  /** Samples at or above −0.01 dBFS; proximity to full scale, not proof of clipping. */
+  nearFullScalePercent: number;
+  /** p90−p10 of active short RMS frames; pauses are excluded. */
+  activeRangeDb?: number;
+  /** Share of active frames dominated by 5–10 kHz energy. */
+  sibilanceCandidatePercent?: number;
+  /** Short, rising 20–180 Hz bursts that may warrant a plosive check. */
+  lowBurstCount?: number;
+}
 
 export interface AudioFeatures {
   durationSec: number;
@@ -81,6 +99,7 @@ export interface AudioFeatures {
   bands: AudioBands;
   /** Onsets/sec from spectral flux; undefined when duration < 0.5 s. */
   transientDensity?: number;
+  vocalCues?: VocalCues;
   /** L/R Pearson correlation (−1..+1); undefined for mono or silence. */
   correlation?: number;
   /** Correlation below 150 Hz; undefined for mono, silence, < 100 ms, or a
@@ -719,10 +738,21 @@ export function analyzePcm(pcm: MonoPcm): AudioFeatures {
     stDb.push(toDb(Math.sqrt(s / FFT_N)));
   }
   let dynamicRangeDb: number | undefined;
+  let activeRangeDb: number | undefined;
+  let activeThresholdDb = Infinity;
   if (stDb.length >= 8) {
     const sorted = [...stDb].sort((a, b) => a - b);
     const pick = (p: number): number => sorted[Math.min(sorted.length - 1, Math.round(p * (sorted.length - 1)))];
     dynamicRangeDb = pick(0.95) - pick(0.1);
+    const upper = pick(0.9);
+    if (upper > -80) {
+      activeThresholdDb = Math.max(-50, upper - 24);
+      const active = sorted.filter((db) => db >= activeThresholdDb);
+      if (active.length >= 8) {
+        const activePick = (p: number): number => active[Math.min(active.length - 1, Math.round(p * (active.length - 1)))];
+        activeRangeDb = activePick(0.9) - activePick(0.1);
+      }
+    }
   }
 
   // Loudness: K-inspired weighting on a Float64 copy.
@@ -733,6 +763,12 @@ export function analyzePcm(pcm: MonoPcm): AudioFeatures {
   for (let i = 0; i < n; i++) wSumSq += weighted[i] * weighted[i];
   const loudnessDb = -0.691 + 10 * Math.log10(Math.max(wSumSq / Math.max(1, n), 1e-10));
   const peakChannels = pcm.channelData && pcm.channelData.length > 0 ? pcm.channelData : [samples];
+  let nearFullScaleSamples = 0;
+  let channelSamples = 0;
+  for (const channel of peakChannels) {
+    channelSamples += channel.length;
+    for (const value of channel) if (Math.abs(value) >= 0.999) nearFullScaleSamples++;
+  }
   const integratedLufs = integratedLufsFn(peakChannels, { fs: sampleRate });
   const truePeakDb = toDb(truePeakLinear(peakChannels));
   const shortTerm = shortTermLoudness(peakChannels, sampleRate);
@@ -778,24 +814,54 @@ export function analyzePcm(pcm: MonoPcm): AudioFeatures {
   const hzPerBin = sampleRate / FFT_N;
 
   let frameCount = 0;
+  let activeFrames = 0;
+  let sibilanceFrames = 0;
+  let lowBurstCount = 0;
+  let lastLowBurstFrame = -Infinity;
+  let previousLowPower = 0;
+  const lowBurstRefractory = Math.max(1, Math.ceil(0.15 * sampleRate / FFT_HOP));
   for (let start = 0; start + FFT_N <= n; start += FFT_HOP, frameCount++) {
     for (let i = 0; i < FFT_N; i++) {
       re[i] = samples[start + i] * win[i];
       im[i] = 0;
     }
     fftInPlace(re, im);
+    let sibilancePower = 0;
+    let vocalBandPower = 0;
+    let lowPower = 0;
+    let lowReferencePower = 0;
     for (let k = 0; k < bins; k++) {
       const mag = Math.hypot(re[k], im[k]);
       const power = mag * mag;
+      const hz = k * hzPerBin;
       totalPower += power;
       const b = bandMap[k];
       if (b >= 0) bandSums[b] += power;
-      centroidNum += k * hzPerBin * mag;
+      centroidNum += hz * mag;
       centroidDen += mag;
+      if (hz >= 5000 && hz < 10000) sibilancePower += power;
+      if (hz >= 300 && hz < 10000) vocalBandPower += power;
+      if (hz >= 20 && hz < 180) lowPower += power;
+      if (hz >= 20 && hz < 6000) lowReferencePower += power;
       const d = mag - prevMag[k];
       if (d > 0) flux[frameCount] += d;
       prevMag[k] = mag;
     }
+    if (durationSec >= 0.5 && stDb[frameCount] >= activeThresholdDb) {
+      activeFrames++;
+      if (sampleRate >= 22050 && vocalBandPower > 1e-12 && sibilancePower / vocalBandPower >= 0.55) {
+        sibilanceFrames++;
+      }
+      if (
+        lowReferencePower > 1e-12 && lowPower / lowReferencePower >= 0.5 &&
+        lowPower >= previousLowPower * 4 &&
+        frameCount - lastLowBurstFrame >= lowBurstRefractory
+      ) {
+        lowBurstCount++;
+        lastLowBurstFrame = frameCount;
+      }
+    }
+    previousLowPower = lowPower;
   }
 
   const bands: AudioBands = { sub: 0, bass: 0, lowMid: 0, mid: 0, highMid: 0, high: 0 };
@@ -845,6 +911,13 @@ export function analyzePcm(pcm: MonoPcm): AudioFeatures {
     ...(dynamicRangeDb !== undefined ? { dynamicRangeDb } : {}),
     spectralCentroidHz,
     bands,
+    vocalCues: {
+      nearFullScalePercent: 100 * nearFullScaleSamples / Math.max(1, channelSamples),
+      ...(activeRangeDb !== undefined ? { activeRangeDb } : {}),
+      ...(activeFrames >= 8 && sampleRate >= 22050
+        ? { sibilanceCandidatePercent: 100 * sibilanceFrames / activeFrames } : {}),
+      ...(activeFrames >= 8 ? { lowBurstCount } : {}),
+    },
     ...(transientDensity !== undefined ? { transientDensity } : {}),
     ...(correlation !== undefined ? { correlation } : {}),
     ...(lowCorrelation !== undefined ? { lowCorrelation } : {}),

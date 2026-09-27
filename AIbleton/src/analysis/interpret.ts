@@ -533,6 +533,10 @@ export function aggregateTrackAudio(ts: TrackState, secPerBeat: number): TrackAu
 
   const dynamicRangeDb = dmeanOpt((f) => f.dynamicRangeDb);
   const transientDensity = dmeanOpt((f) => f.transientDensity);
+  const nearFullScalePercent = dmeanOpt((f) => f.vocalCues?.nearFullScalePercent);
+  const activeRangeDb = dmeanOpt((f) => f.vocalCues?.activeRangeDb);
+  const sibilanceCandidatePercent = dmeanOpt((f) => f.vocalCues?.sibilanceCandidatePercent);
+  const lowBurstContributors = contributors.filter((c) => c.f.vocalCues?.lowBurstCount !== undefined);
   const correlation = dmeanOpt((f) => f.correlation);
   const lowCorrelation = dmeanOpt((f) => f.lowCorrelation);
   return {
@@ -553,6 +557,13 @@ export function aggregateTrackAudio(ts: TrackState, secPerBeat: number): TrackAu
       high: emean((f) => f.bands.high),
     },
     ...(transientDensity !== undefined ? { transientDensity } : {}),
+    ...(nearFullScalePercent !== undefined ? { vocalCues: {
+      nearFullScalePercent,
+      ...(activeRangeDb !== undefined ? { activeRangeDb } : {}),
+      ...(sibilanceCandidatePercent !== undefined ? { sibilanceCandidatePercent } : {}),
+      ...(lowBurstContributors.length > 0
+        ? { lowBurstCount: lowBurstContributors.reduce((sum, c) => sum + c.f.vocalCues!.lowBurstCount!, 0) } : {}),
+    } } : {}),
     ...(correlation !== undefined ? { correlation } : {}),
     ...(lowCorrelation !== undefined ? { lowCorrelation } : {}),
     ...(contributors.some((c) => c.f.partial) ? { partial: true as const } : {}),

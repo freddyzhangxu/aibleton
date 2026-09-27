@@ -118,7 +118,7 @@ export const TOOLS = [
         audio: {
           type: "boolean",
           description:
-            "Optional: decode audio clip source files (WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A AAC or ALAC) and add per-track audio features (rms/crest/dynamic-range/loudness/stereo correlation + low-band correlation/6-band energy/transient density), per-file Integrated LUFS when measurable (absent for silence or <400 ms), plus audio-derived issues. Slower on first run (file reads + decode + FFT), cached afterwards. Features describe the source file, pre-warp/pre-gain/pre-device — not the audible result through the device chain.",
+            "Optional: decode audio clip source files (WAV/AIFF/MP3/FLAC/OGG Vorbis/M4A AAC or ALAC) and add per-track audio features (rms/crest/dynamic-range/loudness/stereo correlation + low-band correlation/6-band energy/transient density), per-file Integrated LUFS when measurable (absent for silence or <400 ms), plus audio-derived issues. The vocal cue block reports active-frame level range, near-full-scale sample share, 5–10 kHz sibilance candidates and low-frequency burst candidates; interpret these only for isolated vocals, not as diagnoses. Slower on first run (file reads + decode + FFT), cached afterwards. Features describe the source file, pre-warp/pre-gain/pre-device — not the audible result through the device chain.",
         },
       },
     },
@@ -126,7 +126,7 @@ export const TOOLS = [
   {
     name: "analyze_rendered_track",
     description:
-      "Render one Audio Track's arrangement range through Live, then measure the rendered pre-FX audio (RMS, peak, true peak dBTP, crest, Integrated LUFS when measurable, 3 s short-term LUFS max and range, dynamic range, spectral centroid, transients, stereo correlation and 6-band balance). Integrated LUFS is absent for silence or audio shorter than 400 ms; short-term LUFS needs at least 3 s. Streaming delivery targets: Integrated ≈ −14 LUFS, true peak ≤ −1 dBTP. Use when the user explicitly asks about a track's arranged audio rather than its source file. This is read-only and may take time. Pre-FX means it reflects clip timing/content but NOT the track device chain or master processing. Pass start_bar and end_bar together for a precise inclusive range; omit both to render from the track's earliest to latest arrangement Audio Clip.",
+      "Render one Audio Track's arrangement range through Live, then measure the rendered pre-FX audio (RMS, peak, true peak dBTP, crest, Integrated LUFS when measurable, 3 s short-term LUFS max and range, dynamic range, spectral centroid, transients, stereo correlation and 6-band balance). Includes vocal screening cues (active-frame level range, near-full-scale samples, 5–10 kHz sibilance candidates, low-frequency burst candidates) that are meaningful only for isolated vocals. Integrated LUFS is absent for silence or audio shorter than 400 ms; short-term LUFS needs at least 3 s. Streaming delivery targets: Integrated ≈ −14 LUFS, true peak ≤ −1 dBTP. Use when the user explicitly asks about a track's arranged audio rather than its source file. This is read-only and may take time. Pre-FX means it reflects clip timing/content but NOT the track device chain or master processing. Pass start_bar and end_bar together for a precise inclusive range; omit both to render from the track's earliest to latest arrangement Audio Clip.",
     input_schema: {
       type: "object",
       properties: {

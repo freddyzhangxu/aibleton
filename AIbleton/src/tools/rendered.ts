@@ -89,9 +89,16 @@ export async function analyzeRenderedTrack(context: Ctx, input: Record<string, u
           ...(f.correlation !== undefined ? { correlation: round(f.correlation, 3) } : {}),
           ...(f.lowCorrelation !== undefined ? { low_correlation: round(f.lowCorrelation, 3) } : {}),
           bands: Object.fromEntries(Object.entries(f.bands).map(([band, value]) => [band, round(value, 3)])),
+          ...(f.vocalCues ? { vocal_cues: {
+            near_full_scale_percent: round(f.vocalCues.nearFullScalePercent, 3),
+            ...(f.vocalCues.activeRangeDb !== undefined ? { active_range_db: round(f.vocalCues.activeRangeDb) } : {}),
+            ...(f.vocalCues.sibilanceCandidatePercent !== undefined
+              ? { sibilance_candidate_percent: round(f.vocalCues.sibilanceCandidatePercent) } : {}),
+            ...(f.vocalCues.lowBurstCount !== undefined ? { low_burst_count: f.vocalCues.lowBurstCount } : {}),
+          } } : {}),
           ...(f.partial ? { partial: true } : {}),
         },
-        caveat: "Pre-FX render: reflects the arrangement range and clip timing, but not the track device chain or master processing.",
+        caveat: "Pre-FX render: reflects arrangement timing, not the device chain or master. Vocal cues are screening metrics for isolated vocals, not diagnoses.",
       });
     },
   );

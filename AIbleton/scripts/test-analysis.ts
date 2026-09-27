@@ -629,6 +629,26 @@ const hasCode = (ma: ReturnType<typeof analyzeMusicState>, code: string): boolea
   check("clips present but none analyzed → note explains", saF.audioRun?.note === "audio clips present but none analyzed (failed 1, skipped 0)", saF.audioRun?.note);
 }
 
+// Vocal cues travel from decoded source features through track aggregation to
+// the model-facing analyze_song response, even if no automatic issue fires.
+{
+  const st = buildMusicState(song([track(0, "Vocal", [audioClip()], { type: "audio" })]));
+  st.tracks[0].clips[0].audio = { features: feat({
+    vocalCues: {
+      nearFullScalePercent: 0.25,
+      activeRangeDb: 7.4,
+      sibilanceCandidatePercent: 12.5,
+      lowBurstCount: 2,
+    },
+  }) };
+  const ma = analyzeMusicState(st);
+  check("vocal cues aggregate without becoming an issue", ma.trackAudio?.[0]?.vocalCues?.lowBurstCount === 2 &&
+    !ma.issues.some((i) => i.code.includes("VOCAL")));
+  const output = presentAnalysis(st, ma, 5800, undefined, { computed: 1, cached: 0, failed: 0, skipped: 0 });
+  check("vocal cues appear in analyze_song", output.tracks[0].audio?.feat?.vocal?.sibilanceCandidatePct === 12.5 &&
+    output.tracks[0].audio?.feat?.vocal?.activeRangeDb === 7.4);
+}
+
 // ---------------------------------------------------------------------------
 console.log(failed ? `\n${failed} 项失败 / ${passed + failed}` : `\n全部通过 (${passed})`);
 process.exit(failed ? 1 : 0);
