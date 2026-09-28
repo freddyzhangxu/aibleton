@@ -4,9 +4,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AudioClip, AudioTrack, MidiTrack } from "@ableton-extensions/sdk";
+import { analyzePcm } from "../dsp.js";
 import { pcmOfSegments, wavOf } from "../music/reference/__tests__/fixtures.js";
 import type { Ctx } from "../state.js";
-import { analyzeVocalPair } from "./vocal-pair.js";
+import { analyzeVocalPair, classifyVocalFeatures } from "./vocal-pair.js";
 
 const temp = mkdtempSync(join(tmpdir(), "aibleton-vocal-pair-"));
 after(() => rmSync(temp, { recursive: true, force: true }));
@@ -82,6 +83,7 @@ test("compares two selected Live vocal clips without changing either track", asy
     reference_track_index: 1, reference_track_name: "Original Vocals",
   });
   assert.equal(out.comparison, "source_file");
+  assert.equal(out.analysis_limit_seconds, 180);
   assert.equal(out.recorded.status, "ok");
   assert.equal(out.reference.status, "ok");
   assert.equal(out.recorded.track, "Lead");
@@ -89,6 +91,19 @@ test("compares two selected Live vocal clips without changing either track", asy
   assert.ok(out.measurements?.deltas.some((d) => d.metric === "rms" && d.delta < 0));
   assert.equal(tracks[0].arrangementClips.length, 1);
   assert.equal(tracks[1].arrangementClips.length, 1);
+});
+
+test("does not call an incompletely analyzed silent prefix a silent source", () => {
+  const silent = analyzePcm({ sampleRate: 44100, channels: 1, samples: new Float32Array(22050) });
+  assert.deepEqual(classifyVocalFeatures({ ...silent, partial: true }), {
+    status: "analysis_error",
+    partial: true,
+    error: "analyzed portion is silent; the rest of the source was not measured",
+  });
+  assert.deepEqual(classifyVocalFeatures(silent), {
+    status: "silent",
+    error: "source audio is silent",
+  });
 });
 
 test("labels unreadable, unsupported, and silent reference audio separately", async () => {

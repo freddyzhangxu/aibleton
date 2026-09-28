@@ -10,7 +10,7 @@ import { resolveTrack, type TrackRef } from "./helpers.js";
 
 const MAX_READ_BYTES = 300 * 1024 * 1024;
 const MAX_SECONDS = 180;
-const SOURCE_CAVEAT = "Both measurements describe full source files, pre-warp, pre-gain and pre-device. Clip trimming, automation and existing effects are not measured. Vocal cues are screening candidates, not diagnoses; no note-level pitch or timing comparison was made.";
+const SOURCE_CAVEAT = `When available, measurements describe source-file audio capped at the first ${MAX_SECONDS} seconds per file, pre-warp, pre-gain and pre-device. Clip trimming, automation and existing effects are not measured. Vocal cues are screening candidates, not diagnoses; no note-level pitch or timing comparison was made.`;
 
 type SourceStatus = "ok" | "unreadable" | "unsupported" | "silent" | "analysis_error";
 
@@ -27,6 +27,7 @@ export interface VocalSourceResult {
 
 export interface VocalComparisonToolResult {
   comparison: "source_file";
+  analysis_limit_seconds: number;
   recorded: VocalSourceResult;
   reference: VocalSourceResult;
   measurements?: VocalComparison;
@@ -39,6 +40,16 @@ interface SourceSelection {
   trackIndex?: number;
   clipIndex?: number;
   clip?: string;
+}
+
+/** A silent analyzed prefix cannot establish that an unmeasured tail is silent. */
+export function classifyVocalFeatures(features: AudioFeatures): Pick<VocalSourceResult, "status" | "partial" | "error"> {
+  if (features.peakDb <= -90) {
+    return features.partial
+      ? { status: "analysis_error", partial: true, error: "analyzed portion is silent; the rest of the source was not measured" }
+      : { status: "silent", error: "source audio is silent" };
+  }
+  return { status: "ok", ...(features.partial ? { partial: true as const } : {}) };
 }
 
 function audioTrack(ref: TrackRef): AudioTrack<"1.0.0"> {
@@ -105,12 +116,10 @@ async function analyzeSource(source: SourceSelection): Promise<{ summary: VocalS
     const status = outcome.error.startsWith("unknown audio extension") ? "unsupported" : "analysis_error";
     return { summary: { ...base, status, error: outcome.error } };
   }
-  if (outcome.features.peakDb <= -90) {
-    return { summary: { ...base, status: "silent", error: "source audio is silent" } };
-  }
+  const classification = classifyVocalFeatures(outcome.features);
   return {
-    summary: { ...base, ...(outcome.features.partial ? { partial: true as const } : {}) },
-    features: outcome.features,
+    summary: { ...base, ...classification },
+    ...(classification.status === "ok" ? { features: outcome.features } : {}),
   };
 }
 
@@ -149,6 +158,7 @@ export async function analyzeVocalPair(context: Ctx, input: Record<string, unkno
   ]);
   return {
     comparison: "source_file",
+    analysis_limit_seconds: MAX_SECONDS,
     recorded: recordedResult.summary,
     reference: referenceResult.summary,
     ...(recordedResult.features && referenceResult.features
