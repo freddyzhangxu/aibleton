@@ -55,3 +55,28 @@ test("insert_device preserves an explicitly named instrument", async () => {
   assert.equal(result.selected, undefined);
   assert.equal(toolState.activeDeleteAuthorization, undefined);
 });
+
+test("insert_device forwards exact native vocal-device names to the SDK", async () => {
+  const deviceNames = [
+    "Auto Shift",
+    "Gate",
+    "Multiband Dynamics",
+    "Roar",
+    "Glue Compressor",
+    "Hybrid Reverb",
+    "Vocoder",
+  ];
+
+  for (const deviceName of deviceNames) {
+    const { context, calls, devices } = insertContext();
+    const result = await runTool(context, "insert_device", {
+      index: 0,
+      track_name: "Bass",
+      device_name: deviceName,
+    }) as Record<string, unknown>;
+
+    assert.deepEqual(calls, [`insert:${deviceName}:0`]);
+    assert.equal(result.inserted, deviceName);
+    assert.deepEqual(devices, [{ name: deviceName }]);
+  }
+});
