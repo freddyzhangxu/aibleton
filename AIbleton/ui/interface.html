@@ -1902,6 +1902,27 @@
     // text node. That keeps stored chat history just as safe as fresh replies.
     const SAFE_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
 
+    function appendSafeLink(target, label, href, depth) {
+      let url;
+      try { url = new URL(href); } catch { return false; }
+      if (!SAFE_LINK_PROTOCOLS.has(url.protocol)) return false;
+      const link = document.createElement('a');
+      link.href = url.href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        fetch('/api/link/open', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: link.href }),
+        }).catch(() => {});
+      });
+      appendInlineMarkdown(link, label, depth + 1, false);
+      target.appendChild(link);
+      return true;
+    }
+
     function appendText(target, text) {
       target.appendChild(document.createTextNode(text));
     }
@@ -1913,14 +1934,14 @@
       });
     }
 
-    function appendInlineMarkdown(target, source, depth = 0) {
+    function appendInlineMarkdown(target, source, depth = 0, allowLinks = true) {
       const text = String(source ?? '');
       // A bounded recursion depth handles normal nesting (for example bold
       // text containing inline code) without letting adversarial input grow a
       // deep call stack.
       if (depth >= 8) { appendTextWithBreaks(target, text); return; }
 
-      const token = /(`([^`\n]+)`)|(\[([^\]\n]+)\]\(([^()\s]+)\))|(\*\*([^\n]+?)\*\*)|(~~([^\n]+?)~~)|(__([^\n]+?)__)|(\*([^*\n]+?)\*)|(_([^_\n]+?)_)/g;
+      const token = /(`([^`\n]+)`)|(\[([^\]\n]+)\]\(([^()\s]+)\))|(\*\*([^\n]+?)\*\*)|(~~([^\n]+?)~~)|(__([^\n]+?)__)|(\*([^*\n]+?)\*)|(_([^_\n]+?)_)|(https?:\/\/[^\s<>]+)/g;
       let pos = 0;
       let match;
       while ((match = token.exec(text))) {
@@ -1931,19 +1952,13 @@
           code.textContent = match[2];
           target.appendChild(code);
         } else if (match[4] !== undefined) {
-          const href = match[5];
-          let url;
-          try { url = new URL(href); } catch { url = null; }
-          if (url && SAFE_LINK_PROTOCOLS.has(url.protocol)) {
-            const link = document.createElement('a');
-            link.href = url.href;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            appendInlineMarkdown(link, match[4], depth + 1);
-            target.appendChild(link);
-          } else {
+          if (!allowLinks || !appendSafeLink(target, match[4], match[5], depth)) {
             appendTextWithBreaks(target, match[0]);
           }
+        } else if (match[16] !== undefined) {
+          const href = match[16].replace(/[.,!?;:]+$/, '');
+          if (!allowLinks || !appendSafeLink(target, href, href, depth)) appendTextWithBreaks(target, href);
+          appendTextWithBreaks(target, match[16].slice(href.length));
         } else {
           const tag = match[7] !== undefined || match[11] !== undefined
             ? 'strong'
@@ -1952,7 +1967,7 @@
               : 'em';
           const content = match[7] ?? match[9] ?? match[11] ?? match[13] ?? match[15];
           const el = document.createElement(tag);
-          appendInlineMarkdown(el, content, depth + 1);
+          appendInlineMarkdown(el, content, depth + 1, allowLinks);
           target.appendChild(el);
         }
         pos = token.lastIndex;

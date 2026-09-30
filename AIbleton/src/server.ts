@@ -650,6 +650,36 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       send(200, JSON.stringify({ ok: true }));
       return;
     }
+    if (req.method === "POST" && req.url === "/api/link/open") {
+      if (req.headers["content-type"]?.split(";")[0] !== "application/json") {
+        send(415, JSON.stringify({ error: "JSON required" }));
+        return;
+      }
+      readBody((parsed) => {
+        if (typeof parsed.url !== "string" || parsed.url.length > 2048) {
+          send(400, JSON.stringify({ error: "invalid URL" }));
+          return;
+        }
+        let url: URL;
+        try {
+          url = new URL(parsed.url);
+        } catch {
+          send(400, JSON.stringify({ error: "invalid URL" }));
+          return;
+        }
+        if (url.protocol !== "http:" && url.protocol !== "https:" && url.protocol !== "mailto:") {
+          send(400, JSON.stringify({ error: "unsupported URL protocol" }));
+          return;
+        }
+        try {
+          openExternal(url.href);
+          send(200, JSON.stringify({ ok: true }));
+        } catch (err) {
+          send(500, JSON.stringify({ error: errMessage(err) }));
+        }
+      });
+      return;
+    }
     if (req.method === "POST" && req.url === "/api/update/open") {
       // Only ever open the server-side release URL — never a client-supplied
       // one, so this endpoint can't be turned into an open-anything primitive.
