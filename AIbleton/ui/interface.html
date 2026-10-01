@@ -407,6 +407,7 @@
       cursor: pointer;
     }
     .steps .action:hover { color: var(--c-text); }
+    .steps .action a { color: var(--c-accent); text-decoration: underline; }
     /* Click a line to read it in full: wraps, vertically scrolls if huge. */
     .steps .action.open {
       white-space: pre-wrap;
@@ -1902,7 +1903,7 @@
     // text node. That keeps stored chat history just as safe as fresh replies.
     const SAFE_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
 
-    function appendSafeLink(target, label, href, depth) {
+    function appendSafeLink(target, label, href, depth, plainLabel = false) {
       let url;
       try { url = new URL(href); } catch { return false; }
       if (!SAFE_LINK_PROTOCOLS.has(url.protocol)) return false;
@@ -1912,13 +1913,17 @@
       link.rel = 'noopener noreferrer';
       link.addEventListener('click', (event) => {
         event.preventDefault();
+        event.stopPropagation?.();
         fetch('/api/link/open', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: link.href }),
-        }).catch(() => {});
+        }).then((response) => {
+          if (!response.ok) throw new Error('open failed');
+        }).catch(() => addMsg('error', t('error') + t('requestFailed') + ' ' + link.href));
       });
-      appendInlineMarkdown(link, label, depth + 1, false);
+      if (plainLabel) appendText(link, label);
+      else appendInlineMarkdown(link, label, depth + 1, false);
       target.appendChild(link);
       return true;
     }
@@ -1934,6 +1939,39 @@
       });
     }
 
+    function trimBareUrl(text) {
+      let end = text.length;
+      const pairs = { ')': '(', '）': '（', ']': '[', '】': '【', '}': '{' };
+      while (end) {
+        const last = text[end - 1];
+        if (/[.,!?;:。，！？；：、'"`]/.test(last)) { end--; continue; }
+        const opener = pairs[last];
+        if (opener) {
+          const candidate = text.slice(0, end);
+          const opens = candidate.split(opener).length - 1;
+          const closes = candidate.split(last).length - 1;
+          if (closes > opens) { end--; continue; }
+        }
+        break;
+      }
+      return text.slice(0, end);
+    }
+
+    function appendPlainLinks(target, text) {
+      const source = String(text);
+      const urls = /https?:\/\/[^\s<>]+/g;
+      let pos = 0;
+      let match;
+      while ((match = urls.exec(source))) {
+        appendText(target, source.slice(pos, match.index));
+        const href = trimBareUrl(match[0]);
+        if (!appendSafeLink(target, href, href, 0, true)) appendText(target, href);
+        appendText(target, match[0].slice(href.length));
+        pos = urls.lastIndex;
+      }
+      appendText(target, source.slice(pos));
+    }
+
     function appendInlineMarkdown(target, source, depth = 0, allowLinks = true) {
       const text = String(source ?? '');
       // A bounded recursion depth handles normal nesting (for example bold
@@ -1941,7 +1979,7 @@
       // deep call stack.
       if (depth >= 8) { appendTextWithBreaks(target, text); return; }
 
-      const token = /(`([^`\n]+)`)|(\[([^\]\n]+)\]\(([^()\s]+)\))|(\*\*([^\n]+?)\*\*)|(~~([^\n]+?)~~)|(__([^\n]+?)__)|(\*([^*\n]+?)\*)|(_([^_\n]+?)_)|(https?:\/\/[^\s<>]+)/g;
+      const token = /(`([^`\n]+)`)|(\[([^\]\n]+)\]\(((?:[^()\s]|\([^()\s]*\))+?)\))|(\*\*([^\n]+?)\*\*)|(~~([^\n]+?)~~)|(__([^\n]+?)__)|(\*([^*\n]+?)\*)|(_([^_\n]+?)_)|(https?:\/\/[^\s<>]+)/g;
       let pos = 0;
       let match;
       while ((match = token.exec(text))) {
@@ -1956,8 +1994,8 @@
             appendTextWithBreaks(target, match[0]);
           }
         } else if (match[16] !== undefined) {
-          const href = match[16].replace(/[.,!?;:]+$/, '');
-          if (!allowLinks || !appendSafeLink(target, href, href, depth)) appendTextWithBreaks(target, href);
+          const href = trimBareUrl(match[16]);
+          if (!allowLinks || !appendSafeLink(target, href, href, depth, true)) appendTextWithBreaks(target, href);
           appendTextWithBreaks(target, match[16].slice(href.length));
         } else {
           const tag = match[7] !== undefined || match[11] !== undefined
@@ -2171,8 +2209,9 @@
     function addAction(tool, input, result) {
       const div = document.createElement('div');
       div.className = 'action';
-      div.textContent = '⚙ ' + tool + ' ' + JSON.stringify(input) + ' → ' + JSON.stringify(result);
-      div.title = div.textContent;
+      const detail = '⚙ ' + tool + ' ' + JSON.stringify(input) + ' → ' + JSON.stringify(result);
+      appendPlainLinks(div, detail);
+      div.title = detail;
       div.addEventListener('click', () => div.classList.toggle('open'));
       return div;
     }
@@ -2517,7 +2556,9 @@
     }
 
     document.getElementById('updateGo').addEventListener('click', () => {
-      fetch('/api/update/open', { method: 'POST' }).catch(() => {});
+      fetch('/api/update/open', { method: 'POST' }).then((response) => {
+        if (!response.ok) throw new Error('open failed');
+      }).catch(() => { updateMsg.textContent = t('updateFailed'); });
     });
     document.getElementById('updateDismiss').addEventListener('click', () => {
       updateBar.classList.add('hidden');
