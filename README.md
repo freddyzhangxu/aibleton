@@ -85,7 +85,7 @@ The agent can inspect your Live Set, understand musical context, reason about yo
 - Inspect tracks, clips, MIDI, devices, and parameters
 - Understand key, tempo, track roles, and musical context
 - Analyze arrangement structure and sections
-- Analyze audio characteristics
+- Analyze audio source files for loudness (LUFS), true peak, dynamics, stereo correlation, and possible phase issues
 
 ### Reason
 
@@ -131,6 +131,14 @@ Analyze again
 ```
 
 This allows generated music to be evaluated against measurable goals and refined through multiple iterations.
+
+### Vocal Assist
+
+- Compare a recorded vocal with an isolated reference vocal from another Live audio track or a local file
+- Review differences in level, dynamics, spectral balance, and possible sibilance or plosive cues
+- Inspect and adjust vocal effects, including Auto Shift when pitch correction is requested and available in Live
+
+The comparison measures source files before warping, gain, and effects. It does not measure note-by-note pitch or timing, or verify how the processed vocal sounds; audition both vocals in Live before judging the result.
 
 ### Search & Remember
 
