@@ -130,6 +130,8 @@ When a task involves multi-step creation, arrangement, or repair, AI first estab
 
 AI’s structural analysis prioritizes Live cue points. If there are no cue points, it infers sections from 8-bar energy blocks. If you want to work consistently with `Intro / Build / Drop`, use meaningful cue names in Live.
 
+For sound questions, ask AI to analyze the audio as well as the arrangement, for example: `Analyze the audio for loudness, true peak, dynamics, stereo correlation, and possible phase issues.` Audio measurements include LUFS when the source is long enough, but describe clip source files before warp, gain, and devices. MIDI-only instrument tracks have no audio source for this analysis.
+
 ### B. Rearrange the Arrangement from Existing Clips
 
 When asking AI to rearrange, do not say only “arrange it.” Specify the range and preservation strategy first:
@@ -194,6 +196,15 @@ no vocals. After generating, import it directly to the Texture audio track at ba
 - **Cost and retry warning:** generation can still be billed even if the later import fails. The generated file is retained; when possible, retry the import rather than generating the audio again.
 
 “Auto-iteration” is appropriate for generation tasks with a clear, measurable goal. It is not appropriate to enable blindly while you are still exploring a style. Turning it on means pre-authorizing up to 6 additional paid generations for the same goal, with no confirmation for each later generation; set a duration and budget first, then audition every result.
+
+### G. Compare and Refine Vocals
+
+1. Put the recorded vocal on an Audio track. Use an isolated reference vocal on a different Audio track or provide the absolute path to a local audio file. A full mix is not a suitable isolated vocal reference.
+2. Ask for a read-only comparison, such as: `Compare the recorded vocal on Lead Vocal with the reference vocal on Reference Vocal. Report source-file differences in level, dynamics, and spectral balance, and list any sibilance or plosive cues for me to check. Do not change the Set.` If a track has multiple clips, identify the matching passage and ask AI to compare those clips.
+3. Review the comparison, then audition the two passages side by side in Live. Ask for specific processing changes only after deciding what you hear.
+4. If you want pitch correction, ask for Auto Shift explicitly. Provide a confirmed key and scale if you have them. Without a confirmed key, chromatic correction can center notes on semitones, but it does not follow the reference melody or identify wrong notes.
+
+Vocal comparison measures the complete source files (up to 180 seconds per file), before warp, clip trimming, gain, and devices. Level and spectral cues are prompts for listening, not diagnoses; the tool does not measure note-by-note pitch or timing, and it cannot verify the sound after effects.
 
 ## 7. References, Attachments, Search, and Memory
 
