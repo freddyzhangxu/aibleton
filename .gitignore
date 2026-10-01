@@ -11,6 +11,8 @@ extensions-sdk-*/
 
 # 内部文档（不公开）
 .docs/
+.AGENTS.md
+AGENTS.md
 # Superpowers-generated plans, specs, and related docs (at any depth)
 .superpowers/
 superpowers/
