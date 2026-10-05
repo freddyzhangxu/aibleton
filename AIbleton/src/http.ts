@@ -15,9 +15,13 @@ import * as http from "node:http";
 import * as https from "node:https";
 import * as tls from "node:tls";
 import * as net from "node:net";
+import { Readable } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
 import { detectSystemProxy } from "./paths.js";
+
+const NativeResponse = (globalThis as { Response?: typeof Response }).Response;
 
 let cachedProxy: string | null | undefined;
 
@@ -169,10 +173,24 @@ export function rawGet(target: URL, init: RawInit): Promise<RawResponse> {
   return rawRequest("GET", target, init);
 }
 
+/** Read a response stream as UTF-8 text. A naive `chunk.toString("utf8")`
+ * concat corrupts multi-byte characters split across chunk boundaries (CJK
+ * search pages, localized API errors) — the native Response decodes across
+ * boundaries, and the StringDecoder fallback does the same on older Live
+ * runtimes. No mid-flight fallback: if native consumption fails the error
+ * propagates rather than silently returning partial text. */
 export async function readAll(stream: AsyncIterable<Buffer>): Promise<string> {
+  if (
+    typeof NativeResponse === "function" &&
+    stream instanceof Readable &&
+    typeof Readable.toWeb === "function"
+  ) {
+    return new NativeResponse(Readable.toWeb(stream) as ReadableStream).text();
+  }
+  const dec = new StringDecoder("utf8");
   let out = "";
-  for await (const chunk of stream) out += chunk.toString("utf8");
-  return out;
+  for await (const chunk of stream) out += dec.write(chunk);
+  return out + dec.end();
 }
 
 export async function readAllBinary(stream: AsyncIterable<Buffer>): Promise<Buffer> {
