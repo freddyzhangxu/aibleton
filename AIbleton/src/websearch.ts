@@ -20,6 +20,7 @@
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
 import { detectProxy, rawGet, readAll } from "./http.js";
+import { withDeadline } from "./deadline.js";
 import { commonText } from "./i18n/common.js";
 
 export interface SearchHit {
@@ -38,43 +39,6 @@ export interface FetchResult {
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-
-interface Deadline {
-  signal: AbortSignal;
-  /** true when OUR timer (not the chat stop button) aborted the request. */
-  timedOut: () => boolean;
-  dispose: () => void;
-}
-
-/**
- * Chat-stop abort + a hard per-call ceiling, whichever fires first.
- * Hand-rolled because the Extension Host sandbox only guarantees the globals
- * the existing code already relies on (AbortController, setTimeout — proven
- * by server.ts's abortCtl and audiogen.ts's sleep). AbortSignal.timeout/any
- * are off-limits: the original version crashed there with
- * "AbortSignal is not defined".
- */
-function withDeadline(signal: AbortSignal | undefined, ms: number): Deadline {
-  const ctl = new AbortController();
-  let fired = false;
-  const timer = setTimeout(() => {
-    fired = true;
-    ctl.abort();
-  }, ms);
-  const onAbort = () => ctl.abort();
-  if (signal) {
-    if (signal.aborted) ctl.abort();
-    else signal.addEventListener("abort", onAbort, { once: true });
-  }
-  return {
-    signal: ctl.signal,
-    timedOut: () => fired,
-    dispose: () => {
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", onAbort);
-    },
-  };
-}
 
 // ---------- HTML → text helpers (hand-rolled, no deps) ----------
 

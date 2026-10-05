@@ -8,6 +8,7 @@
 
 import { URL } from "node:url";
 import { rawGet, readAll, detectProxy } from "./http.js";
+import { withDeadline } from "./deadline.js";
 import { toolHooks, toolState } from "./state.js";
 
 // Stamped by esbuild from package.json (same define as server.ts).
@@ -50,9 +51,7 @@ export async function checkForUpdate(force = false): Promise<void> {
   ) {
     return;
   }
-  // Manual timeout — bare AbortSignal.timeout() crashes the extension sandbox.
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 15_000);
+  const dl = withDeadline(undefined, 15_000);
   try {
     const res = await rawGet(RELEASE_API, {
       headers: {
@@ -60,7 +59,7 @@ export async function checkForUpdate(force = false): Promise<void> {
         accept: "application/vnd.github+json",
       },
       proxy: detectProxy(),
-      signal: ctl.signal,
+      signal: dl.signal,
     });
     if (res.status < 200 || res.status >= 300) {
       await readAll(res.stream).catch(() => "");
@@ -79,7 +78,7 @@ export async function checkForUpdate(force = false): Promise<void> {
   } catch {
     // Silent: checkedAt stays stale, so the next host start retries.
   } finally {
-    clearTimeout(timer);
+    dl.dispose();
   }
 }
 
