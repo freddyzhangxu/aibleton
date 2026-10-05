@@ -28,6 +28,7 @@ import type { AudioEnrichStats } from "./analysis/types.js";
 import { featuresFromBuffer, type AudioFeatures } from "./dsp.js";
 import type { ClipState, MusicState } from "./musicstate/types.js";
 import { readHomeBinary } from "./paths.js";
+import { monotonicNow } from "./chat/timing.js";
 
 const MAX_READ_BYTES = 300 * 1024 * 1024; // reject without reading
 const TRUNCATE_BYTES = 150 * 1024 * 1024; // read but analyze a prefix
@@ -110,7 +111,7 @@ export async function enrichMusicStateWithAudio(
     !ts.muted && cs.clip.kind === "audio" && cs.clip.start !== null && !cs.clip.muted && !!cs.clip.filePath;
 
   const outcomes = new Map<string, FeatureOutcome>();
-  const t0 = Date.now();
+  const t0 = monotonicNow();
   let budgetExhausted = false;
   for (const ts of state.tracks) {
     for (const cs of ts.clips) {
@@ -118,7 +119,7 @@ export async function enrichMusicStateWithAudio(
       const p = cs.clip.filePath;
       let outcome = outcomes.get(p);
       if (outcome === undefined) {
-        if (budgetExhausted || outcomes.size >= maxFiles || Date.now() - t0 > timeBudgetMs) {
+        if (budgetExhausted || outcomes.size >= maxFiles || monotonicNow() - t0 > timeBudgetMs) {
           budgetExhausted = true;
           stats.skipped++;
           continue;

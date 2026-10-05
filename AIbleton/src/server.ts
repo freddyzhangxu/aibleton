@@ -103,10 +103,10 @@ function buildSampleIndex(): SampleEntry[] {
     out.push(...(denied ? listAudioFilesViaFind(root, 200000 - out.length) : fromRoot));
   }
   // Parse BPM/key from file & folder names once — search time is then pure matching.
-  const t0 = Date.now();
+  const t0 = monotonicNow();
   sampleIndex = out.map(toSampleEntry);
   console.log(
-    `[ai-assistant] 采样索引: ${out.length} 个文件 (+${Date.now() - t0}ms 元数据解析)，来源: ${roots.join(" | ")}`,
+    `[ai-assistant] 采样索引: ${out.length} 个文件 (+${(monotonicNow() - t0).toFixed(1)}ms 元数据解析)，来源: ${roots.join(" | ")}`,
   );
   return sampleIndex;
 }
