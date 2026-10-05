@@ -30,6 +30,7 @@ import {
   writeHomeBinary,
 } from "./paths.js";
 import { detectProxy, rawGet, rawPost, readAll, readAllBinary } from "./http.js";
+import { multipartFields } from "./multipart.js";
 import { actionableError, errMessage, friendlyAudioError, isFriendlyError } from "./errors.js";
 
 export type AudioProvider = "stable-audio" | "elevenlabs" | "minimax" | "custom";
@@ -148,22 +149,12 @@ export async function generateAudio(
 
 // ---------- Stable Audio (sync, multipart → wav bytes) ----------
 
-/** multipart/form-data body for Stability's API (text fields only). */
-function multipartBody(fields: Record<string, string>): { body: string; contentType: string } {
-  const boundary = "----aibleton" + Math.random().toString(36).slice(2);
-  let body = "";
-  for (const [k, v] of Object.entries(fields)) {
-    body += `--${boundary}\r\ncontent-disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`;
-  }
-  return { body: body + `--${boundary}--\r\n`, contentType: `multipart/form-data; boundary=${boundary}` };
-}
-
 async function genStableAudio(
   cfg: AudioGenConfig,
   opts: GenerateOptions,
   signal?: AbortSignal,
 ): Promise<string> {
-  const { body, contentType } = multipartBody({
+  const { body, contentType } = await multipartFields({
     prompt: opts.prompt,
     duration: String(opts.seconds),
     output_format: "wav",

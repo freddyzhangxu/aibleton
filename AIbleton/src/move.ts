@@ -20,6 +20,8 @@
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
 import { rawGet, rawPost, readAll, readAllBinary } from "./http.js";
+import { withDeadline } from "./deadline.js";
+import { multipartFile } from "./multipart.js";
 import { readHomeBinary } from "./paths.js";
 
 export interface MoveConfig {
@@ -55,13 +57,11 @@ function encPath(p: string): string {
     .join("/");
 }
 
-/** AbortController + setTimeout — the sandbox-safe pattern from websearch.ts
- * (a bare AbortSignal.timeout would crash the Extension Host). */
+/** Native AbortSignal.timeout where the SDK provides it, hand-rolled
+ * fallback for older Live runtimes — see deadline.ts. */
 function deadline(ms: number): { signal: AbortSignal; done: () => void } {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), ms);
-  if (typeof timer.unref === "function") timer.unref();
-  return { signal: ctl.signal, done: () => clearTimeout(timer) };
+  const dl = withDeadline(undefined, ms);
+  return { signal: dl.signal, done: dl.dispose };
 }
 
 interface MoveReply {
@@ -249,21 +249,6 @@ export async function listFiles(cfg: MoveConfig, dir?: string): Promise<MoveFile
   }));
 }
 
-function multipartBody(field: string, filename: string, data: Buffer): { body: Buffer; contentType: string } {
-  const boundary = `----aibleton-move-${Date.now().toString(16)}`;
-  const head = Buffer.from(
-    `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="${field}"; filename="${filename}"\r\n` +
-      `Content-Type: application/octet-stream\r\n\r\n`,
-    "utf8",
-  );
-  const tail = Buffer.from(`\r\n--${boundary}--\r\n`, "utf8");
-  return {
-    body: Buffer.concat([head, data, tail]),
-    contentType: `multipart/form-data; boundary=${boundary}`,
-  };
-}
-
 /** Upload a local audio file into a folder on the Move (default: Samples). */
 export async function uploadFile(
   cfg: MoveConfig,
@@ -274,7 +259,7 @@ export async function uploadFile(
   const data = readHomeBinary(localPath);
   if (!data) throw new MoveError(`读不到本地文件：${localPath}`);
   const filename = localPath.split(/[\\/]/).pop() || "sample.wav";
-  const { body, contentType } = multipartBody("file", filename, data);
+  const { body, contentType } = await multipartFile("file", filename, data);
   const reply = await request(
     cfg,
     "POST",
