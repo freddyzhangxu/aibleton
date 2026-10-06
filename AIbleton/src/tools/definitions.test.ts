@@ -26,3 +26,34 @@ test("describes generic insertion attempts for named built-in Live vocal devices
     assert.ok(description.includes(device), `missing device name: ${device}`);
   }
 });
+
+test("keeps executable plan mode optional and documents its argument contract", () => {
+  const plan = TOOLS.find((tool) => tool.name === "set_plan");
+  assert.ok(plan);
+  const schema = plan.input_schema as {
+    properties: Record<string, unknown>;
+    required: string[];
+  };
+  assert.deepEqual(schema.required, ["steps"]);
+  const execute = schema.properties.execute as { type: string; description: string };
+  assert.equal(execute.type, "boolean");
+  assert.match(execute.description, /fully specified multi-step task/);
+  assert.match(execute.description, /execute every validated Set-edit step in this same call/);
+  assert.match(plan.description, /sequentially inside this set_plan call/);
+  assert.match(plan.description, /fully specified multi-step task, you MUST include execute: true/);
+  assert.match(plan.description, /Execution stops on the first failed step/);
+  assert.match(plan.description, /do not reissue completed steps/);
+
+  const stepSchema = (schema.properties.steps as { items: { properties: Record<string, unknown> } }).items;
+  const args = stepSchema.properties.args as { description: string };
+  assert.match(args.description, /\$ref/);
+  assert.match(args.description, /execute is true/);
+  assert.ok(stepSchema.properties.expectedEffects);
+});
+
+test("documents actual creation result fields so later plan steps can reference them", () => {
+  const createMidi = TOOLS.find((tool) => tool.name === "create_midi_track");
+  assert.ok(createMidi);
+  assert.match(createMidi.description, /result returns the actual track name in `created`/);
+  assert.match(createMidi.description, /step-id#\/created/);
+});

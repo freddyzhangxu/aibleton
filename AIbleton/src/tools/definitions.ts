@@ -230,6 +230,13 @@ export const TOOLS = [
       "Declare your step-by-step plan for the declared goal — call it AFTER set_goal, BEFORE any Set-modifying " +
       "tool, only for multi-step tasks whose expected effects fit the plan's measured vocabulary. Skip it for subjective " +
       "creative passes, including when set_goal only carries explicit hard boundaries. " +
+      "set_plan is declaration-only by default. For a fully specified multi-step task, you MUST include execute: true or no " +
+      "Set changes run. Only do this when each supported tool and complete args are known now or use an exact $ref to an " +
+      "earlier successful step. When execute is true, supported Set-edit steps run sequentially inside this " +
+      "set_plan call after full preflight; every step still uses normal selection, delete, confirmation, budget, and verification " +
+      "guards. The result reports each step. Execution stops on the first failed step; report partial changes and do not reissue " +
+      "completed steps. Only opt in when all tools and arguments are known now or use an exact $ref to an earlier step result. " +
+      "If a read is needed to determine a later argument, do that read before set_plan. " +
       "Each step names the tool you expect to " +
       "call and the expectedEffects it should produce, so you always know WHY you call a tool and WHAT should " +
       "change afterwards. Effects are a CLOSED vocabulary (see the schema): pick a metric and fill its " +
@@ -240,6 +247,12 @@ export const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        execute: {
+          type: "boolean",
+          description:
+            "For a fully specified multi-step task, set to true to execute every validated Set-edit step in this same call. " +
+            "Omit or set false to declare a plan without executing it.",
+        },
         steps: {
           type: "array",
           description: "Ordered plan steps (max 12). Keep descriptions short and musical.",
@@ -253,11 +266,13 @@ export const TOOLS = [
               },
               tool: {
                 type: "string",
-                description: "The tool expected to carry out this step (must be a real tool name)",
+                description: "The supported Set-edit tool this step calls (read-only, goal, and plan tools cannot run inside an executable plan)",
               },
               args: {
                 type: "object",
-                description: "Optional sketch of the intended call arguments — display only, never validated",
+                description:
+                  "Optional and display-only when execute is false. Required when execute is true. A value may be exactly " +
+                  "{\"$ref\":\"step-id#/json/pointer\"} to use a value from an earlier successful step; no string interpolation.",
               },
               expectedEffects: {
                 type: "array",
@@ -382,7 +397,8 @@ export const TOOLS = [
   },
   {
     name: "create_midi_track",
-    description: "Create a new MIDI track, optionally with a name.",
+    description:
+      "Create a new MIDI track, optionally with a name. The result returns the actual track name in `created` and `type: MIDI`; an executable plan can use {$ref: \"step-id#/created\"} as track_name in a later step.",
     input_schema: {
       type: "object",
       properties: { name: { type: "string" } },

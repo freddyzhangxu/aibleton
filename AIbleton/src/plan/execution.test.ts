@@ -182,4 +182,18 @@ test("sequential plan execution keeps results by ID and stops after errors, fals
   assert.deepEqual(stopped.completedStepIds, ["a"]);
   assert.deepEqual(stopped.skippedStepIds, ["b"]);
   assert.equal(stopped.stopped, true);
+
+  const thrown = await executePlanSequentially(
+    successSteps,
+    schemas,
+    async () => { throw new Error("bridge failed"); },
+    () => false,
+  );
+  assert.deepEqual(thrown, {
+    completedStepIds: [],
+    failedStepId: "a",
+    failure: "bridge failed",
+    skippedStepIds: ["b"],
+    stopped: false,
+  });
 });

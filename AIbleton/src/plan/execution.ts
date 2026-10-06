@@ -294,7 +294,18 @@ export async function executePlanSequentially(
         stopped: false,
       };
     }
-    const outcome = await runStep(step, resolved.value as Record<string, unknown>);
+    let outcome: PlanStepOutcome;
+    try {
+      outcome = await runStep(step, resolved.value as Record<string, unknown>);
+    } catch (error) {
+      return {
+        completedStepIds,
+        failedStepId: step.id,
+        failure: error instanceof Error ? error.message : String(error),
+        skippedStepIds: steps.slice(index + 1).map((remaining) => remaining.id),
+        stopped: false,
+      };
+    }
     if (!outcome.ok) {
       return {
         completedStepIds,
