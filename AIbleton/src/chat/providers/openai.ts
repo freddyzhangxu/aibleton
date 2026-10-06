@@ -243,7 +243,7 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       })),
     );
   });
-  const tools = activeTools().map((tool) => ({
+  const tools = activeTools(req.simpleEdit).map((tool) => ({
     type: "function",
     name: tool.name,
     description: tool.description,

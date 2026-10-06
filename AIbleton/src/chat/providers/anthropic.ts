@@ -68,7 +68,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
   const thinking = claudeEffort
     ? { type: "enabled", budget_tokens: claudeEffort.budget }
     : undefined;
-  const chatTools = activeTools();
+  const chatTools = activeTools(req.simpleEdit);
 
   // Continue text-only answers until they finish or this turn reaches the
   // provider-round safety limit.

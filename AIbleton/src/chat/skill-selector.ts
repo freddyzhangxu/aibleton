@@ -2,7 +2,8 @@ import { URL } from "node:url";
 import { detectProxy, rawPost, readAll } from "../http.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
 import { loadSkills, matchSkills, type Skill } from "../skills.js";
-import type { ResolvedConfig } from "./config.js";
+import { simpleEditKind, type ResolvedConfig } from "./config.js";
+import { measureAsync } from "./timing.js";
 import { readResponsesStream } from "./providers/openai.js";
 import { parseCustomResponse } from "./providers/custom-response.js";
 
@@ -192,15 +193,30 @@ async function requestSelectionText(
   return data.choices?.[0]?.message?.content ?? "";
 }
 
-/** Resolve explicit/keyword matches first, then ask the configured model only if none matched. */
-export async function selectSkillsForTurn(
+interface SelectorDependencies {
+  loadSkills: () => Skill[];
+  requestText: typeof requestSelectionText;
+  now: () => number;
+}
+
+/** Bounded, per-process cache. Catalog/endpoint/model changes use a new key;
+ * network failures and aborted selections are never cached. */
+export function createSkillSelector(dependencies: Partial<SelectorDependencies> = {}) {
+  const deps: SelectorDependencies = { loadSkills, requestText: requestSelectionText, now: Date.now, ...dependencies };
+  const cache = new Map<string, { at: number; names: string[] }>();
+  return async function selectSkills(
   context: Ctx,
   cfg: ResolvedConfig,
   userText: string,
 ): Promise<Skill[]> {
-  const skills = loadSkills();
+  if (toolState.abortCtl?.signal.aborted) return [];
+  const skills = deps.loadSkills();
   const directMatches = matchSkills(userText, skills);
   if (directMatches.length || !skills.length || !userText.trim()) return directMatches;
+  if (simpleEditKind(userText)) {
+    toolHooks.debugLog(context, "SKILLS semantic selection skipped: simple edit");
+    return [];
+  }
 
   const catalog = catalogFor(skills);
   if (!catalog) {
@@ -208,10 +224,26 @@ export async function selectSkillsForTurn(
     return [];
   }
 
+  const classifierText = userText.slice(0, MAX_USER_TEXT_CHARS);
+  const key = JSON.stringify([cfg.provider, cfg.baseUrl, cfg.model, catalog, classifierText]);
+  const hit = cache.get(key);
+  if (hit && deps.now() - hit.at < 300_000) {
+    toolHooks.debugLog(context, "SKILLS semantic selection cache hit");
+    return hit.names.map((name) => skills.find((skill) => skill.name === name)).filter((skill): skill is Skill => !!skill);
+  }
+
   const request = combineTurnSignal();
   try {
-    const raw = await requestSelectionText(cfg, userText.slice(0, MAX_USER_TEXT_CHARS), catalog, request.signal);
+    const raw = await measureAsync("SKILLS selection", () => deps.requestText(cfg, classifierText, catalog, request.signal), (line) => toolHooks.debugLog(context, line));
+    if (request.signal.aborted) return [];
     const selected = resolveSelectedNames(raw, skills);
+    // Invalid output is a transient failure too, rather than a cached "none".
+    const parsed: unknown = JSON.parse(responseSelectionText(raw));
+    if (Array.isArray(parsed)) {
+      cache.delete(key);
+      cache.set(key, { at: deps.now(), names: selected.map((skill) => skill.name) });
+      if (cache.size > 128) cache.delete(cache.keys().next().value!);
+    }
     if (selected.length) {
       toolHooks.debugLog(context, `SKILLS semantic match: ${selected.map((skill) => skill.name).join(", ")}`);
     }
@@ -223,4 +255,8 @@ export async function selectSkillsForTurn(
   } finally {
     request.cleanup();
   }
+  };
 }
+
+/** Direct matches win; only ambiguous requests incur semantic classification. */
+export const selectSkillsForTurn = createSkillSelector();

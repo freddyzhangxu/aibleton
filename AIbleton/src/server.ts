@@ -39,7 +39,7 @@ import {
 import { answerConfirmation, getPendingConfirm } from "./chat/gates.js";
 import { deleteAuthorizationFor } from "./chat/deleteauth.js";
 import { explicitEditScopeFor } from "./selectionguard.js";
-import { resolveConfig, type Attachment, type ChatRequest } from "./chat/config.js";
+import { resolveConfig, simpleEditKind, withTaskEffort, type Attachment, type ChatRequest, type ResolvedConfig } from "./chat/config.js";
 import { resetTurnState } from "./agent/runtime.js";
 import { clearRightClickFocus, clearSelectionContext, updateSetContext } from "./setcontext.js";
 import { chatAnthropic } from "./chat/providers/anthropic.js";
@@ -51,7 +51,8 @@ import { toBpm, toStrArr } from "./tools/helpers.js";
 import { NO_AUTH_HINT } from "./prompts.js";
 import { lastUserText, loadSkills, matchSkills, skillProblems } from "./skills.js";
 import { selectSkillsForTurn } from "./chat/skill-selector.js";
-import { testConnection, testAudioConnection } from "./chat/testconn.js";
+import { testConnection, testAudioConnection, listModels } from "./chat/testconn.js";
+import { modelPreferenceScope, normalizeModelPreferences, updateModelPreferences, type ModelPreferences } from "./chat/model-preferences.js";
 import { errMessage, friendlyBoundaryError } from "./errors.js";
 import { commonText, resolveTurnLanguage } from "./i18n/index.js";
 import { monotonicNow } from "./chat/timing.js";
@@ -129,6 +130,11 @@ let manualConfigPath: string | null = null;
  * webview's localStorage doesn't survive reopening, so the UI asks the
  * server which provider to default to. */
 let lastProvider: Provider = "claude";
+/** Picker preferences are scoped to both provider and endpoint. */
+let modelPreferences: Record<string, ModelPreferences> = {};
+/** Models an explicit Test connection proved working, per provider:endpoint
+ * scope — the quick check stops its "run Test connection" nudge for these. */
+let verifiedModels: Record<string, string[]> = {};
 
 /** Audio-generation settings from the settings UI, persisted in the same
  * providers.json (same localStorage-loss problem as lastProvider). */
@@ -223,12 +229,29 @@ function loadManualConfigs(context: Ctx): void {
     const data = JSON.parse(raw) as
       Partial<Record<Provider, LocalConfig>> & {
         lastProvider?: unknown;
+        modelPicker?: Record<string, unknown>;
+        verified?: Record<string, unknown>;
         audio?: Partial<PersistedAudio>;
         web?: { enabled?: unknown };
         move?: { host?: unknown; token?: unknown };
         update?: { latest?: unknown; url?: unknown; checkedAt?: unknown; dismissed?: unknown };
       };
     manualConfigs = {};
+    modelPreferences = {};
+    verifiedModels = {};
+    if (data.modelPicker && typeof data.modelPicker === "object" && !Array.isArray(data.modelPicker)) {
+      for (const [scope, prefs] of Object.entries(data.modelPicker)) {
+        if (/^(claude|codex|gemini|custom):/.test(scope)) modelPreferences[scope] = normalizeModelPreferences(prefs);
+      }
+    }
+    if (data.verified && typeof data.verified === "object" && !Array.isArray(data.verified)) {
+      for (const [scope, ids] of Object.entries(data.verified)) {
+        if (!/^(claude|codex|gemini|custom):/.test(scope) || !Array.isArray(ids)) continue;
+        verifiedModels[scope] = [...new Set(ids
+          .filter((id): id is string => typeof id === "string" && Boolean(id.trim()) && id.length <= 256)
+          .map((id) => id.trim()))].slice(0, 100);
+      }
+    }
     for (const p of ["claude", "codex", "gemini", "custom"] as Provider[]) {
       const cfg = data[p];
       if (cfg && typeof cfg === "object") manualConfigs[p] = cfg;
@@ -267,6 +290,8 @@ function loadManualConfigs(context: Ctx): void {
     }
   } catch {
     manualConfigs = {};
+    modelPreferences = {};
+    verifiedModels = {};
   }
   const configured = Object.keys(manualConfigs).join(", ");
   console.log(`[ai-assistant] Provider 手动配置: ${configured || "无"}`);
@@ -277,7 +302,7 @@ function saveManualConfigs(): void {
   try {
     mkdirOutsideSandbox(path.dirname(manualConfigPath));
     writeHomeFile(manualConfigPath,
-      JSON.stringify({ ...manualConfigs, lastProvider, audio: audioSettings, web: toolState.webSettings, move: toolState.moveSettings, update: toolState.updateInfo }, null, 2));
+      JSON.stringify({ ...manualConfigs, lastProvider, modelPicker: modelPreferences, verified: verifiedModels, audio: audioSettings, web: toolState.webSettings, move: toolState.moveSettings, update: toolState.updateInfo }, null, 2));
   } catch {
     // In-memory copy still works for this run.
   }
@@ -367,15 +392,26 @@ async function chat(context: Ctx, req: ChatRequest) {
   const setFp = updateSetContext(context);
   if (setFp) debugLog(context, `SET key=${setFp.key}${setFp.changed ? " CHANGED" : ""}`);
   const cfg = resolveConfig(req);
-  const withSelectedSkills = async (): Promise<ChatRequest> => {
+  const withSelectedSkills = async (): Promise<{ request: ChatRequest; config: ResolvedConfig }> => {
     const selected = await selectSkillsForTurn(context, cfg, lastUserText());
-    return { ...req, selectedSkillNames: selected.map((skill) => skill.name) };
+    const userText = lastUserText();
+    const selectedReq: ChatRequest = {
+      ...req,
+      selectedSkillNames: selected.map((skill) => skill.name),
+      simpleEdit: req.attachments?.length ? undefined : simpleEditKind(userText),
+    };
+    const taskConfig = withTaskEffort(cfg, selectedReq, userText);
+    if (selectedReq.simpleEdit || taskConfig !== cfg) {
+      debugLog(context, `TASK policy simpleEdit=${selectedReq.simpleEdit ?? "none"} effort=${taskConfig.reasoningEffort ?? taskConfig.effort ?? "provider-default"}`);
+    }
+    return { request: selectedReq, config: taskConfig };
   };
   // Custom endpoints may legitimately need no key (Ollama & co.) — they get
   // their own validation (baseUrl + model) inside chatCustom instead.
   if (cfg.provider === "custom") {
     if (!cfg.baseUrl || !cfg.model) return chatCustom(context, cfg, req);
-    return chatCustom(context, cfg, await withSelectedSkills());
+    const selected = await withSelectedSkills();
+    return chatCustom(context, selected.config, selected.request);
   }
   if (!cfg.authToken && !cfg.refreshToken) {
     const hint = NO_AUTH_HINT[req.language ?? ""] ?? NO_AUTH_HINT.en;
@@ -383,11 +419,12 @@ async function chat(context: Ctx, req: ChatRequest) {
   }
   if (cfg.provider === "codex") {
     await ensureCodexAuth(cfg, req.language);
-    return chatOpenAI(context, cfg, await withSelectedSkills());
+    const selected = await withSelectedSkills();
+    return chatOpenAI(context, selected.config, selected.request);
   }
-  const selectedReq = await withSelectedSkills();
-  if (cfg.provider === "gemini") return chatGemini(context, cfg, selectedReq);
-  return chatAnthropic(context, cfg, selectedReq);
+  const selected = await withSelectedSkills();
+  if (cfg.provider === "gemini") return chatGemini(context, selected.config, selected.request);
+  return chatAnthropic(context, selected.config, selected.request);
 }
 
 // ---------- HTTP server ----------
@@ -481,10 +518,62 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
           ? providerParam
           : "claude";
       const full = u.searchParams.get("full") === "1";
-      void testConnection(provider, full).then(
-        (r) => send(200, JSON.stringify({ provider, ...r })),
+      const scope = modelPreferenceScope(provider, resolveConfig({ provider }).baseUrl);
+      void testConnection(provider, full, verifiedModels[scope]).then((r) => {
+        // A clean explicit test (no caveat detail) proves this endpoint serves
+        // the model — remember it so reopening stays a plain "Connected".
+        // A 429 "rate limited (auth OK)" never reaches this: generation
+        // wasn't actually proven.
+        if (full && r.status === "connected" && r.model && !r.detail) {
+          const ids = verifiedModels[scope] ?? [];
+          if (!ids.includes(r.model)) {
+            verifiedModels[scope] = [...ids, r.model];
+            saveManualConfigs();
+          }
+        }
+        send(200, JSON.stringify({ provider, ...r }));
+      }, (err) =>
+        send(200, JSON.stringify({ provider, status: "error", detail: errMessage(err).slice(0, 160) })),
+      );
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/model-preferences") {
+      readBody((parsed) => {
+        const provider = parsed.provider;
+        if (provider !== "claude" && provider !== "codex" && provider !== "gemini" && provider !== "custom") {
+          send(400, JSON.stringify({ error: "unknown provider" }));
+          return;
+        }
+        const scope = modelPreferenceScope(provider, resolveConfig({ provider }).baseUrl);
+        if (parsed.scope !== scope) {
+          send(409, JSON.stringify({ error: "provider endpoint changed" }));
+          return;
+        }
+        if (typeof parsed.model !== "string" || !parsed.model.trim() || parsed.model.length > 256 ||
+            ("favorite" in parsed && typeof parsed.favorite !== "boolean")) {
+          send(400, JSON.stringify({ error: "invalid model preference" }));
+          return;
+        }
+        modelPreferences[scope] = updateModelPreferences(modelPreferences[scope], parsed.model, parsed.favorite as boolean | undefined);
+        saveManualConfigs();
+        send(200, JSON.stringify({ preferences: modelPreferences[scope] }));
+      });
+      return;
+    }
+    // Toolbar model picker: the provider's model catalog (same free
+    // models-list GETs as the connection probe — never a generation call).
+    if (req.method === "GET" && req.url?.startsWith("/api/models")) {
+      const providerParam =
+        new URL(req.url, "http://127.0.0.1").searchParams.get("provider") ?? undefined;
+      const provider: Provider =
+        providerParam === "codex" || providerParam === "gemini" || providerParam === "custom"
+          ? providerParam
+          : "claude";
+      const scope = modelPreferenceScope(provider, resolveConfig({ provider }).baseUrl);
+      void listModels(provider).then(
+        (r) => send(200, JSON.stringify({ provider, scope, ...r, ...normalizeModelPreferences(modelPreferences[scope]) })),
         (err) =>
-          send(200, JSON.stringify({ provider, status: "error", detail: errMessage(err).slice(0, 160) })),
+          send(200, JSON.stringify({ provider, scope, models: [], ...normalizeModelPreferences(modelPreferences[scope]), detail: errMessage(err).slice(0, 160) })),
       );
       return;
     }
@@ -798,6 +887,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         pending: getPendingConfirm(),
         phase: toolState.phase,
         activity: toolState.activity,
+        progress: busy ? toolState.progress : null,
       }));
       return;
     }
@@ -935,10 +1025,12 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             toolState.activeLanguageContext = null;
             toolState.activeDeleteAuthorization = undefined;
             toolState.activeCreatedDeviceHandles.clear();
+            toolState.activeCreatedTrackHandles.clear();
             toolState.activeGlobalIntent = false;
             toolState.activeExplicitEditScope = { trackIndices: [], arrangementRanges: [] };
             toolState.phase = null;
             toolState.activity = null;
+            toolState.progress = { completedTools: 0, plan: undefined };
             // Never leave a confirmation dangling past its task's lifetime.
             answerConfirmation(false);
           }

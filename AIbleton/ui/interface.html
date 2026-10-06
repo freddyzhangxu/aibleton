@@ -246,6 +246,8 @@
     #customFields { display: flex; flex-direction: column; gap: 8px; }
     #customFields.hidden { display: none; }
     .cfg-hint { font-size: 10px; color: var(--c-text-dim); line-height: 1.45; }
+    /* Reserve 2 lines so the panel height never jumps when the provider hint swaps */
+    #cfgHint { min-height: 29px; }
     /* Per-provider connection status badge (Settings → AI Configuration) */
     .conn-badge { margin-left: auto; font-size: 10px; color: var(--c-text-dim); display: flex; align-items: center; gap: 4px; }
     .conn-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-text-dim); flex: none; }
@@ -489,7 +491,49 @@
     .chip .x:hover { color: #FF5F57; }
 
     /* Toolbar under the input: model / effort / attach … YOLO */
-    .bar { display: flex; gap: 6px; align-items: center; }
+    .bar { display: flex; gap: 6px; align-items: center; position: relative; }
+    /* Model picker popup above the toolbar model button (mirrors #skillPop). */
+    #modelPop.hidden { display: none; }
+    #modelPop {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 0;
+      width: min(320px, calc(100vw - 28px));
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-border);
+      border-radius: 6px;
+      max-height: 300px;
+      overflow-y: auto;
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+      z-index: 30;
+      padding: 2px 0;
+    }
+    .model-row {
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+      padding: 5px 10px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      font-size: 12px;
+    }
+    .model-row:hover { background: var(--c-border); }
+    .model-row .tick { width: 14px; flex: none; color: var(--c-accent); font-size: 11px; }
+    .model-row .m-name { overflow: hidden; text-overflow: ellipsis; }
+    .model-controls { position: sticky; top: -2px; z-index: 1; background: var(--c-input-bg); padding: 8px 10px 6px; border-bottom: 1px solid var(--c-border); }
+    .model-search { box-sizing: border-box; width: 100%; background: transparent; color: var(--c-text); border: 1px solid var(--c-border); border-radius: 4px; padding: 6px 8px; font: inherit; font-size: 12px; outline: none; }
+    .model-search:focus { border-color: var(--c-accent); }
+    .model-tabs { display: flex; gap: 12px; margin-top: 6px; }
+    .model-tabs button { background: none; border: none; padding: 2px 0; color: var(--c-text-dim); font: inherit; font-size: 11px; cursor: pointer; }
+    .model-tabs button[aria-pressed="true"] { color: var(--c-accent); }
+    .model-favorite { flex: none; margin-left: auto; background: none; border: none; color: var(--c-text-dim); padding: 0 0 0 6px; cursor: pointer; font-size: 14px; }
+    .model-favorite[aria-pressed="true"], .model-favorite:hover { color: var(--c-accent); }
+    .model-preview { flex: none; color: var(--c-text-dim); font-size: 10px; }
+    .model-row.model-note { color: var(--c-text-dim); cursor: default; font-size: 11px; }
+    .model-row.model-note:hover { background: none; }
+    .model-row.model-custom { border-top: 1px solid var(--c-border); color: var(--c-text-dim); }
+    .model-row.model-custom:hover { color: var(--c-text); }
     .bar-btn {
       background: var(--c-input-bg);
       border: 1px solid var(--c-border);
@@ -843,6 +887,7 @@
       <textarea id="input" rows="2" placeholder="输入消息，Enter 发送（Shift+Enter 换行）"></textarea>
     </div>
     <div class="bar">
+      <div id="modelPop" class="hidden"></div>
       <button id="modelBtn" class="bar-btn" title=""><span id="modelName">…</span></button>
       <select id="effortSel" class="bar-btn" title=""></select>
       <button id="attachBtn" class="bar-btn" title="">
@@ -891,6 +936,7 @@
         close: '关闭', minimize: '最小化为右下角小条（需 AIbletonBar 运行中）',
         newChat: '新建对话', history: '历史对话',
         send: '发送', stop: '停止', inputPh: '输入消息，Enter 发送（Shift+Enter 换行）',
+        completedOperations: '已完成 {n} 项操作', batchProgress: '批量步骤 {n}/{total}',
         thinkingNote: '（可关闭窗口，任务在后台继续）',
         phase_reading: '读取 Live Set…', phase_analyzing: '分析编曲…',
         phase_rendering: '正在从 Live 渲染音频…', phase_analyzing_render: '正在分析渲染音频…',
@@ -921,7 +967,7 @@
         customRequestUrl: 'Request URL',
         customHint: 'POST 该地址；body 模板用 {{prompt}} {{duration}} 占位。响应：bytes=音频流；url/base64/hex=JSON，填字段路径。异步任务填轮询 URL，{taskId} 占位',
         cfgHint: '留空将自动使用本机 CLI 配置与默认值',
-        cfgHintCustom: 'Custom：API 地址与模型必填；本地服务（如 Ollama）可留空 API Key',
+        cfgHintCustom: 'Custom：OpenAI 兼容接口；API 地址与模型必填；Ollama 等本地服务可留空 Key',
         apiKeyPhCustom: '可选，本地服务可留空',
         testConnection: '测试连接', connTesting: '测试中…',
         connConnected: '已连接', connNotConfigured: '未配置',
@@ -930,7 +976,9 @@
         effortDefault: '默认 Effort',
         effortTitle: '思考强度：更高 = 推理更深但更慢',
         attachTitle: '上传文件给 AI：图片、文本、MIDI、Ableton 工程均 ≤10MB；点击选择、拖入窗口或 ⌘V 粘贴',
-        modelTitle: '当前模型 · 点击打开设置',
+        modelTitle: '当前模型 · 点击切换模型',
+        modelLoading: '加载模型列表…', modelCustom: '自定义模型…', modelListFail: '获取模型列表失败',
+        modelCommon: '推荐', modelAll: '全部模型', modelSearch: '搜索全部模型…', modelNoMatch: '没有匹配的模型', modelFavorite: '收藏模型', modelUnfavorite: '取消收藏', modelPreview: '预览版', modelSaveFail: '模型偏好保存失败，请重试',
         yoloTitle: 'YOLO 模式：开启 = AI 直接执行所有操作；关闭 = 修改 Set 前需你确认',
         allow: '允许', deny: '拒绝', confirmAsk: 'AI 请求执行', confirmCostly: '消耗 API 额度',
         fileTooBig: '文件过大：', fileUnsupported: '不支持的文件类型：',
@@ -948,6 +996,7 @@
         close: 'Close', minimize: 'Minimize to the corner bar (requires AIbletonBar running)',
         newChat: 'New chat', history: 'History',
         send: 'Send', stop: 'Stop', inputPh: 'Type a message — Enter to send (Shift+Enter for a new line)',
+        completedOperations: '{n} operations completed', batchProgress: 'Batch steps {n}/{total}',
         thinkingNote: ' (you can close this window; the task continues in the background)',
         phase_reading: 'Reading Live Set…', phase_analyzing: 'Analyzing arrangement…',
         phase_rendering: 'Rendering audio from Live…', phase_analyzing_render: 'Analyzing rendered audio…',
@@ -978,7 +1027,7 @@
         customRequestUrl: 'Request URL',
         customHint: 'POSTs the request URL; {{prompt}} {{duration}} in the body template. Response: bytes = raw audio; url/base64/hex = JSON field path. Async: poll URL with {taskId}',
         cfgHint: 'Leave empty to use local CLI config and defaults',
-        cfgHintCustom: 'Custom: Base URL and model are required; local servers (e.g. Ollama) may leave the API Key empty',
+        cfgHintCustom: 'Custom: OpenAI-compatible; Base URL + model required; local servers can skip API Key',
         apiKeyPhCustom: 'Optional — local servers may leave empty',
         testConnection: 'Test connection', connTesting: 'Testing…',
         connConnected: 'Connected', connNotConfigured: 'Not configured',
@@ -987,7 +1036,9 @@
         effortDefault: 'Default effort',
         effortTitle: 'Reasoning effort: higher = deeper but slower',
         attachTitle: 'Attach images, text, MIDI, or Live sets (≤10MB each): click, drag in, or paste',
-        modelTitle: 'Current model · click to open Settings',
+        modelTitle: 'Current model · click to switch model',
+        modelLoading: 'Loading models…', modelCustom: 'Custom model…', modelListFail: 'Could not load the model list',
+        modelCommon: 'Recommended', modelAll: 'All models', modelSearch: 'Search all models…', modelNoMatch: 'No matching models', modelFavorite: 'Favorite model', modelUnfavorite: 'Remove favorite', modelPreview: 'Preview', modelSaveFail: 'Could not save model preferences; please retry',
         yoloTitle: 'YOLO: on = AI runs every action directly; off = confirm before modifying the Set',
         allow: 'Allow', deny: 'Deny', confirmAsk: 'AI wants to run', confirmCostly: 'uses API credits',
         fileTooBig: 'File too large: ', fileUnsupported: 'Unsupported file type: ',
@@ -1005,6 +1056,7 @@
         close: 'Schließen', minimize: 'Zur Leiste unten rechts minimieren (AIbletonBar muss laufen)',
         newChat: 'Neuer Chat', history: 'Verlauf',
         send: 'Senden', stop: 'Stoppen', inputPh: 'Nachricht eingeben – Enter zum Senden (Umschalt+Enter für Zeilenumbruch)',
+        completedOperations: '{n} Vorgänge abgeschlossen', batchProgress: 'Schritte {n}/{total}',
         thinkingNote: ' (Fenster kann geschlossen werden, die Aufgabe läuft im Hintergrund weiter)',
         phase_reading: 'Live Set wird gelesen…', phase_analyzing: 'Arrangement wird analysiert…',
         phase_rendering: 'Audio wird aus Live gerendert…', phase_analyzing_render: 'Gerendertes Audio wird analysiert…',
@@ -1029,7 +1081,7 @@
         customRequestUrl: 'Request-URL',
         customHint: 'POST an die Request-URL; {{prompt}} {{duration}} im Body-Template. Antwort: bytes = rohes Audio; url/base64/hex = JSON-Feldpfad. Asynchron: Poll-URL mit {taskId}',
         cfgHint: 'Leer lassen = lokale CLI-Konfiguration und Standardwerte',
-        cfgHintCustom: 'Custom: API-Adresse und Modell erforderlich; lokale Server (z. B. Ollama) können ohne API-Schlüssel laufen',
+        cfgHintCustom: 'Custom: OpenAI-kompatibel; Adresse + Modell erforderlich; lokal ohne Schlüssel',
         apiKeyPhCustom: 'Optional — lokale Server können leer bleiben',
         testConnection: 'Verbindung testen', connTesting: 'Teste…',
         connConnected: 'Verbunden', connNotConfigured: 'Nicht konfiguriert',
@@ -1038,7 +1090,9 @@
         effortDefault: 'Standard-Effort',
         effortTitle: 'Denktiefe: höher = gründlicher, aber langsamer',
         attachTitle: 'Dateien anhängen: Bilder, Text, MIDI und Live-Sets jeweils ≤10MB — klicken, ziehen oder einfügen',
-        modelTitle: 'Aktuelles Modell · Klicken öffnet Einstellungen',
+        modelTitle: 'Aktuelles Modell · Klicken zum Wechseln',
+        modelLoading: 'Modelle werden geladen…', modelCustom: 'Eigenes Modell…', modelListFail: 'Modellliste konnte nicht geladen werden',
+        modelCommon: 'Empfohlen', modelAll: 'Alle Modelle', modelSearch: 'Alle Modelle durchsuchen…', modelNoMatch: 'Keine passenden Modelle', modelFavorite: 'Modell merken', modelUnfavorite: 'Favorit entfernen', modelPreview: 'Vorschau', modelSaveFail: 'Modellpräferenzen nicht gespeichert; bitte erneut versuchen',
         yoloTitle: 'YOLO: ein = KI führt alles direkt aus; aus = Bestätigung vor Set-Änderungen',
         allow: 'Erlauben', deny: 'Ablehnen', confirmAsk: 'KI möchte ausführen', confirmCostly: 'verbraucht API-Guthaben',
         fileTooBig: 'Datei zu groß: ', fileUnsupported: 'Nicht unterstützter Dateityp: ',
@@ -1056,6 +1110,7 @@
         close: 'Fermer', minimize: 'Réduire en barre en bas à droite (AIbletonBar requis)',
         newChat: 'Nouvelle conversation', history: 'Historique',
         send: 'Envoyer', stop: 'Arrêter', inputPh: 'Saisissez un message — Entrée pour envoyer (Maj+Entrée pour sauter une ligne)',
+        completedOperations: '{n} opérations terminées', batchProgress: 'Étapes {n}/{total}',
         thinkingNote: ' (vous pouvez fermer la fenêtre, la tâche continue en arrière-plan)',
         phase_reading: 'Lecture du Live Set…', phase_analyzing: 'Analyse de l’arrangement…',
         phase_rendering: 'Rendu audio depuis Live…', phase_analyzing_render: 'Analyse de l’audio rendu…',
@@ -1080,7 +1135,7 @@
         customRequestUrl: 'URL de requête',
         customHint: "POST vers l'URL ; {{prompt}} {{duration}} dans le template. Réponse : bytes = audio brut ; url/base64/hex = chemin du champ JSON. Asynchrone : URL de polling avec {taskId}",
         cfgHint: 'Laisser vide = config CLI locale et valeurs par défaut',
-        cfgHintCustom: 'Custom : adresse API et modèle requis ; les serveurs locaux (ex. Ollama) peuvent laisser la clé API vide',
+        cfgHintCustom: 'Custom : compatible OpenAI ; adresse + modèle requis ; clé vide possible en local',
         apiKeyPhCustom: 'Optionnel — les serveurs locaux peuvent laisser vide',
         testConnection: 'Tester la connexion', connTesting: 'Test en cours…',
         connConnected: 'Connecté', connNotConfigured: 'Non configuré',
@@ -1089,7 +1144,9 @@
         effortDefault: 'Effort par défaut',
         effortTitle: 'Intensité de raisonnement : plus haut = plus profond mais plus lent',
         attachTitle: 'Joindre images, texte, MIDI ou Live Sets (≤10 Mo chacun) : cliquer, glisser ou coller',
-        modelTitle: 'Modèle actuel · cliquer pour ouvrir les paramètres',
+        modelTitle: 'Modèle actuel · cliquer pour changer',
+        modelLoading: 'Chargement des modèles…', modelCustom: 'Modèle personnalisé…', modelListFail: 'Impossible de charger la liste des modèles',
+        modelCommon: 'Recommandés', modelAll: 'Tous les modèles', modelSearch: 'Rechercher tous les modèles…', modelNoMatch: 'Aucun modèle correspondant', modelFavorite: 'Ajouter aux favoris', modelUnfavorite: 'Retirer des favoris', modelPreview: 'Aperçu', modelSaveFail: 'Préférences non enregistrées ; veuillez réessayer',
         yoloTitle: 'YOLO : activé = l’IA exécute tout directement ; désactivé = confirmation avant de modifier le Set',
         allow: 'Autoriser', deny: 'Refuser', confirmAsk: 'L’IA veut exécuter', confirmCostly: 'consomme des crédits API',
         fileTooBig: 'Fichier trop volumineux : ', fileUnsupported: 'Type de fichier non pris en charge : ',
@@ -1107,6 +1164,7 @@
         close: '閉じる', minimize: '右下のミニバーに最小化（AIbletonBar の起動が必要）',
         newChat: '新規チャット', history: '履歴',
         send: '送信', stop: '停止', inputPh: 'メッセージを入力 — Enter で送信（Shift+Enter で改行）',
+        completedOperations: '{n} 件の操作が完了', batchProgress: '手順 {n}/{total}',
         thinkingNote: '（ウィンドウを閉じてもタスクはバックグラウンドで続行）',
         phase_reading: 'Live Set を読み込み中…', phase_analyzing: 'アレンジを解析中…',
         phase_rendering: 'Live からオーディオをレンダリング中…', phase_analyzing_render: 'レンダリング済みオーディオを解析中…',
@@ -1131,7 +1189,7 @@
         customRequestUrl: 'リクエスト URL',
         customHint: 'リクエスト URL に POST;ボディテンプレートで {{prompt}} {{duration}} を使用。応答: bytes=生音声、url/base64/hex=JSON フィールドパス。非同期: {taskId} 入りポーリング URL',
         cfgHint: '空欄ならローカル CLI 設定とデフォルト値を使用します',
-        cfgHintCustom: 'Custom：API アドレスとモデルは必須です。ローカルサーバー（Ollama 等）は API キー空欄可',
+        cfgHintCustom: 'Custom：OpenAI 互換。API アドレスとモデル必須。Ollama 等は API キー空欄可',
         apiKeyPhCustom: '任意 — ローカルサーバーは空欄可',
         testConnection: '接続テスト', connTesting: 'テスト中…',
         connConnected: '接続済み', connNotConfigured: '未設定',
@@ -1140,7 +1198,9 @@
         effortDefault: 'デフォルト',
         effortTitle: '思考の強さ：高いほど深く推論しますが遅くなります',
         attachTitle: 'ファイル添付：画像・テキスト・MIDI・Live Set は各 ≤10MB。クリック、ドラッグ、または貼り付け',
-        modelTitle: '現在のモデル · クリックで設定を開く',
+        modelTitle: '現在のモデル · クリックで切り替え',
+        modelLoading: 'モデル一覧を読み込み中…', modelCustom: 'カスタムモデル…', modelListFail: 'モデル一覧を取得できませんでした',
+        modelCommon: 'おすすめ', modelAll: 'すべてのモデル', modelSearch: 'すべてのモデルを検索…', modelNoMatch: '一致するモデルがありません', modelFavorite: 'お気に入りに追加', modelUnfavorite: 'お気に入りから削除', modelPreview: 'プレビュー', modelSaveFail: 'モデル設定を保存できませんでした。再試行してください',
         yoloTitle: 'YOLO：オン = AI がすべて直接実行、オフ = Set 変更前に確認',
         allow: '許可', deny: '拒否', confirmAsk: 'AI が実行を要求', confirmCostly: 'API クレジットを消費',
         fileTooBig: 'ファイルが大きすぎます：', fileUnsupported: '未対応のファイル形式：',
@@ -1158,6 +1218,7 @@
         close: 'Cerrar', minimize: 'Minimizar a la barra inferior derecha (requiere AIbletonBar)',
         newChat: 'Nuevo chat', history: 'Historial',
         send: 'Enviar', stop: 'Detener', inputPh: 'Escribe un mensaje — Enter para enviar (Mayús+Enter para nueva línea)',
+        completedOperations: '{n} operaciones completadas', batchProgress: 'Pasos {n}/{total}',
         thinkingNote: ' (puedes cerrar la ventana; la tarea continúa en segundo plano)',
         phase_reading: 'Leyendo el Live Set…', phase_analyzing: 'Analizando el arreglo…',
         phase_rendering: 'Renderizando audio desde Live…', phase_analyzing_render: 'Analizando el audio renderizado…',
@@ -1182,7 +1243,7 @@
         customRequestUrl: 'URL de solicitud',
         customHint: 'POST a la URL; {{prompt}} {{duration}} en la plantilla. Respuesta: bytes = audio crudo; url/base64/hex = ruta del campo JSON. Asíncrono: URL de sondeo con {taskId}',
         cfgHint: 'Vacío = config CLI local y valores por defecto',
-        cfgHintCustom: 'Custom: la dirección API y el modelo son obligatorios; los servidores locales (p. ej. Ollama) pueden dejar la API Key vacía',
+        cfgHintCustom: 'Custom: compatible OpenAI; dirección + modelo obligatorios; clave opcional en local',
         apiKeyPhCustom: 'Opcional — los servidores locales pueden dejarlo vacío',
         testConnection: 'Probar conexión', connTesting: 'Probando…',
         connConnected: 'Conectado', connNotConfigured: 'No configurado',
@@ -1191,7 +1252,9 @@
         effortDefault: 'Effort por defecto',
         effortTitle: 'Intensidad de razonamiento: mayor = más profundo pero más lento',
         attachTitle: 'Adjuntar imágenes, texto, MIDI o Sets de Live (≤10MB cada uno): clic, arrastrar o pegar',
-        modelTitle: 'Modelo actual · clic para abrir Ajustes',
+        modelTitle: 'Modelo actual · clic para cambiar',
+        modelLoading: 'Cargando modelos…', modelCustom: 'Modelo personalizado…', modelListFail: 'No se pudo cargar la lista de modelos',
+        modelCommon: 'Recomendados', modelAll: 'Todos los modelos', modelSearch: 'Buscar todos los modelos…', modelNoMatch: 'No hay modelos coincidentes', modelFavorite: 'Añadir a favoritos', modelUnfavorite: 'Quitar de favoritos', modelPreview: 'Vista previa', modelSaveFail: 'No se guardaron las preferencias; inténtalo de nuevo',
         yoloTitle: 'YOLO: activado = la IA ejecuta todo directamente; desactivado = confirmar antes de modificar el Set',
         allow: 'Permitir', deny: 'Denegar', confirmAsk: 'La IA quiere ejecutar', confirmCostly: 'consume créditos de API',
         fileTooBig: 'Archivo demasiado grande: ', fileUnsupported: 'Tipo de archivo no admitido: ',
@@ -1209,6 +1272,7 @@
         close: 'Chiudi', minimize: 'Riduci a barra in basso a destra (richiede AIbletonBar)',
         newChat: 'Nuova chat', history: 'Cronologia',
         send: 'Invia', stop: 'Interrompi', inputPh: 'Scrivi un messaggio — Invio per inviare (Maiusc+Invio per andare a capo)',
+        completedOperations: '{n} operazioni completate', batchProgress: 'Passaggi {n}/{total}',
         thinkingNote: ' (puoi chiudere la finestra; l’attività continua in background)',
         phase_reading: 'Lettura del Live Set…', phase_analyzing: 'Analisi dell’arrangiamento…',
         phase_rendering: 'Rendering audio da Live…', phase_analyzing_render: 'Analisi dell’audio renderizzato…',
@@ -1233,7 +1297,7 @@
         customRequestUrl: 'URL richiesta',
         customHint: "POST all'URL; {{prompt}} {{duration}} nel template. Risposta: bytes = audio grezzo; url/base64/hex = percorso del campo JSON. Asincrono: URL di polling con {taskId}",
         cfgHint: 'Vuoto = config CLI locale e valori predefiniti',
-        cfgHintCustom: 'Custom: indirizzo API e modello obbligatori; i server locali (es. Ollama) possono lasciare vuota la API Key',
+        cfgHintCustom: 'Custom: compatibile OpenAI; URL + modello obbligatori; chiave opzionale in locale',
         apiKeyPhCustom: 'Opzionale — i server locali possono lasciarlo vuoto',
         testConnection: 'Testa connessione', connTesting: 'Test in corso…',
         connConnected: 'Connesso', connNotConfigured: 'Non configurato',
@@ -1242,7 +1306,9 @@
         effortDefault: 'Effort predefinito',
         effortTitle: 'Intensità di ragionamento: più alta = più profonda ma più lenta',
         attachTitle: 'Allega immagini, testo, MIDI o Live Set (≤10MB ciascuno): clic, trascina o incolla',
-        modelTitle: 'Modello attuale · clic per aprire le Impostazioni',
+        modelTitle: 'Modello attuale · clic per cambiare',
+        modelLoading: 'Caricamento modelli…', modelCustom: 'Modello personalizzato…', modelListFail: "Impossibile caricare l'elenco dei modelli",
+        modelCommon: 'Consigliati', modelAll: 'Tutti i modelli', modelSearch: 'Cerca tutti i modelli…', modelNoMatch: 'Nessun modello corrispondente', modelFavorite: 'Aggiungi ai preferiti', modelUnfavorite: 'Rimuovi dai preferiti', modelPreview: 'Anteprima', modelSaveFail: 'Preferenze non salvate; riprova',
         yoloTitle: 'YOLO: attivo = l’IA esegue tutto direttamente; spento = conferma prima di modificare il Set',
         allow: 'Consenti', deny: 'Nega', confirmAsk: 'L’IA vuole eseguire', confirmCostly: 'consuma crediti API',
         fileTooBig: 'File troppo grande: ', fileUnsupported: 'Tipo di file non supportato: ',
@@ -1335,31 +1401,61 @@
             changed = true;
           }
         }
-        if (changed) updateModelName();
+        if (changed) {
+          updateModelName();
+          renderEfforts();
+        }
       }).catch(() => {});
     }
     for (const f of Object.keys(cfgInputs)) {
       cfgInputs[f].addEventListener('change', () => {
         localStorage.setItem(`ai.${currentProvider}.${f}`, cfgInputs[f].value);
         saveProviderFields();
+        if (f !== 'model') {
+          delete modelListCache[currentProvider];
+          modelCatalogRequest++;
+          closeModelPop();
+        }
+        if (f === 'baseUrl' || f === 'model') renderEfforts();
         refreshHealth();
         // New credentials/baseUrl/model — re-check this provider's badge.
         testProvider(currentProvider, false);
       });
     }
-    cfgInputs.model.addEventListener('input', () => updateModelName());
+    cfgInputs.model.addEventListener('input', () => { updateModelName(); renderEfforts(); });
 
     // Toolbar model label: custom override > server-resolved > provider default.
     const modelName = document.getElementById('modelName');
+    // Last server-resolved model (from /api/health) — the picker's "current"
+    // when the settings field is empty.
+    let healthModel = '';
+    function setCurrentProvider(provider) {
+      if (provider === currentProvider) return;
+      currentProvider = provider;
+      healthModel = '';
+      modelCatalogRequest++;
+      closeModelPop();
+      // Connection test output is stored per provider; rerender when switching so the previous
+      // provider's result is not left visible.
+      renderConnOut('chat');
+    }
     function updateModelName(serverModel) {
       modelName.textContent =
-        cfgInputs.model.value || serverModel || PROVIDERS[currentProvider].model;
+        cfgInputs.model.value || serverModel || healthModel || PROVIDERS[currentProvider].model;
+    }
+    // The model a chat request would actually use right now.
+    function currentModelId() {
+      return cfgInputs.model.value || healthModel || PROVIDERS[currentProvider].model;
     }
 
     // Report which config the extension resolved for the selected provider.
     function refreshHealth() {
-      fetch('/api/health?provider=' + currentProvider).then(r => r.json()).then(h => {
+      const p = currentProvider;
+      fetch('/api/health?provider=' + p).then(r => r.json()).then(h => {
+        if (p !== currentProvider) return;
+        healthModel = h.model || '';
         updateModelName(h.model);
+        if (!modelPop.classList.contains('hidden')) renderModelPop(modelListCache[p] || null);
         const connection = connState[currentProvider];
         if (connection && connection.status === 'auth_expired') {
           statusEl.textContent = t('connAuthExpired');
@@ -1443,7 +1539,7 @@
         row.addEventListener('click', (e) => {
           e.stopPropagation();
           if (code !== currentProvider) {
-            currentProvider = code;
+            setCurrentProvider(code);
             localStorage.setItem('ai.provider', code);
             // Live's embedded webview does not persist localStorage, so also update the server.
             // The server value is restored on the next open if local state is lost.
@@ -1818,6 +1914,7 @@
 
     document.getElementById('showSettings').addEventListener('click', (e) => {
       e.stopPropagation();
+      document.getElementById('modelPop').classList.add('hidden');
       const opening = settingsPanel.classList.contains('hidden');
       settingsPanel.classList.toggle('hidden');
       historyPanel.classList.add('hidden');
@@ -1846,7 +1943,7 @@
         renderLangs();
       }
       if (e.key === 'ai.provider' && e.newValue && PROVIDERS[e.newValue] && e.newValue !== currentProvider) {
-        currentProvider = e.newValue;
+        setCurrentProvider(e.newValue);
         providerVal.textContent = PROVIDERS[currentProvider].name;
         loadProviderFields();
         renderProviders();
@@ -2424,6 +2521,7 @@
     let thinkingEl = null;
     let thinkingPhase;
     let thinkingActivity;
+    let thinkingProgress;
     let thinkingLabelText;
     let thinkingVariantIndex = 0;
     let thinkingTimer = null;
@@ -2443,13 +2541,25 @@
       return !phase || phase === 'thinking' || !I18N.en[key];
     }
 
+    function progressLabel(progress) {
+      if (!progress) return '';
+      if (progress.plan && Number.isFinite(progress.plan.completed) && Number.isFinite(progress.plan.total) && progress.plan.total > 0) {
+        return ' · ' + t('batchProgress').replace('{n}', progress.plan.completed).replace('{total}', progress.plan.total);
+      }
+      if (!Number.isFinite(progress.completedTools) || progress.completedTools <= 0) return '';
+      return ' · ' + t('completedOperations').replace('{n}', progress.completedTools);
+    }
+
     function thinkingLabel(phase, activity) {
+      let label;
       if (activity && typeof activity.key === 'string') {
         const detail = typeof activity.detail === 'string' ? activity.detail.trim() : '';
-        return t(activity.key) + (detail ? ` · ${detail}` : '…');
+        label = t(activity.key) + (detail ? ` · ${detail}` : '…');
+      } else {
+        const key = 'phase_' + phase;
+        label = isGenericThinking(phase) ? genericThinkingLabel() : t(key);
       }
-      const key = 'phase_' + phase;
-      return isGenericThinking(phase) ? genericThinkingLabel() : t(key);
+      return label + progressLabel(thinkingProgress);
     }
 
     function genericThinkingLabel() {
@@ -2489,11 +2599,12 @@
       }, 5000);
     }
 
-    function setThinking(on, phase, activity) {
+    function setThinking(on, phase, activity, progress) {
       if (on) {
         const wasGeneric = isGenericThinking(thinkingPhase);
         thinkingPhase = phase;
         thinkingActivity = activity || null;
+        thinkingProgress = progress || null;
         const generic = isGenericThinking(phase) && !thinkingActivity;
         if (!generic && wasGeneric) thinkingVariantIndex = 0;
         if (!thinkingEl) thinkingEl = addMsg('thinking', '');
@@ -2504,6 +2615,7 @@
         clearThinkingTimer();
         thinkingPhase = undefined;
         thinkingActivity = null;
+        thinkingProgress = null;
         thinkingVariantIndex = 0;
         if (thinkingEl) {
           thinkingEl.remove();
@@ -2519,7 +2631,7 @@
       const s = await fetch('/api/status').then(r => r.json()).catch(() => null);
       if (!s) return;
       if (s.busy) {
-        setThinking(true, s.phase, s.activity);
+        setThinking(true, s.phase, s.activity, s.progress);
         showConfirm(s.pending || null);
         setTimeout(pollStatus, 900);
         return;
@@ -2645,46 +2757,90 @@
     document.getElementById('showHistory').addEventListener('click', (e) => {
       e.stopPropagation();
       settingsPanel.classList.add('hidden');
+      document.getElementById('modelPop').classList.add('hidden');
       historyPanel.classList.toggle('hidden');
       if (!historyPanel.classList.contains('hidden')) loadSessions();
     });
     document.addEventListener('click', (e) => {
       if (!historyPanel.contains(e.target)) historyPanel.classList.add('hidden');
       if (!settingsPanel.contains(e.target)) settingsPanel.classList.add('hidden');
+      const mp = document.getElementById('modelPop');
+      if (mp && !mp.contains(e.target)) mp.classList.add('hidden');
     });
 
     // ----- input-area toolbar: model / effort / attach / YOLO -----
     // Effort levels match each provider's own naming (Claude Code / Codex CLI /
-    // Gemini thinking); the empty option means "provider default".
+    // Gemini thinking); Custom options are resolved from endpoint and model.
     const EFFORT_LEVELS = {
       claude: ['low', 'medium', 'high', 'xhigh', 'max'],
       codex:  ['minimal', 'low', 'medium', 'high', 'xhigh'],
       gemini: ['low', 'medium', 'high', 'max'],
-      // Custom 端点没有统一的 effort 概念（xAI 收到 reasoning_effort 还会报错）
-      // —— 空档 = 隐藏下拉。
-      custom: [],
     };
     const effortSel = document.getElementById('effortSel');
+    function customEffortProfile() {
+      const model = cfgInputs.model.value.trim().toLowerCase();
+      const raw = cfgInputs.baseUrl.value.trim();
+      if (!raw || !model) return null;
+      try {
+        const url = new URL(raw);
+        const host = url.hostname.toLowerCase();
+        if ((host === 'api.moonshot.ai' || host === 'api.moonshot.cn') && model.startsWith('kimi-k3')) {
+          return { default: 'low', levels: ['low', 'high', 'max'] };
+        }
+        if ((host === 'api.kimi.com' || host === 'api.kimi.ai') && url.pathname.toLowerCase().includes('/coding') && /^k3(?:-256k)?$/.test(model)) {
+          return { default: 'low', levels: ['low', 'high', 'max'] };
+        }
+        if (host.endsWith('.volces.com')) {
+          // Ark Coding Plan Kimi K3 always thinks; the API does not support disabling it.
+          if (model.startsWith('kimi-k3')) return null;
+          const supportsThinkingSwitch =
+            /^doubao-seed-(?:evolving|2-1-(?:pro|lite))(?:-|$)/.test(model) ||
+            /^deepseek-v4-(?:1-)?(?:flash|pro)(?:-|$)/.test(model);
+          if (supportsThinkingSwitch) return { default: 'off', levels: ['off', 'on'] };
+        }
+      } catch { /* invalid endpoints keep the generic Auto option */ }
+      return null;
+    }
+    function effortStorageKey() {
+      const raw = cfgInputs.baseUrl.value.trim().replace(/\/+$/, '');
+      let endpoint = raw || 'default';
+      if (raw) {
+        try {
+          const url = new URL(raw);
+          // Scope by actual endpoint path while keeping URL credentials and
+          // query parameters out of the localStorage key.
+          endpoint = `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, '')}`;
+        } catch { endpoint = 'invalid-url'; }
+      }
+      const model = currentProvider === 'custom' ? `.${encodeURIComponent(cfgInputs.model.value.trim().toLowerCase())}` : '';
+      return `ai.${currentProvider}.effort.${encodeURIComponent(endpoint)}${model}`;
+    }
     function renderEfforts() {
-      const levels = EFFORT_LEVELS[currentProvider] ?? [];
-      effortSel.style.display = levels.length ? '' : 'none';
-      const saved = localStorage.getItem('ai.effort') || '';
+      const profile = currentProvider === 'custom' ? customEffortProfile() : null;
+      const levels = profile?.levels ?? EFFORT_LEVELS[currentProvider] ?? [];
+      effortSel.style.display = levels.length || currentProvider === 'custom' ? '' : 'none';
+      const saved = localStorage.getItem(effortStorageKey()) || '';
       effortSel.innerHTML = '';
       const dflt = document.createElement('option');
-      dflt.value = '';
-      dflt.textContent = t('effortDefault');
+      const defaultEffort = profile?.default ?? '';
+      dflt.value = defaultEffort;
+      dflt.textContent = currentProvider === 'custom' && !profile
+        ? 'Auto'
+        : defaultEffort ? `${t('effortDefault')} (${defaultEffort})` : t('effortDefault');
       effortSel.appendChild(dflt);
       for (const lv of levels) {
+        if (lv === defaultEffort) continue;
         const opt = document.createElement('option');
         opt.value = lv;
         opt.textContent = lv;
         effortSel.appendChild(opt);
       }
-      // A level saved under another provider may not exist here → fall back to default.
-      effortSel.value = levels.includes(saved) ? saved : '';
+      // Custom preferences are model-scoped; unsupported values use the
+      // detected profile default or the generic Auto option.
+      effortSel.value = levels.includes(saved) ? saved : defaultEffort;
     }
     renderEfforts();
-    effortSel.addEventListener('change', () => localStorage.setItem('ai.effort', effortSel.value));
+    effortSel.addEventListener('change', () => localStorage.setItem(effortStorageKey(), effortSel.value));
 
     const yoloToggle = document.getElementById('yoloToggle');
     const yoloLabel = document.getElementById('yoloLabel');
@@ -2695,17 +2851,218 @@
       yoloLabel.classList.toggle('on', yoloToggle.checked);
     });
 
-    // Model label doubles as a shortcut to the AI settings view (click again to close).
-    document.getElementById('modelBtn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      historyPanel.classList.add('hidden');
-      const opening = settingsPanel.classList.contains('hidden');
-      settingsPanel.classList.toggle('hidden');
-      if (opening) {
+    // ----- Model picker: click the toolbar model label → catalog popup -----
+    // The list comes from /api/models (free catalog GET or local CLI models);
+    // per-provider cached so reopening is instant, refreshed in the background.
+    // Picking writes the settings model field through its existing change
+    // handler (localStorage + POST /api/provider-config + health re-check).
+    const modelBtn = document.getElementById('modelBtn');
+    const modelPop = document.getElementById('modelPop');
+    const modelListCache = {};
+    let modelQuery = '';
+    let modelShowAll = false;
+    let modelCatalogRequest = 0;
+    let modelPreferenceWrites = Promise.resolve();
+
+    function closeModelPop() { modelPop.classList.add('hidden'); }
+
+    function saveModelPreference(data, id, favorite) {
+      if (!data || !data.scope) return Promise.resolve();
+      const p = currentProvider;
+      const body = { provider: p, scope: data.scope, model: id };
+      if (typeof favorite === 'boolean') body.favorite = favorite;
+      // Serialize writes so rapid selections/favorite toggles keep their order.
+      modelPreferenceWrites = modelPreferenceWrites.then(async () => {
+        const response = await fetch('/api/model-preferences', {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+        });
+        if (!response.ok) throw new Error('model preference save failed');
+        const result = await response.json();
+        const cached = modelListCache[p];
+        if (cached && cached.scope === data.scope) {
+          cached.favorites = result.preferences.favorites;
+          cached.recent = result.preferences.recent;
+          cached.preferenceError = false;
+        }
+      }).catch(() => {
+        const cached = modelListCache[p];
+        if (cached && cached.scope === data.scope) cached.preferenceError = true;
+      }).then(() => {
+        if (p === currentProvider && !modelPop.classList.contains('hidden')) renderModelPop(modelListCache[p]);
+      });
+      return modelPreferenceWrites;
+    }
+
+    function renderModelPop(data) {
+      const provider = currentProvider;
+      const wasSearching = document.activeElement && document.activeElement.className === 'model-search';
+      const caret = wasSearching ? document.activeElement.selectionStart : null;
+      modelPop.innerHTML = '';
+      const cur = currentModelId();
+      const unique = (ids) => [...new Set((Array.isArray(ids) ? ids : []).filter(id => typeof id === 'string' && id))];
+      const ids = unique(data && data.models);
+      const favorites = unique(data && data.favorites);
+      const recent = unique(data && data.recent);
+      const suggested = unique(data && Array.isArray(data.suggestedModels) ? data.suggestedModels : ids);
+      const preview = unique(data && data.previewModels);
+      const controls = document.createElement('div');
+      controls.className = 'model-controls';
+      const search = document.createElement('input');
+      search.className = 'model-search';
+      search.type = 'search';
+      search.placeholder = t('modelSearch');
+      search.setAttribute('aria-label', t('modelSearch'));
+      search.value = modelQuery;
+      search.addEventListener('input', () => {
+        modelQuery = search.value;
+        renderModelPop(modelListCache[currentProvider] || data);
+      });
+      const tabs = document.createElement('div');
+      tabs.className = 'model-tabs';
+      for (const all of [false, true]) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = all ? 'model-view-all' : 'model-view-common';
+        button.textContent = t(all ? 'modelAll' : 'modelCommon') + (all ? ` · ${ids.length}` : '');
+        button.setAttribute('aria-pressed', String(all === modelShowAll));
+        button.addEventListener('click', (e) => {
+          e.stopPropagation(); modelShowAll = all;
+          renderModelPop(modelListCache[currentProvider] || data);
+        });
+        tabs.appendChild(button);
+      }
+      controls.append(search, tabs);
+      modelPop.appendChild(controls);
+      const note = (text) => {
+        const row = document.createElement('div');
+        row.className = 'model-row model-note';
+        row.textContent = text;
+        modelPop.appendChild(row);
+      };
+      if (!data) {
+        note(t('modelLoading'));
+      } else {
+        const query = modelQuery.trim().toLowerCase();
+        const compact = true;
+        const local = unique(data && data.localModels);
+        const common = unique([cur, ...local, ...favorites, ...recent, ...(compact ? suggested : ids)]).slice(0, compact ? 8 : Infinity);
+        const pool = query || modelShowAll ? unique([cur, ...favorites, ...recent, ...ids]) : common;
+        const matches = query ? pool.filter(id => id.toLowerCase().includes(query)) : pool;
+        // Keep the active model first even when a search/catalog omits it.
+        const rows = unique([cur, ...matches]);
+        // Endpoints without a model catalog (some relay plans) aren't an
+        // error — the picker just shows the current model + manual entry, so
+        // don't alarm the user with a "could not load" note. A PARTIAL
+        // catalog still earns the note: models are listed but incomplete.
+        if (ids.length && data.partial) note(t('modelListFail') + (data.detail ? ` · ${data.detail}` : ''));
+        if (query && !matches.length) note(t('modelNoMatch'));
+        if (data.preferenceError) note(t('modelSaveFail'));
+        for (const id of rows) {
+          const row = document.createElement('div');
+          row.className = 'model-row';
+          const tick = document.createElement('span');
+          tick.className = 'tick';
+          tick.textContent = id === cur ? '✓' : '';
+          const name = document.createElement('span');
+          name.className = 'm-name';
+          name.textContent = id;
+          name.title = id;
+          row.append(tick, name);
+          if (preview.includes(id)) {
+            const label = document.createElement('span');
+            label.className = 'model-preview'; label.textContent = t('modelPreview');
+            row.appendChild(label);
+          }
+          const star = document.createElement('button');
+          star.type = 'button'; star.className = 'model-favorite';
+          const saved = favorites.includes(id);
+          star.textContent = saved ? '★' : '☆';
+          star.title = t(saved ? 'modelUnfavorite' : 'modelFavorite');
+          star.setAttribute('aria-label', star.title + ' · ' + id);
+          star.setAttribute('aria-pressed', String(saved));
+          star.disabled = !data.scope;
+          star.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (provider !== currentProvider) { closeModelPop(); return; }
+            star.disabled = true;
+            return saveModelPreference(data, id, !saved);
+          });
+          row.appendChild(star);
+          row.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (provider !== currentProvider) { closeModelPop(); return; }
+            if (id !== cur) {
+              cfgInputs.model.value = id;
+              cfgInputs.model.dispatchEvent(new Event('input'));
+              cfgInputs.model.dispatchEvent(new Event('change'));
+            }
+            void saveModelPreference(data, id);
+            closeModelPop();
+          });
+          modelPop.appendChild(row);
+        }
+      }
+      // Manual entry stays one click away (previous model-button behavior).
+      const custom = document.createElement('div');
+      custom.className = 'model-row model-custom';
+      const cTick = document.createElement('span');
+      cTick.className = 'tick';
+      const cName = document.createElement('span');
+      cName.className = 'm-name';
+      cName.textContent = t('modelCustom');
+      custom.append(cTick, cName);
+      custom.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeModelPop();
         renderLangs();
         renderProviders();
+        settingsPanel.classList.remove('hidden');
         showView('viewAI');
+      });
+      modelPop.appendChild(custom);
+      if (wasSearching) {
+        search.focus();
+        // Search inputs do not support setSelectionRange in every webview.
+        try { if (caret !== null) search.setSelectionRange(caret, caret); } catch {}
       }
+    }
+
+    modelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      historyPanel.classList.add('hidden');
+      settingsPanel.classList.add('hidden');
+      if (!modelPop.classList.contains('hidden')) { closeModelPop(); return; }
+      modelPop.classList.remove('hidden');
+      modelQuery = '';
+      modelShowAll = false;
+      const p = currentProvider;
+      const request = ++modelCatalogRequest;
+      renderModelPop(modelListCache[p] || null);
+      fetch('/api/models?provider=' + p).then(r => r.json()).then(d => {
+        if (request !== modelCatalogRequest) return;
+        modelListCache[p] = {
+          models: Array.isArray(d && d.models) ? d.models : [],
+          suggestedModels: Array.isArray(d && d.suggestedModels) ? d.suggestedModels : undefined,
+          localModels: Array.isArray(d && d.localModels) ? d.localModels : [],
+          previewModels: Array.isArray(d && d.previewModels) ? d.previewModels : [],
+          favorites: Array.isArray(d && d.favorites) ? d.favorites : [],
+          recent: Array.isArray(d && d.recent) ? d.recent : [],
+          scope: (d && d.scope) || '',
+          partial: Boolean(d && d.partial),
+          detail: (d && d.detail) || '',
+        };
+        if (p === currentProvider && !modelPop.classList.contains('hidden')) {
+          renderModelPop(modelListCache[p]);
+        }
+      }).catch(() => {
+        if (request === modelCatalogRequest && p === currentProvider && !modelPop.classList.contains('hidden') && !modelListCache[p]) {
+          renderModelPop({ models: [], detail: '' });
+        }
+      });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModelPop();
     });
 
     // ----- attachments -----
@@ -3085,7 +3442,7 @@
     // isolated localStorage.
     fetch('/api/last-provider').then(r => r.json()).then(s => {
       if (s && PROVIDERS[s.provider] && s.provider !== currentProvider) {
-        currentProvider = s.provider;
+        setCurrentProvider(s.provider);
         localStorage.setItem('ai.provider', currentProvider);
         providerVal.textContent = PROVIDERS[currentProvider].name;
         loadProviderFields();

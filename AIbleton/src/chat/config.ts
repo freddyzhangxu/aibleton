@@ -1,3 +1,4 @@
+import { URL } from "node:url";
 import { loadLocalConfig, type LocalConfig, type Provider } from "../config/local.js";
 import { toolHooks } from "../state.js";
 
@@ -16,7 +17,7 @@ export interface ChatRequest {
   baseUrl?: string;
   model?: string;
   language?: string;
-  /** Reasoning effort override: "low" | "medium" | "high" (empty = provider default). */
+  /** Provider-specific reasoning choice (empty = detected/default behavior). */
   effort?: string;
   /** false = ask the user before any Set-modifying tool call (default true = run freely). */
   yolo?: boolean;
@@ -25,6 +26,43 @@ export interface ChatRequest {
   audio?: { provider?: string; apiKey?: string; baseUrl?: string };
   /** Server-selected local skills for this turn; never accepted from the client. */
   selectedSkillNames?: string[];
+  /** Server-classified narrow edit; never trusted from the request body. */
+  simpleEdit?: "tempo" | "mixer";
+}
+
+/** Deliberately narrow: ambiguous, compound, contextual, and attached requests
+ * keep the full agent path. This classifies cost, never authorizes an edit. */
+export function simpleEditKind(userText: string): ChatRequest["simpleEdit"] {
+  if (userText.length > 160 || /[\n\r;；/&]|\b(?:and|then|also|master)\b|并|同时|以及|母带|总线/i.test(userText)) return undefined;
+  const text = userText.trim().replace(/^(?:请|帮我|please\s+)/i, "").replace(/[。.!！]$/, "").trim();
+  if (/^(?:(?:把|将)?\s*(?:bpm|tempo|速度)\s*(?:设置(?:为|成)?|调(?:整)?(?:到|为)?|改(?:成|为)?|设(?:成|为)?|到|为|[:=])?\s*\d{2,3}(?:\.\d+)?\s*(?:bpm)?|(?:set|change|adjust)\s+(?:the\s+)?(?:tempo|bpm)\s+(?:to\s+)?\d{2,3}(?:\.\d+)?\s*(?:bpm)?)$/i.test(text)) return "tempo";
+  const numberedTrackMixer = /^(?:(?:把|将)?\s*第?\d+(?:条|个)?(?:轨道|轨)(?:的)?\s*(?:音量|声像)\s*(?:设置为|调到|改成|设为)\s*-?\d+(?:\.\d+)?\s*(?:db|%)?)$/i.test(text);
+  const englishMixer = /^(?:set|change|adjust)\s+(?:the\s+)?(?:volume|pan)\s+(?:of|on|for)\s+(.{1,40})\s+to\s+-?\d+(?:\.\d+)?\s*(?:db|%)?$/i.exec(text);
+  const deviceContext = /\b(?:on|in|inside|within)\b|\b(?:device|plugin|instrument|simpler|sampler|operator|compressor|equalizer|eq\d*|synth|effect)\b/i;
+  if (numberedTrackMixer || (englishMixer && !deviceContext.test(englishMixer[1]))) return "mixer";
+  return undefined;
+}
+
+/** Explicit UI/CLI effort wins. Claude already omits extended thinking by
+ * default; do not turn it on merely to label a simple task "low". */
+export function withTaskEffort(cfg: ResolvedConfig, req: ChatRequest, text: string): ResolvedConfig {
+  if (req.effort || cfg.effort || cfg.reasoningEffort || req.attachments?.length || req.selectedSkillNames?.length || !simpleEditKind(text)) return cfg;
+  if (cfg.provider === "codex") return { ...cfg, reasoningEffort: "low" };
+  if (cfg.provider === "gemini") return { ...cfg, effort: "low" };
+  // The `thinking` switch is not part of the OpenAI-compatible contract.
+  // Only use the automatic optimization on the known Ark host; custom relays
+  // and local servers keep their request shape unless the user picked effort.
+  if (cfg.provider === "custom") {
+    try {
+      const hostname = new URL(cfg.baseUrl).hostname.toLowerCase();
+      if (hostname === "ark.cn-beijing.volces.com" || hostname.endsWith(".volces.com")) {
+        return { ...cfg, effort: "low" };
+      }
+    } catch {
+      // Invalid or non-URL base addresses receive no automatic API fields.
+    }
+  }
+  return cfg;
 }
 
 export interface ResolvedConfig {
@@ -38,7 +76,7 @@ export interface ResolvedConfig {
   refreshToken?: string;
   chatgpt?: boolean;
   reasoningEffort?: string;
-  /** UI-selected effort, mapped per provider (claude: thinking budget; gemini: thinkingBudget). */
+  /** UI-selected provider-specific reasoning choice. */
   effort?: string;
 }
 
@@ -54,14 +92,17 @@ export function resolveConfig(req: ChatRequest): ResolvedConfig {
   if (provider === "custom") {
     // Generic OpenAI-compatible endpoint (Grok / DeepSeek / Kimi / OpenRouter /
     // Ollama / vLLM …): chat/completions protocol. No CLI autodetect, no
-    // effort mapping, no built-in defaults — baseUrl and model are required,
-    // the key may stay empty for local servers that don't check it.
+    // built-in defaults — baseUrl and model are required, the key may stay
+    // empty for local servers that don't check it. custom.ts maps reasoning
+    // controls only for documented endpoint/model combinations; arbitrary
+    // relays keep receiving the request without vendor-specific fields.
     return {
       provider,
       baseUrl: (req.baseUrl || local.baseUrl || "").replace(/\/$/, ""),
       authToken: req.apiKey || local.apiKey || local.authToken || "",
       model: req.model || local.model || "",
       fromLocal,
+      effort: req.effort,
     };
   }
   if (provider === "codex") {

@@ -76,7 +76,7 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
   });
   const tools = [
     {
-      functionDeclarations: activeTools().map((tool) => ({
+      functionDeclarations: activeTools(req.simpleEdit).map((tool) => ({
         name: tool.name,
         description: tool.description,
         parameters: toGeminiSchema(tool.input_schema),
