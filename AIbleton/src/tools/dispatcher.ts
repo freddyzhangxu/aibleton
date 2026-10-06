@@ -75,6 +75,11 @@ import { presentTakeLanes, takeLaneAt } from "./take-lanes.js";
 import { parseWarpMode, presentWarp, resolveAudioClip } from "./warp.js";
 import { chainDeviceAt, drumPadAt, drumRackAt, presentPad, presentPads, setParamValue as setChainParam } from "./drum-rack.js";
 import { deleteAuthorizationError, deleteToolIsAuthorized, isDeleteTool } from "../chat/deleteauth.js";
+import {
+  forgetCreatedDevice,
+  recordCreatedDevice,
+  targetIsAgentCreatedDevice,
+} from "./created-devices.js";
 import { pickRandomMelodicInstrument } from "./instruments.js";
 
 // ---------- Factory drum kits (Drum Essentials pack) ----------
@@ -302,7 +307,11 @@ export async function runTool(
     toolState.activeExplicitEditScope,
   );
   if (selectionRefusal) throw new Error(selectionRefusal);
-  if (isDeleteTool(name) && !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization)) {
+  if (
+    isDeleteTool(name) &&
+    !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization) &&
+    !targetIsAgentCreatedDevice(context, name, input)
+  ) {
     return deleteAuthorizationError(name, toolState.activeLanguage);
   }
 
@@ -566,6 +575,7 @@ export async function runTool(
       const device = await context.withinTransaction(() =>
         track.insertDevice(deviceName, track.devices.length),
       );
+      recordCreatedDevice(device);
       return trackResult(ref, {
         inserted: device.name,
         into: track.name,
@@ -588,10 +598,12 @@ export async function runTool(
         throw new Error("替换设备不能与源设备同名");
       }
       await context.withinTransaction(() => track.deleteDevice(source));
+      forgetCreatedDevice(source);
       try {
         const replacement = await context.withinTransaction(() =>
           track.insertDevice(replacementName, sourceIndex),
         );
+        recordCreatedDevice(replacement);
         const landed = track.devices[sourceIndex];
         const sourceStillPresent = track.devices.some((device) => device.name === source.name);
         if (!landed || landed.name !== replacement.name || sourceStillPresent) {
@@ -630,6 +642,7 @@ export async function runTool(
       const deviceIndex = ref.track.devices.indexOf(device);
       const name = device.name;
       await context.withinTransaction(() => ref.track.deleteDevice(device));
+      forgetCreatedDevice(device);
       return trackResult(ref, {
         deleted: "device",
         device: name,
@@ -827,6 +840,7 @@ export async function runTool(
           );
           if (!rack) {
             rack = (await track.insertDevice("Drum Rack", 0)) as DrumRack<"1.0.0">;
+            recordCreatedDevice(rack);
           }
           return rack;
         })();
@@ -839,6 +853,7 @@ export async function runTool(
               const chain = (await rack.insertChain(0)) as DrumChain<"1.0.0">;
               chain.receivingNote = pad.note;
               const simpler = (await chain.insertDevice("Simpler", 0)) as Simpler<"1.0.0">;
+              recordCreatedDevice(simpler);
               await simpler.replaceSample(path.join(root, pad.file));
               return `${pad.note}=${pad.name}`;
             }),
@@ -867,11 +882,13 @@ export async function runTool(
     case "insert_drum_pad_device": {
       const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input.pad_note);
       const device = await context.withinTransaction(() => chain.insertDevice(String(input.device_name), chain.devices.length));
+      recordCreatedDevice(device);
       return trackResult(ref, { ...(await presentPad(rack, chain)), inserted: device.name });
     }
     case "duplicate_drum_pad_device": {
       const ref = resolveTrack(context, input, "track_index"); const rack = drumRackAt(ref.track, input); const chain = drumPadAt(rack, input.pad_note); const device = chainDeviceAt(chain, input);
       const copy = await context.withinTransaction(() => chain.duplicateDevice(device));
+      recordCreatedDevice(copy);
       return trackResult(ref, { ...(await presentPad(rack, chain)), duplicated: device.name, created: copy.name });
     }
     case "delete_drum_pad_device": {
@@ -879,6 +896,7 @@ export async function runTool(
       const deviceIndex = chain.devices.indexOf(device);
       const deviceName = device.name;
       await context.withinTransaction(() => chain.deleteDevice(device));
+      forgetCreatedDevice(device);
       return trackResult(ref, {
         deleted: "drum_pad_device",
         device: deviceName,
@@ -966,6 +984,7 @@ export async function runTool(
       let inserted = false;
       if (!simpler) {
         simpler = (await context.withinTransaction(() => chain.insertDevice("Simpler", 0))) as Simpler<"1.0.0">;
+        recordCreatedDevice(simpler);
         inserted = true;
       }
       await context.withinTransaction(() => simpler.replaceSample(managed));
@@ -1047,6 +1066,7 @@ export async function runTool(
         simpler = (await context.withinTransaction(() =>
           track.insertDevice("Simpler", 0),
         )) as Simpler<"1.0.0">;
+        recordCreatedDevice(simpler);
       }
       await simpler.replaceSample(managed);
       return trackResult(ref, { track: track.name, device: "Simpler", file: managed });

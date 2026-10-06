@@ -3,12 +3,14 @@ import test from "node:test";
 
 import { deleteAuthorizationFor } from "../chat/deleteauth.js";
 import { toolState, type Ctx } from "../state.js";
+import { clearCreatedDevices } from "./created-devices.js";
 import { runTool } from "./dispatcher.js";
 
-type FakeDevice = { name: string };
+type FakeDevice = { name: string; handle?: { id: bigint } };
 
 function replacementContext(options: { failInsert?: boolean } = {}) {
   const calls: string[] = [];
+  let nextHandleId = 1n;
   const devices: FakeDevice[] = [{ name: "Operator" }, { name: "Auto Filter" }];
   const track = {
     name: "Lead",
@@ -16,7 +18,7 @@ function replacementContext(options: { failInsert?: boolean } = {}) {
     insertDevice: async (name: string, index: number) => {
       calls.push(`insert:${name}:${index}`);
       if (options.failInsert) throw new Error("host rejected device");
-      const device = { name };
+      const device = { name, handle: { id: nextHandleId++ } };
       devices.splice(index, 0, device);
       return device;
     },
@@ -89,4 +91,53 @@ test("replace_device is refused without explicit device-replacement authorizatio
   assert.equal(result.delete_authorization_required, true);
   assert.deepEqual(calls, []);
   assert.deepEqual(devices.map((device) => device.name), ["Operator", "Auto Filter"]);
+});
+
+test("replace_device may self-correct a device the agent inserted this turn, without user wording", async () => {
+  const { context, calls, devices } = replacementContext();
+  toolState.activeDeleteAuthorization = undefined;
+  try {
+    const inserted = await runTool(context, "insert_device", { index: 0, device_name: "Drift" }) as Record<string, unknown>;
+    assert.equal(inserted.inserted, "Drift");
+
+    // No delete authorization: replacing the just-inserted Drift is
+    // self-correction within the creation flow, so the gate lets it through.
+    const replaced = await runTool(context, "replace_device", {
+      track_index: 0,
+      track_name: "Lead",
+      source_device_name: "Drift",
+      replacement_device_name: "Analog",
+    }) as Record<string, unknown>;
+    assert.equal(replaced.replaced, "Drift");
+    assert.equal(replaced.replacement, "Analog");
+
+    // The replacement itself is also agent-created: a second self-correction
+    // (or a plain delete) of it is equally allowed without user wording.
+    const deleted = await runTool(context, "delete_device", {
+      track_index: 0,
+      track_name: "Lead",
+      device_name: "Analog",
+    }) as Record<string, unknown>;
+    assert.equal(deleted.deleted, "device");
+
+    assert.deepEqual(calls, ["insert:Drift:2", "delete:Drift", "insert:Analog:2", "delete:Analog"]);
+    assert.deepEqual(devices.map((device) => device.name), ["Operator", "Auto Filter"]);
+  } finally {
+    clearCreatedDevices();
+  }
+});
+
+test("replace_device on a pre-existing user device stays refused even after agent inserts elsewhere", async () => {
+  const { context, calls, devices } = replacementContext();
+  toolState.activeDeleteAuthorization = undefined;
+  try {
+    await runTool(context, "insert_device", { index: 0, device_name: "Drift" });
+    // Operator was there before the turn — no handle recorded for it.
+    const result = await runTool(context, "replace_device", replacementInput()) as Record<string, unknown>;
+    assert.equal(result.delete_authorization_required, true);
+    assert.deepEqual(calls, ["insert:Drift:2"]);
+    assert.deepEqual(devices.map((device) => device.name), ["Operator", "Auto Filter", "Drift"]);
+  } finally {
+    clearCreatedDevices();
+  }
 });

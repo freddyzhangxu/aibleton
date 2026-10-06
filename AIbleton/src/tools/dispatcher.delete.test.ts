@@ -3,6 +3,7 @@ import test from "node:test";
 import { DrumRack } from "@ableton-extensions/sdk";
 import { deleteAuthorizationFor } from "../chat/deleteauth.js";
 import { toolState, type Ctx } from "../state.js";
+import { clearCreatedDevices } from "./created-devices.js";
 import { runTool } from "./dispatcher.js";
 
 function contextWithDeleteSpies() {
@@ -95,6 +96,122 @@ test("delete_drum_pad_device deletes the resolved chain device under device auth
     });
   } finally {
     toolState.activeDeleteAuthorization = undefined;
+  }
+});
+
+function contextWithInsertableTrack() {
+  const calls: string[] = [];
+  let nextHandleId = 1n;
+  const devices: { name: string; handle?: { id: bigint } }[] = [{ name: "EQ Eight" }];
+  const track = {
+    name: "Bass",
+    get devices() { return devices; },
+    insertDevice: async (name: string, index: number) => {
+      calls.push(`insert:${name}:${index}`);
+      const device = { name, handle: { id: nextHandleId++ } };
+      devices.splice(index, 0, device);
+      return device;
+    },
+    deleteDevice: async (d: unknown) => {
+      const index = devices.indexOf(d as (typeof devices)[number]);
+      if (index < 0) throw new Error("device no longer exists");
+      calls.push(`delete:${(d as { name: string }).name}`);
+      devices.splice(index, 1);
+    },
+  };
+  const context = {
+    application: { song: { tracks: [track], scenes: [] } },
+    withinTransaction: <T>(fn: () => T) => fn(),
+  } as unknown as Ctx;
+  return { context, calls, devices };
+}
+
+test("delete_device may remove a device the agent inserted this turn, without user wording", async () => {
+  const { context, calls, devices } = contextWithInsertableTrack();
+  toolState.activeDeleteAuthorization = undefined;
+  try {
+    await runTool(context, "insert_device", { index: 0, device_name: "Reverb" });
+    const result = await runTool(context, "delete_device", {
+      track_index: 0, track_name: "Bass", device_name: "Reverb",
+    }) as Record<string, unknown>;
+    assert.equal(result.deleted, "device");
+    assert.deepEqual(calls, ["insert:Reverb:1", "delete:Reverb"]);
+    assert.deepEqual(devices.map((device) => device.name), ["EQ Eight"]);
+  } finally {
+    clearCreatedDevices();
+  }
+});
+
+test("delete_device is refused again once the turn's created-device registry is cleared", async () => {
+  const { context, calls, devices } = contextWithInsertableTrack();
+  toolState.activeDeleteAuthorization = undefined;
+  try {
+    await runTool(context, "insert_device", { index: 0, device_name: "Reverb" });
+    clearCreatedDevices(); // turn ended — next turn needs fresh user wording
+    const result = await runTool(context, "delete_device", {
+      track_index: 0, track_name: "Bass", device_name: "Reverb",
+    }) as Record<string, unknown>;
+    assert.equal(result.delete_authorization_required, true);
+    assert.deepEqual(calls, ["insert:Reverb:1"]);
+    assert.deepEqual(devices.map((device) => device.name), ["EQ Eight", "Reverb"]);
+  } finally {
+    clearCreatedDevices();
+  }
+});
+
+test("delete_device on a pre-existing user device stays refused after agent inserts elsewhere", async () => {
+  const { context, calls, devices } = contextWithInsertableTrack();
+  toolState.activeDeleteAuthorization = undefined;
+  try {
+    await runTool(context, "insert_device", { index: 0, device_name: "Reverb" });
+    // EQ Eight predates the turn — no handle recorded for it.
+    const result = await runTool(context, "delete_device", {
+      track_index: 0, track_name: "Bass", device_name: "EQ Eight",
+    }) as Record<string, unknown>;
+    assert.equal(result.delete_authorization_required, true);
+    assert.deepEqual(calls, ["insert:Reverb:1"]);
+    assert.deepEqual(devices.map((device) => device.name), ["EQ Eight", "Reverb"]);
+  } finally {
+    clearCreatedDevices();
+  }
+});
+
+test("delete_drum_pad_device may remove a pad device the agent inserted this turn", async () => {
+  const calls: string[] = [];
+  const chain = {
+    receivingNote: 38,
+    devices: [] as { name: string; handle?: { id: bigint } }[],
+    insertDevice: async (name: string, index: number) => {
+      calls.push(`insert:${name}:${index}`);
+      const device = { name, handle: { id: 7n } };
+      chain.devices.splice(index, 0, device);
+      return device;
+    },
+    deleteDevice: async (device: unknown) => {
+      calls.push(`delete:${(device as { name: string }).name}`);
+      chain.devices.splice(chain.devices.indexOf(device as never), 1);
+    },
+    mixer: { volume: { getValue: async () => 0 }, panning: { getValue: async () => 0 }, sends: [] },
+  };
+  const rack = Object.create(DrumRack.prototype) as DrumRack<"1.0.0">;
+  Object.defineProperties(rack, {
+    name: { value: "Kit", configurable: true },
+    chains: { value: [chain], configurable: true },
+  });
+  const context = {
+    application: { song: { tracks: [{ name: "Drums", devices: [rack] }], scenes: [] } },
+    withinTransaction: <T>(fn: () => T) => fn(),
+  } as unknown as Ctx;
+  toolState.activeDeleteAuthorization = undefined;
+  try {
+    await runTool(context, "insert_drum_pad_device", { track_index: 0, pad_note: 38, device_name: "Reverb" });
+    const result = await runTool(context, "delete_drum_pad_device", {
+      track_index: 0, pad_note: 38, device_index: 0,
+    }) as Record<string, unknown>;
+    assert.equal(result.deleted, "drum_pad_device");
+    assert.deepEqual(calls, ["insert:Reverb:0", "delete:Reverb"]);
+  } finally {
+    clearCreatedDevices();
   }
 });
 

@@ -934,6 +934,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             toolState.activeLanguage = undefined;
             toolState.activeLanguageContext = null;
             toolState.activeDeleteAuthorization = undefined;
+            toolState.activeCreatedDeviceHandles.clear();
             toolState.activeGlobalIntent = false;
             toolState.activeExplicitEditScope = { trackIndices: [], arrangementRanges: [] };
             toolState.phase = null;

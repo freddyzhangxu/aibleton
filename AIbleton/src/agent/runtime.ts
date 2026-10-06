@@ -105,6 +105,7 @@ import {
   deleteToolIsAuthorized,
   isDeleteTool,
 } from "../chat/deleteauth.js";
+import { clearCreatedDevices, targetIsAgentCreatedDevice } from "../tools/created-devices.js";
 import * as fs from "node:fs";
 import { actionableError, friendlyToolError, sanitizeToolResultLanguage } from "../errors.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
@@ -903,7 +904,13 @@ export async function callTool(
   }
   // Delete permission is never inferred from YOLO, tool history, or a prior
   // chat message. The dispatcher repeats this guard as defense in depth.
-  if (isDeleteTool(name) && !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization)) {
+  // Replacing/deleting a device the agent itself inserted this turn is
+  // self-correction, not destruction — it bypasses the wording requirement.
+  if (
+    isDeleteTool(name) &&
+    !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization) &&
+    !targetIsAgentCreatedDevice(context, name, input)
+  ) {
     const refused = deleteAuthorizationError(name, toolState.activeLanguage);
     actions.push({ tool: name, input, result: refused });
     toolHooks.debugLog(context, `TOOL ${name} REFUSED: no explicit delete authorization`);
@@ -1098,6 +1105,7 @@ export async function callTool(
  * the start of every user turn so a stale goal never gates a new request. */
 export function resetTurnState(): void {
   clearTurnGoalOutcome();
+  clearCreatedDevices();
   pendingGoal = null;
   pendingPlan = null;
   pendingExecutablePlan = null;

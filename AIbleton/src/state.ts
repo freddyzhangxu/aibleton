@@ -54,6 +54,12 @@ export const toolState = {
   activeLanguageContext: null as TurnLanguageContext | null,
   /** Kind-scoped delete permission derived from the CURRENT user message. */
   activeDeleteAuthorization: undefined as DeleteAuthorization | undefined,
+  /** Host-assigned handle ids (as strings) of devices the agent itself
+   * inserted during the CURRENT turn. Deleting/replacing one of these is
+   * self-correction, not destruction of user work, so it bypasses the
+   * user-wording delete authorization. Same per-turn lifetime as
+   * activeDeleteAuthorization. */
+  activeCreatedDeviceHandles: new Set<string>() as Set<string>,
   /** The CURRENT user explicitly asked to operate on the entire Set. This is
    * deliberately per-turn: it must never grant scope beyond this request. */
   activeGlobalIntent: false,
