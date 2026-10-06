@@ -27,6 +27,35 @@ export interface LocalConfig {
 
 const configCache: Partial<Record<Provider, LocalConfig | null>> = {};
 
+/** Local picker catalogs. Read fresh so CLI model changes appear on reopening. */
+export function loadLocalModelIds(provider: Provider): string[] {
+  if (provider !== "claude" && provider !== "codex") return [];
+  const raw = readHomeFile(path.join(os.homedir(),
+    provider === "claude" ? ".claude" : ".codex",
+    provider === "claude" ? "settings.json" : "models_cache.json"));
+  if (!raw) return [];
+  try {
+    let ids: unknown[];
+    if (provider === "codex") {
+      const cache = JSON.parse(raw) as { models?: { slug?: unknown; visibility?: string }[] };
+      ids = Array.isArray(cache?.models)
+        ? cache.models.filter((m) => m?.visibility === "list").map((m) => m.slug)
+        : [];
+    } else {
+      const settings = JSON.parse(raw) as { env?: Record<string, unknown>; model?: unknown };
+      const env = settings?.env ?? {};
+      // These are the model IDs configured in Claude Code itself. Keep them
+      // available in AIbleton even if its endpoint override uses another URL.
+      ids = [env.ANTHROPIC_MODEL || settings.model, env.ANTHROPIC_DEFAULT_OPUS_MODEL,
+        env.ANTHROPIC_DEFAULT_SONNET_MODEL, env.ANTHROPIC_DEFAULT_HAIKU_MODEL];
+    }
+    return [...new Set(ids.filter((id): id is string => typeof id === "string" && Boolean(id.trim()))
+      .map((id) => id.trim()))];
+  } catch {
+    return [];
+  }
+}
+
 function loadClaudeCodeConfig(): LocalConfig | null {
   if ("claude" in configCache) return configCache.claude ?? null;
   const raw = readHomeFile(path.join(os.homedir(), ".claude", "settings.json"));

@@ -32,6 +32,9 @@ test("explicit Custom connection test verifies a model missing from the catalog"
     const full = await testConnection("custom", true);
     assert.equal(full.status, "connected");
     assert.equal(probes, 1, "an explicit test must prove generation works");
+    const again = await testConnection("custom", false, ["relay-alias"]);
+    assert.equal(again.status, "connected");
+    assert.equal(again.detail, undefined, "a verified relay model stays a plain Connected");
   } finally {
     toolHooks.getManualConfig = getManualConfig;
     server.close();
