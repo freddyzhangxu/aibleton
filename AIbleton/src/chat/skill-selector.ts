@@ -4,6 +4,7 @@ import { toolHooks, toolState, type Ctx } from "../state.js";
 import { loadSkills, matchSkills, type Skill } from "../skills.js";
 import type { ResolvedConfig } from "./config.js";
 import { readResponsesStream } from "./providers/openai.js";
+import { parseCustomResponse } from "./providers/custom-response.js";
 
 const MAX_CATALOG_CHARS = 12_000;
 const MAX_SELECTION_MS = 10_000;
@@ -185,10 +186,9 @@ async function requestSelectionText(
     proxy,
     signal,
   });
-  const data = JSON.parse(await readAll(response.stream)) as {
-    choices?: { message?: { content?: string | null } }[];
-  };
+  const data = parseCustomResponse(response.status, await readAll(response.stream));
   if (response.status < 200 || response.status >= 300) throw new Error(`provider status ${response.status}`);
+  if (data.error) throw new Error(data.error.message || "Custom response error");
   return data.choices?.[0]?.message?.content ?? "";
 }
 

@@ -23,21 +23,9 @@ import {
   replyNeedsLanguageCorrection,
 } from "../../i18n/language.js";
 import { measureAsync } from "../timing.js";
+import { parseCustomResponse, type ChatCompletionsData } from "./custom-response.js";
 
 // ---------- OpenAI-compatible chat/completions (custom endpoint) ----------
-
-interface ChatCompletionsData {
-  choices?: {
-    message?: {
-      content?: string | null;
-      tool_calls?: {
-        id?: string;
-        function?: { name?: string; arguments?: string };
-      }[];
-    };
-  }[];
-  error?: { message?: string };
-}
 
 /**
  * Generic OpenAI-compatible endpoint. Speaks plain /chat/completions (the
@@ -116,7 +104,7 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
         });
         return {
           status: res.status,
-          data: JSON.parse(await readAll(res.stream)) as ChatCompletionsData,
+          data: parseCustomResponse(res.status, await readAll(res.stream)),
         };
       }, (line) => toolHooks.debugLog(context, line));
       status = response.status;
@@ -132,7 +120,7 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
         language: req.language,
       });
     }
-    if (status < 200 || status >= 300) {
+    if (status < 200 || status >= 300 || data.error) {
       console.error(
         `[ai-assistant] custom API ${status} · 请求 ${requestBody.length} 字符 · 响应: ${JSON.stringify(data).slice(0, 500)}`,
       );
