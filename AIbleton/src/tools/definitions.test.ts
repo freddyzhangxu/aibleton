@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { TOOLS } from "./definitions.js";
+import { TOOLS, activeTools } from "./definitions.js";
 
 test("describes generic insertion attempts for named built-in Live vocal devices", () => {
   const insertDevice = TOOLS.find((tool) => tool.name === "insert_device");
@@ -56,4 +56,12 @@ test("documents actual creation result fields so later plan steps can reference 
   assert.ok(createMidi);
   assert.match(createMidi.description, /result returns the actual track name in `created`/);
   assert.match(createMidi.description, /step-id#\/created/);
+});
+
+test("simple edits advertise their reads and writes without the full tool catalog", () => {
+  assert.deepEqual(activeTools("tempo").map((tool) => tool.name).sort(), ["get_song_overview", "set_tempo"]);
+  const mixer = activeTools("mixer").map((tool) => tool.name);
+  for (const name of ["get_song_overview", "get_track_mixer", "set_track_mixer", "get_return_track_mixer", "set_return_track_mixer"]) assert.ok(mixer.includes(name));
+  assert.ok(mixer.length < 10);
+  assert.ok(activeTools().length > 60, "ambiguous and creative tasks keep the full catalog");
 });

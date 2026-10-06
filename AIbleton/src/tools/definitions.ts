@@ -227,9 +227,8 @@ export const TOOLS = [
   {
     name: "set_plan",
     description:
-      "Declare your step-by-step plan for the declared goal — call it AFTER set_goal, BEFORE any Set-modifying " +
-      "tool, only for multi-step tasks whose expected effects fit the plan's measured vocabulary. Skip it for subjective " +
-      "creative passes, including when set_goal only carries explicit hard boundaries. " +
+      "Batch fully specified Set edits with execute: true, even without set_goal. This also works for creative passes; " +
+      "do not invent measurable goals or expectedEffects just to batch edits. Declaration-only plans still require set_goal. " +
       "set_plan is declaration-only by default. For a fully specified multi-step task, you MUST include execute: true or no " +
       "Set changes run. Only do this when each supported tool and complete args are known now or use an exact $ref to an " +
       "earlier successful step. When execute is true, supported Set-edit steps run sequentially inside this " +
@@ -238,7 +237,7 @@ export const TOOLS = [
       "completed steps. Only opt in when all tools and arguments are known now or use an exact $ref to an earlier step result. " +
       "If a read is needed to determine a later argument, do that read before set_plan. " +
       "Each step names the tool you expect to " +
-      "call and the expectedEffects it should produce, so you always know WHY you call a tool and WHAT should " +
+      "call and optionally the expectedEffects it should produce, so you always know WHY you call a tool and WHAT should " +
       "change afterwards. Effects are a CLOSED vocabulary (see the schema): pick a metric and fill its " +
       "parameters — never invent metrics. The server tracks which steps actually execute (matched from your " +
       "tool calls) and, if the goal check fails at the end, reports per step: which steps never ran and which " +
@@ -407,7 +406,7 @@ export const TOOLS = [
   { name: "duplicate_track", description: "Duplicate a Track immediately after it. The copy keeps Live's default name.", input_schema: { type: "object", properties: { track_index: { type: "number" }, track_name: { type: "string", description: TRACK_NAME_DESC } }, required: ["track_index"] } },
   {
     name: "delete_track",
-    description: "Permanently remove one regular track from the Set. Call ONLY when the CURRENT user message explicitly asks to delete/remove that track; vague clear or cleanup wording is not authorization. Live Undo can restore it.",
+    description: "Permanently remove one regular track from the Set. A track created or duplicated by you earlier in this turn may be deleted as self-correction. For a pre-existing track, call ONLY when the CURRENT user message explicitly asks to delete/remove it; renaming or editing it this turn does not make it yours. Vague clear or cleanup wording is not authorization. Live Undo can restore it.",
     input_schema: {
       type: "object",
       properties: {
@@ -1075,7 +1074,14 @@ export const TOOLS = [
 
 /** Web tools leave the tools list entirely when the toggle is off, so the
  * model can't call them (and weak relay models can't imitate them). */
-export function activeTools(): typeof TOOLS {
-  if (toolState.webSettings.enabled) return TOOLS;
-  return TOOLS.filter((t) => t.name !== "web_search" && t.name !== "web_fetch");
+export function activeTools(simpleEdit?: "tempo" | "mixer"): typeof TOOLS {
+  const allowed = simpleEdit === "tempo"
+    ? new Set(["get_song_overview", "set_tempo"])
+    : simpleEdit === "mixer"
+      ? new Set(["get_song_overview", "get_track_mixer", "set_track_mixer", "get_return_track_mixer", "set_return_track_mixer"])
+      : null;
+  return TOOLS.filter((t) =>
+    (!allowed || allowed.has(t.name)) &&
+    (toolState.webSettings.enabled || (t.name !== "web_search" && t.name !== "web_fetch")),
+  );
 }

@@ -105,13 +105,14 @@ import {
   deleteToolIsAuthorized,
   isDeleteTool,
 } from "../chat/deleteauth.js";
-import { clearCreatedDevices, targetIsAgentCreatedDevice } from "../tools/created-devices.js";
+import { clearCreatedTurnObjects, targetIsAgentCreatedObject } from "../tools/created-devices.js";
 import * as fs from "node:fs";
 import { actionableError, friendlyToolError, sanitizeToolResultLanguage } from "../errors.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
 import { truncateResult } from "../chat/session.js";
 import { clearTurnGoalOutcome, setTurnGoalOutcome } from "./turnoutcome.js";
 import { commonText } from "../i18n/common.js";
+import { measureAsync } from "../chat/timing.js";
 
 // ---------- Goal/Intent layer (goal/) ----------
 //
@@ -207,6 +208,33 @@ export async function loadReferenceAnalysis(
 let mutationsThisTurn = 0;
 let consecutiveToolErrors: ConsecutiveToolErrorState = { count: 0 };
 
+/** Feed both dispatcher errors and pre-dispatch refusals through the same
+ * repeated-call circuit breaker. A refused planned step must count even when
+ * its successful set_plan wrapper would otherwise reset the error streak. */
+function stopAfterRepeatedToolError(
+  context: Ctx,
+  name: string,
+  result: Record<string, unknown>,
+): Record<string, unknown> {
+  const errorText = typeof result.error === "string" ? result.error : undefined;
+  if (!errorText) return result;
+  const errorClass = `${name}:${errorText.split("\n", 1)[0].slice(0, 240)}`;
+  consecutiveToolErrors = nextToolErrorState(consecutiveToolErrors, errorClass);
+  if (consecutiveToolErrors.count < AGENT_MAX_CONSECUTIVE_TOOL_ERRORS) return result;
+  toolState.stopRequested = true;
+  toolState.stopReason = "repeated_tool_error";
+  toolHooks.debugLog(
+    context,
+    `TOOL ${name} AUTO-STOP: repeated error ${consecutiveToolErrors.count}/${AGENT_MAX_CONSECUTIVE_TOOL_ERRORS}`,
+  );
+  return {
+    ...result,
+    error:
+      `${errorText}\n同一工具连续 ${AGENT_MAX_CONSECUTIVE_TOOL_ERRORS} 次失败，已停止重复调用；请重新读取当前状态并改用不同方案。`,
+    repeated_tool_error: true,
+  };
+}
+
 // ---------- Plan layer (plan/) ----------
 //
 // One declared plan per goal. set_plan attaches ordered steps — each with its
@@ -257,7 +285,7 @@ function localizedNormalizationWarnings(
 }
 
 export function handleSetPlan(context: Ctx, input: Record<string, unknown>): unknown {
-  if (!pendingGoal) {
+  if (!pendingGoal && input.execute !== true) {
     throw actionableError(commonText(toolState.activeLanguage, "planRequiresGoal"));
   }
   const norm = normalizePlan(input, VALID_TOOL_NAMES);
@@ -281,17 +309,19 @@ export function handleSetPlan(context: Ctx, input: Record<string, unknown>): unk
   if (mutationsThisTurn > 0) {
     warnings.push(commonText(toolState.activeLanguage, "planDeclaredLate", mutationsThisTurn));
   }
-  pendingPlan = { goal: pendingGoal.goal, steps: norm.steps };
+  // Execution is also useful for a creative pass with fully specified edits.
+  // It must not invent a measurable goal or trigger goal-gate retries.
+  pendingPlan = pendingGoal ? { goal: pendingGoal.goal, steps: norm.steps } : null;
   // Replay the turn so far: a plan declared late still gets correct statuses.
-  const done = executedStepIds(pendingPlan.steps, executedToolsThisTurn);
+  const done = executedStepIds(norm.steps, executedToolsThisTurn);
   toolHooks.debugLog(
     context,
-    `PLAN set: ${norm.steps.length} steps for goal「${pendingGoal.goal.objective}」· already executed=${done.size}`,
+    `PLAN set: ${norm.steps.length} steps · goal=${pendingGoal?.goal.objective ?? "execution only"} · already executed=${done.size}`,
   );
   return {
     plan_set: true,
-    goal: pendingGoal.goal.objective,
-    steps: pendingPlan.steps.map((s) => ({
+    ...(pendingGoal ? { goal: pendingGoal.goal.objective } : { execution_only: true }),
+    steps: norm.steps.map((s) => ({
       id: s.id,
       description: s.description,
       ...(s.tool ? { tool: s.tool } : {}),
@@ -896,7 +926,9 @@ export async function callTool(
       toolState.activeExplicitEditScope,
     );
     if (refusal) {
-      const refused = { error: friendlyToolError(refusal, toolState.activeLanguage) };
+      const refused = stopAfterRepeatedToolError(context, name, {
+        error: friendlyToolError(refusal, toolState.activeLanguage),
+      });
       actions.push({ tool: name, input, result: refused });
       toolHooks.debugLog(context, `TOOL ${name} REFUSED: selection boundary`);
       return JSON.stringify(refused);
@@ -909,9 +941,13 @@ export async function callTool(
   if (
     isDeleteTool(name) &&
     !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization) &&
-    !targetIsAgentCreatedDevice(context, name, input)
+    !targetIsAgentCreatedObject(context, name, input)
   ) {
-    const refused = deleteAuthorizationError(name, toolState.activeLanguage);
+    const refused = stopAfterRepeatedToolError(
+      context,
+      name,
+      deleteAuthorizationError(name, toolState.activeLanguage),
+    );
     actions.push({ tool: name, input, result: refused });
     toolHooks.debugLog(context, `TOOL ${name} REFUSED: no explicit delete authorization`);
     return JSON.stringify(refused);
@@ -925,7 +961,7 @@ export async function callTool(
     !READ_ONLY_TOOLS.has(name) &&
     countMutations(executedToolsThisTurn, READ_ONLY_TOOLS) >= AGENT_MAX_STEPS
   ) {
-    const refused = stepBudgetError(toolState.activeLanguage);
+    const refused = stopAfterRepeatedToolError(context, name, stepBudgetError(toolState.activeLanguage));
     actions.push({ tool: name, input, result: refused });
     toolHooks.debugLog(context, `TOOL ${name} REFUSED: mutation budget ${AGENT_MAX_STEPS} exhausted`);
     return JSON.stringify(refused);
@@ -945,9 +981,11 @@ export async function callTool(
     !refinePreAuthorized &&
     (!yolo || COSTLY_TOOLS.has(name));
   if (needsConfirm) {
-    const allowed = await askConfirmation(name, input);
+    const allowed = await measureAsync(`CONFIRM name=${name}`, () => askConfirmation(name, input), (line) => toolHooks.debugLog(context, line));
     if (!allowed) {
-      const denied = { error: commonText(toolState.activeLanguage, "userDenied") };
+      const denied = stopAfterRepeatedToolError(context, name, {
+        error: commonText(toolState.activeLanguage, "userDenied"),
+      });
       actions.push({ tool: name, input, result: denied });
       toolHooks.debugLog(context, `TOOL ${name} DENIED by user`);
       return JSON.stringify(denied);
@@ -958,7 +996,7 @@ export async function callTool(
   toolState.phase = phaseForTool(name);
   toolState.activity = activityForTool(name, input);
   try {
-    result = await runTool(context, name, input);
+    result = await measureAsync(`DISPATCH name=${name}`, () => runTool(context, name, input), (line) => toolHooks.debugLog(context, line));
     executed = didExecute(result);
     // Plan-layer step matching counts every call that actually ran — a call
     // whose verify later fails still executed ("missed target" ≠ "never
@@ -972,28 +1010,17 @@ export async function callTool(
     // The model digests the result next — back to the generic phase.
     toolState.phase = "thinking";
   }
-  if (executed) result = await verifyToolResult(context, name, input, result);
+  if (executed) result = await measureAsync(`VERIFY name=${name}`, () => verifyToolResult(context, name, input, result), (line) => toolHooks.debugLog(context, line));
   const errorText =
     result && typeof result === "object" && !Array.isArray(result) && "error" in result
       ? String((result as Record<string, unknown>).error ?? "工具失败")
       : undefined;
-  const errorClass = errorText
-    ? `${name}:${errorText.split("\n", 1)[0].slice(0, 240)}`
-    : undefined;
-  consecutiveToolErrors = nextToolErrorState(consecutiveToolErrors, errorClass);
-  if (consecutiveToolErrors.count >= AGENT_MAX_CONSECUTIVE_TOOL_ERRORS && errorText) {
-    result = {
-      ...(result as Record<string, unknown>),
-      error:
-        `${errorText}\n同一工具连续 ${AGENT_MAX_CONSECUTIVE_TOOL_ERRORS} 次失败，已停止重复调用；请重新读取当前状态并改用不同方案。`,
-      repeated_tool_error: true,
-    };
-    toolState.stopRequested = true;
-    toolState.stopReason = "repeated_tool_error";
-    toolHooks.debugLog(
-      context,
-      `TOOL ${name} AUTO-STOP: repeated error ${consecutiveToolErrors.count}/${AGENT_MAX_CONSECUTIVE_TOOL_ERRORS}`,
-    );
+  if (errorText) {
+    result = stopAfterRepeatedToolError(context, name, result as Record<string, unknown>);
+  } else if (executed && !READ_ONLY_TOOLS.has(name) && !PLAN_META_TOOLS.has(name)) {
+    // A successful state-changing tool is progress. Reads and plan wrappers
+    // do not erase a repeated refusal from their underlying planned step.
+    consecutiveToolErrors = { count: 0 };
   }
   // Deterministic listen hint (tools/listenhint.ts): after a successful
   // mutation, tell the user what to play to judge the change. Advisory only —
@@ -1016,6 +1043,9 @@ export async function callTool(
     mutationsThisTurn++;
   }
   result = sanitizeToolResultLanguage(result, toolState.activeLanguage);
+  if (executed && !PLAN_META_TOOLS.has(name) && !(result && typeof result === "object" && "error" in result)) {
+    toolState.progress.completedTools++;
+  }
   const actionIndex = actions.length;
   actions.push({ tool: name, input, result });
   const executableSteps =
@@ -1030,13 +1060,14 @@ export async function callTool(
     // Consume the executable plan once. Planned tools cannot recurse into
     // set_plan because preflight excludes goal/plan meta tools.
     pendingExecutablePlan = null;
+    toolState.progress.plan = { completed: 0, total: executableSteps.length };
     const stepOutcomes = new Map<string, Record<string, unknown>>();
     const report = await executePlanSequentially(
       executableSteps,
       TOOL_INPUT_SCHEMAS,
       async (step, resolvedArgs) => {
         const stepActionIndex = actions.length;
-        await callTool(context, actions, step.tool!, resolvedArgs, yolo);
+        await measureAsync(`PLAN_STEP id=${step.id} tool=${step.tool}`, () => callTool(context, actions, step.tool!, resolvedArgs, yolo), (line) => toolHooks.debugLog(context, line));
         const stepAction = actions[stepActionIndex];
         if (stepAction) stepAction.planStep = true;
         const stepResult = stepAction?.result;
@@ -1045,17 +1076,27 @@ export async function callTool(
             ? stepResult as Record<string, unknown>
             : undefined;
         const error = record && "error" in record ? String(record.error ?? "tool step failed") : undefined;
-        const succeeded = !!record && !error && record.executed !== false;
+        const reportedPartialFailure = Boolean(
+          record && (
+            record.replacement_not_applied === true ||
+            (Array.isArray(record.failed) && record.failed.length > 0)
+          ),
+        );
+        const succeeded = !!record && !error && record.executed !== false && !reportedPartialFailure;
+        const outcomeError = error ?? (reportedPartialFailure
+          ? "tool reported that the operation did not fully succeed"
+          : !succeeded ? "tool step did not execute" : undefined);
+        if (succeeded && toolState.progress.plan) toolState.progress.plan.completed++;
         stepOutcomes.set(step.id, {
           id: step.id,
           tool: step.tool,
           status: succeeded ? "completed" : "failed",
           ...(stepResult !== undefined ? { result: stepResult } : {}),
-          ...(error ? { error } : !succeeded ? { error: "tool step did not execute" } : {}),
+          ...(outcomeError ? { error: outcomeError } : {}),
         });
         return succeeded
           ? { ok: true, result: stepResult }
-          : { ok: false, result: stepResult, error: error ?? "tool step did not execute" };
+          : { ok: false, result: stepResult, error: outcomeError };
       },
       () => toolState.stopRequested,
     );
@@ -1086,6 +1127,7 @@ export async function callTool(
     };
     result = { ...original, execution };
     actions[actionIndex].result = result;
+    toolState.progress.plan = undefined;
   }
   const rawResultJson = JSON.stringify(result);
   const resultJson = JSON.stringify(result);
@@ -1105,13 +1147,14 @@ export async function callTool(
  * the start of every user turn so a stale goal never gates a new request. */
 export function resetTurnState(): void {
   clearTurnGoalOutcome();
-  clearCreatedDevices();
+  clearCreatedTurnObjects();
   pendingGoal = null;
   pendingPlan = null;
   pendingExecutablePlan = null;
   mutationsThisTurn = 0;
   executedToolsThisTurn = [];
   consecutiveToolErrors = { count: 0 };
+  toolState.progress = { completedTools: 0, plan: undefined };
 }
 
 // Self-register the set_goal/set_plan tool handlers (dispatcher calls these

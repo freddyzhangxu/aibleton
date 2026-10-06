@@ -260,12 +260,14 @@ export function normalizePlan(input: Record<string, unknown>, validTools: Readon
   for (const [i, entry] of raw.slice(0, MAX_STEPS).entries()) {
     if (!entry || typeof entry !== "object") {
       warnings.push(`忽略非法步骤（非对象）: ${JSON.stringify(entry)?.slice(0, 80)}`);
+      if (execute) return { steps: null, warnings, execute };
       continue;
     }
     const e = entry as Record<string, unknown>;
     const description = str(e.description).slice(0, MAX_DESCRIPTION);
     if (!description) {
       warnings.push(`第 ${i + 1} 步缺少 description，已忽略`);
+      if (execute) return { steps: null, warnings, execute };
       continue;
     }
     const id = str(e.id) || `step-${steps.length + 1}`;

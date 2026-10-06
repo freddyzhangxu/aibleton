@@ -54,14 +54,14 @@ test("keeps user bar ranges out of invented goal-section names", () => {
 test("uses executable plans only when every step is known or references an earlier result", () => {
   const prompt = systemPromptFor("en");
   assert.match(prompt, /set_plan is declaration-only by default/);
-  assert.match(prompt, /For a fully specified measurable multi-step task, you MUST set execute: true/);
+  assert.match(prompt, /For a fully specified multi-step task, you MUST set execute: true/);
   assert.match(prompt, /execute: true/);
   assert.match(prompt, /\$ref/);
   assert.match(prompt, /earlier successful step result/);
   assert.match(prompt, /create_midi_track returns the new track name as "created"/);
   assert.match(prompt, /Do not call a successfully executed step again/);
   assert.match(prompt, /a read whose result determines a later argument must happen before the plan/i);
-  assert.match(prompt, /Skip set_plan for subjective creative passes/);
+  assert.match(prompt, /including creative passes without set_goal/);
 });
 
 test("auto-creates a MIDI track when MIDI writing targets an Audio Track", () => {

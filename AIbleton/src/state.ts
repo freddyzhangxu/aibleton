@@ -60,6 +60,8 @@ export const toolState = {
    * user-wording delete authorization. Same per-turn lifetime as
    * activeDeleteAuthorization. */
   activeCreatedDeviceHandles: new Set<string>() as Set<string>,
+  /** Host-assigned ids of tracks created or duplicated by the agent this turn. */
+  activeCreatedTrackHandles: new Set<string>() as Set<string>,
   /** The CURRENT user explicitly asked to operate on the entire Set. This is
    * deliberately per-turn: it must never grant scope beyond this request. */
   activeGlobalIntent: false,
@@ -79,6 +81,8 @@ export const toolState = {
   phase: null as string | null,
   /** User-facing summary of the tool currently operating on the Live Set. */
   activity: null as { key: string; detail?: string } | null,
+  /** Measured completed tools and active sequential batch, if any. */
+  progress: { completedTools: 0, plan: undefined as { completed: number; total: number } | undefined },
 };
 
 /**

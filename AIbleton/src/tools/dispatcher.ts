@@ -77,8 +77,10 @@ import { chainDeviceAt, drumPadAt, drumRackAt, presentPad, presentPads, setParam
 import { deleteAuthorizationError, deleteToolIsAuthorized, isDeleteTool } from "../chat/deleteauth.js";
 import {
   forgetCreatedDevice,
+  forgetCreatedTrack,
   recordCreatedDevice,
-  targetIsAgentCreatedDevice,
+  recordCreatedTrack,
+  targetIsAgentCreatedObject,
 } from "./created-devices.js";
 import { pickRandomMelodicInstrument } from "./instruments.js";
 
@@ -263,6 +265,7 @@ async function resolveMidiWriteTarget(context: Ctx, source: TrackRef): Promise<M
 
   const song = context.application.song;
   const track = await context.withinTransaction(() => song.createMidiTrack());
+  recordCreatedTrack(track);
   track.name = uniqueMidiTrackName(song, source.track.name);
   const index = song.tracks.indexOf(track);
   if (index < 0) throw new Error(`MIDI 轨“${track.name}”已创建，但无法定位其轨道位置`);
@@ -310,7 +313,7 @@ export async function runTool(
   if (
     isDeleteTool(name) &&
     !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization) &&
-    !targetIsAgentCreatedDevice(context, name, input)
+    !targetIsAgentCreatedObject(context, name, input)
   ) {
     return deleteAuthorizationError(name, toolState.activeLanguage);
   }
@@ -407,23 +410,27 @@ export async function runTool(
     }
     case "create_midi_track": {
       const track = await context.withinTransaction(() => song.createMidiTrack());
+      recordCreatedTrack(track);
       if (input.name) track.name = String(input.name);
       return { created: track.name, type: "MIDI" };
     }
     case "create_audio_track": {
       const track = await context.withinTransaction(() => song.createAudioTrack());
+      recordCreatedTrack(track);
       if (input.name) track.name = String(input.name);
       return { created: track.name, type: "Audio" };
     }
     case "duplicate_track": {
       const ref = resolveTrack(context, input, "track_index");
       const track = await context.withinTransaction(() => song.duplicateTrack(ref.track));
+      recordCreatedTrack(track);
       return { duplicated: ref.track.name, created: track.name, track_index: song.tracks.indexOf(track) };
     }
     case "delete_track": {
       const ref = resolveTrack(context, input, "track_index");
       const deleted = { name: ref.track.name, track_index: ref.index };
       await context.withinTransaction(() => song.deleteTrack(ref.track));
+      forgetCreatedTrack(ref.track);
       return {
         deleted: "track",
         ...deleted,
@@ -433,6 +440,7 @@ export async function runTool(
     case "create_move_track": {
       const channel = Math.min(16, Math.max(1, Math.round(Number(input.channel) || 1)));
       const track = await context.withinTransaction(() => song.createMidiTrack());
+      recordCreatedTrack(track);
       track.name = String(input.name || `Move Ch ${channel}`);
       return {
         created: track.name,

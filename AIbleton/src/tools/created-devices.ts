@@ -28,13 +28,45 @@ export function recordCreatedDevice(device: unknown): void {
   if (id !== undefined) toolState.activeCreatedDeviceHandles.add(id);
 }
 
+export function recordCreatedTrack(track: unknown): void {
+  const id = handleIdOf(track);
+  if (id !== undefined) toolState.activeCreatedTrackHandles.add(id);
+}
+
 export function forgetCreatedDevice(device: unknown): void {
   const id = handleIdOf(device);
   if (id !== undefined) toolState.activeCreatedDeviceHandles.delete(id);
 }
 
+export function forgetCreatedTrack(track: unknown): void {
+  const id = handleIdOf(track);
+  if (id !== undefined) toolState.activeCreatedTrackHandles.delete(id);
+}
+
 export function clearCreatedDevices(): void {
   toolState.activeCreatedDeviceHandles.clear();
+}
+
+export function clearCreatedTurnObjects(): void {
+  clearCreatedDevices();
+  toolState.activeCreatedTrackHandles.clear();
+}
+
+/** Only a track created/duplicated this turn qualifies. A renamed or edited
+ * pre-existing track is never recorded and cannot match by name or index. */
+export function targetIsAgentCreatedTrack(
+  context: Ctx,
+  toolName: string,
+  input: Record<string, unknown>,
+): boolean {
+  if (toolName !== "delete_track") return false;
+  try {
+    const ref = resolveTrack(context, input, "track_index");
+    const id = handleIdOf(ref.track);
+    return id !== undefined && toolState.activeCreatedTrackHandles.has(id);
+  } catch {
+    return false;
+  }
 }
 
 /** True iff the delete/replace tool's actual target — re-resolved from the
@@ -79,4 +111,14 @@ export function targetIsAgentCreatedDevice(
   } catch {
     return false;
   }
+}
+
+export function targetIsAgentCreatedObject(
+  context: Ctx,
+  toolName: string,
+  input: Record<string, unknown>,
+): boolean {
+  return toolName === "delete_track"
+    ? targetIsAgentCreatedTrack(context, toolName, input)
+    : targetIsAgentCreatedDevice(context, toolName, input);
 }
