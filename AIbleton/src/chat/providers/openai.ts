@@ -22,6 +22,7 @@ import { errMessage, friendlyApiError, isFriendlyError, settingsPath } from "../
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
+import { measureAsync, monotonicNow } from "../timing.js";
 import {
   languageCorrectionPrompt,
   MAX_REPLY_LANGUAGE_CORRECTIONS,
@@ -132,7 +133,7 @@ export async function readResponsesStream(
   stream: AsyncIterable<Buffer>,
   log?: (line: string) => void,
 ): Promise<OpenAIResponseData> {
-  const t0 = Date.now();
+  const t0 = monotonicNow();
   let chunks = 0;
   let bytes = 0;
   const eventTypes: string[] = [];
@@ -185,13 +186,13 @@ export async function readResponsesStream(
     }
   } catch (err) {
     log?.(
-      `SSE stream threw after ${chunks} chunks ${bytes}B in ${Date.now() - t0}ms: ` +
+      `SSE stream threw after ${chunks} chunks ${bytes}B in ${(monotonicNow() - t0).toFixed(1)}ms: ` +
         `${err instanceof Error ? err.message : String(err)} — events=[${eventTypes.join(",")}]`,
     );
     throw err;
   }
   log?.(
-    `SSE stream ended: ${chunks} chunks ${bytes}B in ${Date.now() - t0}ms, ` +
+    `SSE stream ended: ${chunks} chunks ${bytes}B in ${(monotonicNow() - t0).toFixed(1)}ms, ` +
       `events=[${eventTypes.join(",")}], items=${items.length}, ` +
       `final=${finalResponse ? "yes" : "no"}, tail=${JSON.stringify(buf.slice(-300))}`,
   );
@@ -283,15 +284,19 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     let data: OpenAIResponseData;
     let status: number;
     try {
-      let res = await doFetch();
-      if (res.status === 401 && cfg.chatgpt && cfg.refreshToken) {
-        await refreshCodexToken(cfg, req.language);
-        res = await doFetch();
-      }
-      status = res.status;
-      data = cfg.chatgpt
-        ? await readResponsesStream(res.stream, (line) => toolHooks.debugLog(context, line))
-        : (JSON.parse(await readAll(res.stream)) as OpenAIResponseData);
+      const response = await measureAsync(`MODEL provider=openai round=${round}`, async () => {
+        let res = await doFetch();
+        if (res.status === 401 && cfg.chatgpt && cfg.refreshToken) {
+          await refreshCodexToken(cfg, req.language);
+          res = await doFetch();
+        }
+        const responseData = cfg.chatgpt
+          ? await readResponsesStream(res.stream, (line) => toolHooks.debugLog(context, line))
+          : (JSON.parse(await readAll(res.stream)) as OpenAIResponseData);
+        return { status: res.status, data: responseData };
+      }, (line) => toolHooks.debugLog(context, line));
+      status = response.status;
+      data = response.data;
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
@@ -372,7 +377,11 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       } catch {
         // Malformed arguments — run with empty input, the tool error explains.
       }
-      const resultJson = await callTool(context, actions, call.name!, toolInput, req.yolo !== false);
+      const resultJson = await measureAsync(
+        `TOOL provider=openai round=${round} name=${call.name!}`,
+        () => callTool(context, actions, call.name!, toolInput, req.yolo !== false),
+        (line) => toolHooks.debugLog(context, line),
+      );
       input.push({ type: "function_call_output", call_id: call.call_id, output: resultJson });
     }
   }

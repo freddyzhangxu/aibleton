@@ -54,6 +54,7 @@ import { selectSkillsForTurn } from "./chat/skill-selector.js";
 import { testConnection, testAudioConnection } from "./chat/testconn.js";
 import { errMessage, friendlyBoundaryError } from "./errors.js";
 import { commonText, resolveTurnLanguage } from "./i18n/index.js";
+import { monotonicNow } from "./chat/timing.js";
 
 /** A selection is the default editing boundary. These are intentionally
  * narrow, explicit whole-Set requests — a vague "make it bigger" must not
@@ -906,6 +907,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         // side, so closing the dialog (which kills this connection) does NOT
         // stop it. Clients poll /api/status and then read /api/history.
         send(202, JSON.stringify({ ok: true }));
+        const taskStartedAt = monotonicNow();
         debugLog(
           context,
           `TASK start: "${text.slice(0, 60)}" · reply=${languageContext.replyLanguage}` +
@@ -918,11 +920,11 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         void (async () => {
           try {
             await chat(context, parsed);
-            debugLog(context, "TASK done");
+            debugLog(context, `TASK done elapsedMs=${(monotonicNow() - taskStartedAt).toFixed(1)}`);
           } catch (err) {
             const rawError = err instanceof Error ? err.stack ?? err.message : String(err);
             lastError = friendlyBoundaryError(err, languageContext.replyLanguage);
-            debugLog(context, `TASK error: ${rawError}`);
+            debugLog(context, `TASK error elapsedMs=${(monotonicNow() - taskStartedAt).toFixed(1)}: ${rawError}`);
             session.messages.pop(); // roll back the user message to keep the conversation consistent
             saveStore(context);
           } finally {

@@ -18,6 +18,7 @@ import {
   MAX_REPLY_LANGUAGE_CORRECTIONS,
   replyNeedsLanguageCorrection,
 } from "../../i18n/language.js";
+import { measureAsync, monotonicNow } from "../timing.js";
 
 export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
   const { baseUrl, authToken, model } = cfg;
@@ -104,22 +105,22 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     let data: AnthropicRoundData;
     let status = 0;
     let phase = "headers";
-    const startedAt = Date.now();
+    const startedAt = monotonicNow();
     toolHooks.debugLog(context, `ROUND ${round}: Claude request start chars=${requestChars}`);
     try {
-      const res = await requestAnthropicRound(
+      const res = await measureAsync(`MODEL provider=anthropic round=${round}`, () => requestAnthropicRound(
         `${baseUrl}/v1/messages`,
         headers,
         requestBody,
         toolState.abortCtl?.signal ?? null,
         (code, mode) => {
           phase = "body";
-          toolHooks.debugLog(context, `ROUND ${round}: Claude headers status=${code} mode=${mode} elapsedMs=${Date.now() - startedAt}`);
+          toolHooks.debugLog(context, `ROUND ${round}: Claude headers status=${code} mode=${mode} elapsedMs=${(monotonicNow() - startedAt).toFixed(1)}`);
         },
-      );
+      ), (line) => toolHooks.debugLog(context, line));
       status = res.status;
       data = res.data;
-      toolHooks.debugLog(context, `ROUND ${round}: Claude response complete elapsedMs=${Date.now() - startedAt}`);
+      toolHooks.debugLog(context, `ROUND ${round}: Claude response complete elapsedMs=${(monotonicNow() - startedAt).toFixed(1)}`);
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
@@ -129,7 +130,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
         : cause === undefined ? "" : String(cause);
       toolHooks.debugLog(
         context,
-        `ROUND ${round}: Claude request failed phase=${phase} elapsedMs=${Date.now() - startedAt} ` +
+        `ROUND ${round}: Claude request failed phase=${phase} elapsedMs=${(monotonicNow() - startedAt).toFixed(1)} ` +
           `error=${errMessage(err)} cause=${causeDetail.slice(0, 300)}`,
       );
       throw friendlyApiError({
@@ -178,7 +179,11 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
       const toolResults: unknown[] = [];
       for (const block of toolBlocks) {
         if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-        const resultJson = await callTool(context, actions, block.name!, block.input ?? {}, req.yolo !== false);
+        const resultJson = await measureAsync(
+          `TOOL provider=anthropic round=${round} name=${block.name!}`,
+          () => callTool(context, actions, block.name!, block.input ?? {}, req.yolo !== false),
+          (line) => toolHooks.debugLog(context, line),
+        );
         toolResults.push({
           type: "tool_result",
           tool_use_id: block.id,

@@ -22,6 +22,7 @@ import {
   MAX_REPLY_LANGUAGE_CORRECTIONS,
   replyNeedsLanguageCorrection,
 } from "../../i18n/language.js";
+import { measureAsync } from "../timing.js";
 
 // ---------- Gemini generateContent API ----------
 
@@ -107,17 +108,23 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     };
     let status = 0;
     try {
-      const res = await rawPost(
-        new URL(`${cfg.baseUrl}/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`),
-        {
-          headers: { "content-type": "application/json", "x-goog-api-key": cfg.authToken },
-          body: requestBody,
-          proxy: detectProxy(),
-          signal: toolState.abortCtl?.signal,
-        },
-      );
-      status = res.status;
-      data = JSON.parse(await readAll(res.stream)) as typeof data;
+      const response = await measureAsync(`MODEL provider=gemini round=${round}`, async () => {
+        const res = await rawPost(
+          new URL(`${cfg.baseUrl}/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`),
+          {
+            headers: { "content-type": "application/json", "x-goog-api-key": cfg.authToken },
+            body: requestBody,
+            proxy: detectProxy(),
+            signal: toolState.abortCtl?.signal,
+          },
+        );
+        return {
+          status: res.status,
+          data: JSON.parse(await readAll(res.stream)) as typeof data,
+        };
+      }, (line) => toolHooks.debugLog(context, line));
+      status = response.status;
+      data = response.data;
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
@@ -180,7 +187,11 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     for (const p of fnCalls) {
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
       const name = p.functionCall!.name!;
-      const resultJson = await callTool(context, actions, name, p.functionCall!.args ?? {}, req.yolo !== false);
+      const resultJson = await measureAsync(
+        `TOOL provider=gemini round=${round} name=${name}`,
+        () => callTool(context, actions, name, p.functionCall!.args ?? {}, req.yolo !== false),
+        (line) => toolHooks.debugLog(context, line),
+      );
       responseParts.push({ functionResponse: { name, response: { result: resultJson } } });
     }
     contents.push({ role: "user", parts: responseParts });
