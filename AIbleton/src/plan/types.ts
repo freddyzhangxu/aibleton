@@ -99,6 +99,8 @@ export function planNeedsAudio(plan: MusicPlan): boolean {
 export interface NormalizedPlan {
   steps: PlanStep[] | null;
   warnings: string[];
+  /** Explicit opt-in. Omitted and non-true values preserve declaration-only behavior. */
+  execute: boolean;
 }
 
 /** Anti-junk guards: plans are guidance, not data pipelines. */
@@ -106,6 +108,7 @@ const MAX_STEPS = 12;
 const MAX_EFFECTS_PER_STEP = 4;
 const MAX_DESCRIPTION = 200;
 const MAX_ARGS_CHARS = 2000;
+const MAX_EXECUTION_ARGS_CHARS = 32_000;
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
@@ -222,12 +225,12 @@ function normScope(raw: unknown, warnings: string[]): PlanStep["scope"] | undefi
   return out.section || out.startBeat !== undefined ? out : undefined;
 }
 
-function normArgs(raw: unknown, warnings: string[]): unknown {
+function normArgs(raw: unknown, warnings: string[], limit = MAX_ARGS_CHARS): unknown {
   if (raw === undefined) return undefined;
   try {
     const s = JSON.stringify(raw);
-    if (s && s.length > MAX_ARGS_CHARS) {
-      warnings.push(`args 超过 ${MAX_ARGS_CHARS} 字符已丢弃（计划只需意图，不需要完整参数）`);
+    if (s && s.length > limit) {
+      warnings.push(`args 超过 ${limit} 字符已丢弃`);
       return undefined;
     }
     return raw;
@@ -244,12 +247,14 @@ function normArgs(raw: unknown, warnings: string[]): unknown {
  */
 export function normalizePlan(input: Record<string, unknown>, validTools: ReadonlySet<string>): NormalizedPlan {
   const warnings: string[] = [];
+  const execute = input.execute === true;
   const raw = input.steps;
   if (!Array.isArray(raw)) {
-    return { steps: null, warnings: ["steps 必须是数组"] };
+    return { steps: null, warnings: ["steps 必须是数组"], execute };
   }
   if (raw.length > MAX_STEPS) {
     warnings.push(`计划最多 ${MAX_STEPS} 步，超出的 ${raw.length - MAX_STEPS} 步已忽略`);
+    if (execute) return { steps: null, warnings, execute };
   }
   const steps: PlanStep[] = [];
   for (const [i, entry] of raw.slice(0, MAX_STEPS).entries()) {
@@ -284,7 +289,7 @@ export function normalizePlan(input: Record<string, unknown>, validTools: Readon
           .filter((fx): fx is ExpectedEffect => fx !== null);
       }
     }
-    const args = normArgs(e.args, warnings);
+    const args = normArgs(e.args, warnings, execute ? MAX_EXECUTION_ARGS_CHARS : MAX_ARGS_CHARS);
     const scope = normScope(e.scope, warnings);
     steps.push({
       id,
@@ -295,6 +300,6 @@ export function normalizePlan(input: Record<string, unknown>, validTools: Readon
       expectedEffects,
     });
   }
-  if (!steps.length) return { steps: null, warnings };
-  return { steps, warnings };
+  if (!steps.length) return { steps: null, warnings, execute };
+  return { steps, warnings, execute };
 }

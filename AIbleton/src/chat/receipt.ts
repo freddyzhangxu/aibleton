@@ -14,7 +14,7 @@ export type TurnReceipt = {
 };
 
 /** These tools can change local/external data but never change the Live Set. */
-const NON_SET_MUTATIONS = new Set(["move_upload_sample", "move_download_set"]);
+export const NON_SET_MUTATIONS = new Set(["move_upload_sample", "move_download_set"]);
 
 function succeeded(result: unknown): result is Record<string, unknown> {
   return !!result &&
