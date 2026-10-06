@@ -22,6 +22,7 @@ import { URL } from "node:url";
 import { detectProxy, rawGet, rawPost, readAll } from "../http.js";
 import { resolveConfig, type ResolvedConfig } from "./config.js";
 import { ensureCodexAuth } from "./providers/openai.js";
+import { parseCustomResponse } from "./providers/custom-response.js";
 import { errMessage } from "../errors.js";
 import type { Provider } from "../config/local.js";
 import type { AudioGenConfig } from "../audiogen.js";
@@ -327,7 +328,12 @@ async function probeCustomChat(cfg: ResolvedConfig): Promise<ConnTestResult> {
   } catch (err) {
     return netFail(err, cfg.model);
   }
-  return classifyGeneration(r.status, r.body, cfg.model);
+  const result = classifyGeneration(r.status, r.body, cfg.model);
+  if (r.status >= 200 && r.status < 300) {
+    const data = parseCustomResponse(r.status, r.body);
+    if (data.error) return fail("error", cfg.model, data.error.message);
+  }
+  return result;
 }
 
 async function testCustom(full: boolean): Promise<ConnTestResult> {
@@ -346,9 +352,18 @@ async function testCustom(full: boolean): Promise<ConnTestResult> {
   const auth = classifyAuth(r.status);
   if (auth) return fail(auth, cfg.model);
   if (r.status === 429) return ok(cfg.model, "rate limited (auth OK)");
-  // Custom = the user typed both baseUrl and model; a model missing from the
-  // endpoint's own list is almost always a typo, so the check stays strict.
-  if (r.status >= 200 && r.status < 300) return fromModelList(r.body, cfg.model, true);
+  // Relays can expose an upstream catalog that omits valid aliases (including
+  // Coding Plan models). Only a generation probe proves whether they work.
+  if (r.status >= 200 && r.status < 300) {
+    const ids = parseModelIds(r.body);
+    if (ids.length && modelInList(ids, cfg.model)) return ok(cfg.model);
+    if (!full) {
+      return ok(cfg.model, ids.length
+        ? "model not in the list — run Test connection"
+        : "no model list — run Test connection");
+    }
+    return probeCustomChat(cfg);
+  }
   if (!full) return ok(cfg.model, `no model list (HTTP ${r.status}) — run Test connection`);
   return probeCustomChat(cfg);
 }
