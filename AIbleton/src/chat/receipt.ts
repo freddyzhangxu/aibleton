@@ -2,7 +2,7 @@ import { READ_ONLY_TOOLS } from "./gates.js";
 import type { TurnGoalOutcome } from "../agent/turnoutcome.js";
 import type { ListenHint } from "../tools/listenhint.js";
 
-export type ToolAction = { tool: string; input: unknown; result: unknown };
+export type ToolAction = { tool: string; input: unknown; result: unknown; planStep?: true };
 
 export type TurnReceipt = {
   status: "completed" | "passed" | "unmet";

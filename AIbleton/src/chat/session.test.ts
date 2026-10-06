@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import type { Ctx } from "../state.js";
+import { historyWithTools } from "./history.js";
 import { createSession, currentSession, finishChat, stripEmoji } from "./session.js";
 
 test("stripEmoji removes common, joined, flag, and keycap Emoji", () => {
@@ -38,4 +39,37 @@ test("finishChat persists a receipt only when a successful Set mutation ran", ()
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("replays an executable set_plan once without duplicating its internal steps", () => {
+  const transcript = historyWithTools({
+    id: "test",
+    title: "test",
+    createdAt: 0,
+    updatedAt: 0,
+    messages: [
+      { role: "user", content: "Create a bass clip" },
+      {
+        role: "assistant",
+        content: "Done",
+        actions: [
+          { tool: "set_plan", input: { execute: true }, result: { execution: { completed_step_ids: ["track", "clip"] } } },
+          { tool: "create_midi_track", input: { name: "Bass" }, result: { created: "Bass" }, planStep: true },
+          { tool: "write_midi_clip", input: { track_name: "Bass" }, result: { noteCount: 16 }, planStep: true },
+          { tool: "analyze_song", input: {}, result: { bars: 8 } },
+        ],
+      },
+    ],
+  }, {
+    userText: (text) => `user:${text}`,
+    assistantText: (text) => `assistant:${text}`,
+    toolRound: (actions) => actions.map((action) => `tool:${action.tool}`),
+  });
+
+  assert.deepEqual(transcript, [
+    "user:Create a bass clip",
+    "tool:set_plan",
+    "tool:analyze_song",
+    "assistant:Done",
+  ]);
 });

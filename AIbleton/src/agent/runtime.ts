@@ -99,7 +99,7 @@ import {
   READ_ONLY_TOOLS,
   verifyToolResult,
 } from "../chat/gates.js";
-import { NON_SET_MUTATIONS } from "../chat/receipt.js";
+import { NON_SET_MUTATIONS, type ToolAction } from "../chat/receipt.js";
 import {
   deleteAuthorizationError,
   deleteToolIsAuthorized,
@@ -877,7 +877,7 @@ function didExecute(result: unknown): boolean {
 
 export async function callTool(
   context: Ctx,
-  actions: { tool: string; input: unknown; result: unknown }[],
+  actions: ToolAction[],
   name: string,
   input: Record<string, unknown>,
   yolo: boolean,
@@ -1031,6 +1031,7 @@ export async function callTool(
         const stepActionIndex = actions.length;
         await callTool(context, actions, step.tool!, resolvedArgs, yolo);
         const stepAction = actions[stepActionIndex];
+        if (stepAction) stepAction.planStep = true;
         const stepResult = stepAction?.result;
         const record =
           stepResult && typeof stepResult === "object" && !Array.isArray(stepResult)

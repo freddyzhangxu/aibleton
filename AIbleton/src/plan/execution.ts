@@ -141,13 +141,13 @@ function validateTemplate(
         validateTemplate(child, childSchema, stepIndex, stepIndices, `${path}.${key}`, errors);
       } else if (schema?.additionalProperties === false) {
         errors.push(`${path}.${key} is not allowed`);
-      } else if (isReference(child)) {
+      } else {
         validateTemplate(child, undefined, stepIndex, stepIndices, `${path}.${key}`, errors);
       }
     }
-  } else if (Array.isArray(value) && schema?.items) {
+  } else if (Array.isArray(value)) {
     value.forEach((child, index) =>
-      validateTemplate(child, schema.items, stepIndex, stepIndices, `${path}[${index}]`, errors),
+      validateTemplate(child, schema?.items, stepIndex, stepIndices, `${path}[${index}]`, errors),
     );
   } else if (schema) {
     validateValue(value, schema, path, errors);

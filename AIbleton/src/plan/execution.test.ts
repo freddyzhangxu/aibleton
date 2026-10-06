@@ -92,6 +92,23 @@ test("preflight validates total plan size, malformed pointers, and backward-only
   assert.equal(malformed.ok, false);
 });
 
+test("preflight rejects references nested under an untyped array schema before any writes", () => {
+  const looseArraySchema: InputSchema = {
+    type: "object",
+    properties: {
+      bpm: { type: "number" },
+      tags: { type: "array" },
+    },
+    required: ["bpm"],
+    additionalProperties: false,
+  };
+  const result = preflightExecutablePlan([
+    step("source", { bpm: 128 }),
+    step("target", { bpm: 120, tags: [{ $ref: "source#/bpm" }] }),
+  ], new Map([["set_tempo", looseArraySchema]]), allowedTools);
+  assert.equal(result.ok, false);
+});
+
 test("resolves escaped JSON Pointer segments, array indices, and checks consumer types", () => {
   const source = JSON.parse('{"a/b":{"tilde~key":[17]}}') as Record<string, unknown>;
   const schema: InputSchema = {

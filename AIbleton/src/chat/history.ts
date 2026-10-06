@@ -25,7 +25,10 @@ export function historyWithTools(
       out.push(format.userText(m.content));
       return;
     }
-    const acts = m.actions ?? [];
+    // An executable set_plan is the provider-level call. Its nested tool
+    // actions remain in the receipt/UI, but replaying them as separate model
+    // calls would duplicate the plan's own result and distort future context.
+    const acts = (m.actions ?? []).filter((action) => !action.planStep);
     if (acts.length) out.push(...format.toolRound(acts, `hist_${mi}_`));
     out.push(format.assistantText(m.content));
   });
