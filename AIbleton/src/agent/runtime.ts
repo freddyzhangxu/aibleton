@@ -42,6 +42,11 @@ import { buildGoalView, type GoalView } from "../goal/view.js";
 import { evaluateGoal } from "../goal/evaluate.js";
 import { goalIssue, goalText, normalizeGoalLanguage } from "../goal/i18n.js";
 import { normalizePlan, planNeedsAudio, type MusicPlan } from "../plan/types.js";
+import {
+  executePlanSequentially,
+  preflightExecutablePlan,
+  type InputSchema,
+} from "../plan/execution.js";
 import { buildPlanReport, executedStepIds, type PlanReport } from "../plan/check.js";
 import {
   buildMusicIntelligence,
@@ -94,6 +99,7 @@ import {
   READ_ONLY_TOOLS,
   verifyToolResult,
 } from "../chat/gates.js";
+import { NON_SET_MUTATIONS } from "../chat/receipt.js";
 import {
   deleteAuthorizationError,
   deleteToolIsAuthorized,
@@ -211,6 +217,8 @@ let consecutiveToolErrors: ConsecutiveToolErrorState = { count: 0 };
 // never from the model's own claims.
 
 let pendingPlan: MusicPlan | null = null;
+/** Concrete steps from the current opt-in set_plan call; consumed once by callTool. */
+let pendingExecutablePlan: MusicPlan["steps"] | null = null;
 
 /** Every tool call that actually RAN this turn (denied/thrown excluded;
  * verify-failed INCLUDED — "executed but missed target" is not "never
@@ -222,6 +230,21 @@ const PLAN_META_TOOLS = new Set(["set_goal", "set_plan"]);
 
 /** Known tool names for plan validation — built once from TOOLS. */
 const VALID_TOOL_NAMES: ReadonlySet<string> = new Set(TOOLS.map((t) => t.name));
+
+/** Provider JSON schemas are the local source of truth for plan input checks. */
+const TOOL_INPUT_SCHEMAS: ReadonlyMap<string, InputSchema> = new Map(
+  TOOLS.map((tool) => [tool.name, tool.input_schema as InputSchema]),
+);
+
+/** Allow only local Set-changing tools; tool call guards remain authoritative. */
+const PLANNABLE_TOOL_NAMES: ReadonlySet<string> = new Set(
+  TOOLS.map((tool) => tool.name).filter(
+    (name) =>
+      !READ_ONLY_TOOLS.has(name) &&
+      !NON_SET_MUTATIONS.has(name) &&
+      !PLAN_META_TOOLS.has(name),
+  ),
+);
 
 function localizedNormalizationWarnings(
   warnings: string[],
@@ -239,6 +262,19 @@ export function handleSetPlan(context: Ctx, input: Record<string, unknown>): unk
   const norm = normalizePlan(input, VALID_TOOL_NAMES);
   if (!norm.steps) {
     throw actionableError(commonText(toolState.activeLanguage, "planNoValidSteps"));
+  }
+  pendingExecutablePlan = null;
+  if (norm.execute) {
+    const preflight = preflightExecutablePlan(norm.steps, TOOL_INPUT_SCHEMAS, PLANNABLE_TOOL_NAMES);
+    if (!preflight.ok) {
+      toolHooks.debugLog(context, `PLAN execute rejected before writes: ${preflight.errors.join("; ")}`);
+      return {
+        plan_set: false,
+        error: commonText(toolState.activeLanguage, "invalidPlanWarning"),
+        details: preflight.errors,
+      };
+    }
+    pendingExecutablePlan = norm.steps;
   }
   const warnings = localizedNormalizationWarnings(norm.warnings, "invalidPlanWarning");
   if (mutationsThisTurn > 0) {
@@ -306,6 +342,7 @@ export async function handleSetGoal(context: Ctx, input: Record<string, unknown>
   if (pendingPlan) {
     // The goal the plan was built for just changed — the old plan is stale.
     pendingPlan = null;
+    pendingExecutablePlan = null;
     warnings.push(commonText(toolState.activeLanguage, "goalRedeclared"));
   }
   // Audio criteria judge clip source files: decode them before capturing the
@@ -971,9 +1008,78 @@ export async function callTool(
   ) {
     mutationsThisTurn++;
   }
-  const rawResultJson = JSON.stringify(result);
   result = sanitizeToolResultLanguage(result, toolState.activeLanguage);
+  const actionIndex = actions.length;
   actions.push({ tool: name, input, result });
+  const executableSteps =
+    name === "set_plan" &&
+    input.execute === true &&
+    result && typeof result === "object" && !Array.isArray(result) &&
+    !("error" in result) &&
+    pendingExecutablePlan
+      ? pendingExecutablePlan
+      : null;
+  if (executableSteps) {
+    // Consume the executable plan once. Planned tools cannot recurse into
+    // set_plan because preflight excludes goal/plan meta tools.
+    pendingExecutablePlan = null;
+    const stepOutcomes = new Map<string, Record<string, unknown>>();
+    const report = await executePlanSequentially(
+      executableSteps,
+      TOOL_INPUT_SCHEMAS,
+      async (step, resolvedArgs) => {
+        const stepActionIndex = actions.length;
+        await callTool(context, actions, step.tool!, resolvedArgs, yolo);
+        const stepAction = actions[stepActionIndex];
+        const stepResult = stepAction?.result;
+        const record =
+          stepResult && typeof stepResult === "object" && !Array.isArray(stepResult)
+            ? stepResult as Record<string, unknown>
+            : undefined;
+        const error = record && "error" in record ? String(record.error ?? "tool step failed") : undefined;
+        const succeeded = !!record && !error && record.executed !== false;
+        stepOutcomes.set(step.id, {
+          id: step.id,
+          tool: step.tool,
+          status: succeeded ? "completed" : "failed",
+          ...(stepResult !== undefined ? { result: stepResult } : {}),
+          ...(error ? { error } : !succeeded ? { error: "tool step did not execute" } : {}),
+        });
+        return succeeded
+          ? { ok: true, result: stepResult }
+          : { ok: false, result: stepResult, error: error ?? "tool step did not execute" };
+      },
+      () => toolState.stopRequested,
+    );
+    const completed = new Set(report.completedStepIds);
+    const skipped = new Set(report.skippedStepIds);
+    const executionSteps = executableSteps.map((step) => {
+      const outcome = stepOutcomes.get(step.id);
+      if (outcome) return outcome;
+      if (report.failedStepId === step.id) {
+        return {
+          id: step.id,
+          tool: step.tool,
+          status: "failed",
+          error: report.failure ?? "plan step failed before dispatch",
+        };
+      }
+      if (skipped.has(step.id)) return { id: step.id, tool: step.tool, status: "skipped" };
+      if (completed.has(step.id)) return { id: step.id, tool: step.tool, status: "completed" };
+      return { id: step.id, tool: step.tool, status: "skipped" };
+    });
+    const original = actions[actionIndex].result as Record<string, unknown>;
+    const execution = {
+      status: report.stopped ? "stopped" : report.failedStepId ? "partial" : "completed",
+      completed_step_ids: report.completedStepIds,
+      ...(report.failedStepId ? { failed_step_id: report.failedStepId, error: report.failure } : {}),
+      skipped_step_ids: report.skippedStepIds,
+      steps: executionSteps,
+    };
+    result = { ...original, execution };
+    actions[actionIndex].result = result;
+  }
+  const rawResultJson = JSON.stringify(result);
   const resultJson = JSON.stringify(result);
   toolHooks.debugLog(context, `TOOL ${name} ${JSON.stringify(input)} -> ${rawResultJson.slice(0, 400)}`);
   const completedActivity = toolState.activity;
@@ -993,6 +1099,7 @@ export function resetTurnState(): void {
   clearTurnGoalOutcome();
   pendingGoal = null;
   pendingPlan = null;
+  pendingExecutablePlan = null;
   mutationsThisTurn = 0;
   executedToolsThisTurn = [];
   consecutiveToolErrors = { count: 0 };
