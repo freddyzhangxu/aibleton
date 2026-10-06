@@ -4,6 +4,7 @@ export interface ChatCompletionsData {
       content?: string | null;
       tool_calls?: {
         id?: string;
+        type?: string;
         function?: { name?: string; arguments?: string };
       }[];
     };

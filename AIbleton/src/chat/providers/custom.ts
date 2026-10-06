@@ -24,15 +24,65 @@ import {
 } from "../../i18n/language.js";
 import { measureAsync } from "../timing.js";
 import { parseCustomResponse, type ChatCompletionsData } from "./custom-response.js";
+import { readChatCompletionsStream } from "./custom-stream.js";
 
 // ---------- OpenAI-compatible chat/completions (custom endpoint) ----------
+
+type CustomReasoningProfile =
+  | { kind: "effort"; defaultEffort: "low"; efforts: readonly ["low", "high", "max"] }
+  | { kind: "thinking"; defaultEffort: "off"; efforts: readonly ["off", "on"] };
+
+/** Detect only documented endpoint/model combinations. Unknown OpenAI-compatible
+ * relays receive no vendor-specific reasoning fields. */
+function customReasoningProfile(cfg: ResolvedConfig): CustomReasoningProfile | undefined {
+  const model = cfg.model.trim().toLowerCase();
+  try {
+    const url = new URL(cfg.baseUrl);
+    const hostname = url.hostname.toLowerCase();
+    const kimiOpenPlatform = hostname === "api.moonshot.ai" || hostname === "api.moonshot.cn";
+    const kimiCode =
+      (hostname === "api.kimi.com" || hostname === "api.kimi.ai") &&
+      url.pathname.toLowerCase().includes("/coding");
+    if (model.startsWith("kimi-k3") && kimiOpenPlatform) {
+      return { kind: "effort", defaultEffort: "low", efforts: ["low", "high", "max"] };
+    }
+    if (/^k3(?:-256k)?$/.test(model) && kimiCode) {
+      return { kind: "effort", defaultEffort: "low", efforts: ["low", "high", "max"] };
+    }
+    if (hostname.endsWith(".volces.com")) {
+      // Ark Coding Plan Kimi K3 always thinks and does not support disabling it.
+      if (model.startsWith("kimi-k3")) return undefined;
+      const supportsThinkingSwitch =
+        /^doubao-seed-(?:evolving|2-1-(?:pro|lite))(?:-|$)/.test(model) ||
+        /^deepseek-v4-(?:1-)?(?:flash|pro)(?:-|$)/.test(model);
+      if (supportsThinkingSwitch) {
+        return { kind: "thinking", defaultEffort: "off", efforts: ["off", "on"] };
+      }
+    }
+  } catch {
+    // Invalid addresses are reported by the request path below.
+  }
+  return undefined;
+}
+
+/** Exported for tests; the chat path uses it through the request builder. */
+export function customReasoning(cfg: ResolvedConfig): Record<string, unknown> {
+  const profile = customReasoningProfile(cfg);
+  if (!profile) return {};
+  const effort = cfg.effort ?? profile.defaultEffort;
+  if (!profile.efforts.some((value) => value === effort)) return {};
+  if (profile.kind === "effort") return { reasoning_effort: effort };
+  const type = effort === "off" ? "disabled" : "enabled";
+  return { thinking: { type } };
+}
 
 /**
  * Generic OpenAI-compatible endpoint. Speaks plain /chat/completions (the
  * flavor every third-party relay, OpenRouter and local server implements —
  * unlike /responses, which most of them lack) with no instructions field and
- * no effort mapping, so Grok- or DeepSeek-style backends accept the request
- * verbatim. Uses the same bounded provider-round loop as the other providers.
+ * no default field mapping for arbitrary relays, while documented endpoint and
+ * model combinations get their native reasoning control. Uses the same bounded
+ * provider-round loop as the other providers.
  */
 export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
   if (!cfg.baseUrl || !cfg.model) {
@@ -73,7 +123,7 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       })),
     ];
   });
-  const tools = activeTools().map((tool) => ({
+  const tools = activeTools(req.simpleEdit).map((tool) => ({
     type: "function",
     function: {
       name: tool.name,
@@ -81,6 +131,7 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       parameters: tool.input_schema,
     },
   }));
+  const reasoning = customReasoning(cfg);
 
   for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
@@ -88,6 +139,11 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       model: cfg.model,
       messages,
       ...(languageRewriteOnly ? {} : { tools }),
+      // Streaming cuts the perceived wait per round from "whole generation"
+      // to first-token; relays that ignore stream:true still answer with the
+      // old JSON shape, handled below.
+      stream: true,
+      ...reasoning,
     });
     let data: ChatCompletionsData;
     let status: number;
@@ -96,12 +152,25 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
         const res = await rawPost(new URL(`${cfg.baseUrl}/chat/completions`), {
           headers: {
             "content-type": "application/json",
+            accept: "text/event-stream",
             ...(cfg.authToken ? { authorization: `Bearer ${cfg.authToken}` } : {}),
           },
           body: requestBody,
           proxy: detectProxy(),
           signal: toolState.abortCtl?.signal,
         });
+        const mode = res.headers["content-type"]?.toLowerCase().includes("text/event-stream")
+          ? "sse"
+          : "json";
+        toolHooks.debugLog(context, `ROUND ${round}: custom headers status=${res.status} mode=${mode}`);
+        // Error bodies parse better as plain JSON even when a gateway mislabels
+        // them SSE; only successful SSE responses go through the stream reader.
+        if (mode === "sse" && res.status >= 200 && res.status < 300) {
+          return {
+            status: res.status,
+            data: await readChatCompletionsStream(res.stream, (line) => toolHooks.debugLog(context, line)),
+          };
+        }
         return {
           status: res.status,
           data: parseCustomResponse(res.status, await readAll(res.stream)),
