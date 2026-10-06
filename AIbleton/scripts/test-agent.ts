@@ -75,14 +75,14 @@ console.log("== gateAction 出口判定矩阵 ==");
 console.log("== 改动预算计数 ==");
 {
   const log = [
-    "set_goal", // meta — 不占预算
-    "analyze_song", // 只读
-    "set_plan", // meta
-    "create_midi_track", // 改动 1
-    "web_search", // 只读
-    "write_midi_clip", // 改动 2
-    "write_midi_clip", // 改动 3（每次执行都计）
-    "get_song_overview", // 只读
+    "set_goal", // Meta; does not consume the budget.
+    "analyze_song", // Read-only.
+    "set_plan", // Meta.
+    "create_midi_track", // Change 1.
+    "web_search", // Read-only.
+    "write_midi_clip", // Change 2.
+    "write_midi_clip", // Change 3; every execution counts.
+    "get_song_overview", // Read-only.
   ];
   check("混合日志只计修改类调用（3 次）", countMutations(log, READ_ONLY) === 3);
   check(
@@ -153,7 +153,7 @@ console.log("== 终止性：达成目标的正常回合 ==");
 {
   const r = simulate(
     ({ mutations }) => (mutations < 3 ? "mutate" : "exit"),
-    () => true, // 三次改动后目标达成
+    () => true, // The goal is met after three changes.
   );
   check("目标达成即 pass，不重试", r.ended === "pass" && r.retries === 0, JSON.stringify(r));
   check("只执行了需要的 3 次改动", r.mutations === 3);
@@ -169,7 +169,7 @@ console.log("== 终止性：未达成 → 恰好一次 replan → 结账退出 =
       exits++;
       return "exit";
     },
-    () => false, // 目标始终未达成
+    () => false, // The goal is never met.
   );
   check("重试恰好 1 次（AGENT_MAX_RETRIES）", r.retries === 1, JSON.stringify(r));
   check("最终以实测 note 收尾", r.ended === "stop-note");
@@ -180,7 +180,7 @@ console.log("== 终止性：未达成 → 恰好一次 replan → 结账退出 =
 console.log("== 终止性：预算耗尽时未达成 → 不再 retry，直接结账 ==");
 {
   const r = simulate(
-    ({ lastRefused }) => (lastRefused ? "exit" : "mutate"), // 守规矩：被拒就收尾
+    ({ lastRefused }) => (lastRefused ? "exit" : "mutate"), // Rule-following model: stop after a refusal.
     () => false,
   );
   check("改动数恰好停在预算上限", r.mutations === AGENT_MAX_STEPS, JSON.stringify(r));
@@ -194,7 +194,7 @@ console.log("== 终止性：预算耗尽时未达成 → 不再 retry，直接�
 console.log("== 终止性：最顽固模型（无视拒绝永远尝试改动）也不会失控 ==");
 {
   const r = simulate(
-    () => "mutate", // 永不退出、永不停手
+    () => "mutate", // Stubborn model: never exits or stops.
     () => false,
   );
   check("改动数永远不超预算", r.mutations === AGENT_MAX_STEPS, JSON.stringify(r));

@@ -73,7 +73,7 @@ console.log("== set_tempo ==");
   const ok = await verify("set_tempo", { bpm: 128 }, { tempo: 128 }, song([], 128));
   check("匹配 → success", ok.success);
 
-  // Bridge 真实行为：getter 返回 BigInt
+  // The real Bridge behavior: the getter returns a BigInt.
   const big = await verify("set_tempo", { bpm: 128 }, { tempo: 128 }, song([], BigInt(128)));
   check("BigInt tempo 归一化 → success", big.success);
 

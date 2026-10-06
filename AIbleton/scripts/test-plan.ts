@@ -133,7 +133,8 @@ console.log("== normalizePlan ==");
     },
     VALID_TOOLS,
   );
-  // 9 条输入：无 description 的和非对象的被丢弃，其余 7 条保留（坏 tool 置空、坏效果丢弃）。
+  // Of nine inputs, discard those without a description and non-objects; keep the other seven
+  // (clear invalid tools and discard invalid effects).
   check("垃圾步骤/效果全丢弃、合法步骤保留 + warnings",
     !!junk.steps && junk.steps.length === 7 && junk.warnings.length >= 7,
     `steps=${junk.steps?.length} warnings=${junk.warnings.length}: ${junk.warnings.join(" | ")}`);
@@ -438,9 +439,9 @@ import { planNeedsAudio } from "../src/plan/types.js";
         {
           description: "x",
           expectedEffects: [
-            { metric: "track_band_energy", track: "Bass", band: "treble", direction: "increase" }, // band 非法
-            { metric: "track_crest", direction: "increase" }, // 缺 track
-            { metric: "track_crest", track: "Kick" }, // 缺 direction
+            { metric: "track_band_energy", track: "Bass", band: "treble", direction: "increase" }, // Invalid band.
+            { metric: "track_crest", direction: "increase" }, // Missing track.
+            { metric: "track_crest", track: "Kick" }, // Missing direction.
           ],
         },
       ],

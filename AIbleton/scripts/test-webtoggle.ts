@@ -1,5 +1,5 @@
 /**
- * End-to-end test of the web-search settings toggle (Settings → 联网搜索).
+ * End-to-end test of the web-search settings toggle (Settings → Web Search).
  *
  * server.ts imports interface.html, which tsx can't load — bundle first with
  * the same .html text loader as the production build, then run with node:

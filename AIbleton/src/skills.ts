@@ -5,7 +5,7 @@
  *
  *   ---
  *   name: dark-techno-kit
- *   description: 构建 dark techno 鼓组和 bassline
+ *   description: Build dark techno drums and bassline
  *   triggers:
  *     - dark techno
  *     - techno drums

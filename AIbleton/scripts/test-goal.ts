@@ -87,8 +87,8 @@ console.log("== normalizeGoal ==");
     type: "remix",
     successCriteria: [
       { kind: "make_it_banger" },
-      { kind: "section_energy_gt", a: "Drop" }, // 缺 b
-      { kind: "track_count_gte", n: "lots" }, // n 非法
+      { kind: "section_energy_gt", a: "Drop" }, // Missing b.
+      { kind: "track_count_gte", n: "lots" }, // Invalid n.
       { kind: "track_count_gte", n: "baseline" },
       "not-an-object",
     ],
@@ -210,8 +210,8 @@ console.log("== evaluateGoal 聚合 ==");
   const ev = evaluateGoal(g, before, after);
   check("全过 → met, checks=3", ev.met && ev.checks.length === 3);
 
-  // 同一份 view 做 before/after：energy 严格大于必然不过；before 的 Drop
-  // 也只有 drums，role_present 同样不过 → 2 条 criteriaIssue、0 条 constraintIssue。
+  // Use the same view for before and after: strict energy increase must fail. The baseline Drop
+  // also has only drums, so role_present fails too → 2 criteria issues and 0 constraint issues.
   const half = evaluateGoal(g, before, before);
   check("未过项全部归入 criteriaIssues、约束不误伤",
     !half.met && half.criteriaIssues.length === 2 && half.constraintIssues.length === 0,
@@ -349,9 +349,9 @@ import type { AudioFeatures } from "../src/dsp.js";
     type: "sound_design",
     objective: "x",
     successCriteria: [
-      { kind: "track_band_gte", track: "Bass", band: "treble", pct: 0.3 }, // band 非法
-      { kind: "track_band_gte", track: "Bass", band: "sub", pct: 1.5 }, // pct 越界
-      { kind: "track_crest_gte", db: 6 }, // 缺 track
+      { kind: "track_band_gte", track: "Bass", band: "treble", pct: 0.3 }, // Invalid band.
+      { kind: "track_band_gte", track: "Bass", band: "sub", pct: 1.5 }, // pct is out of range.
+      { kind: "track_crest_gte", db: 6 }, // Missing track.
       { kind: "track_crest_gte", track: "Kick", db: 6 },
     ],
   });
@@ -379,7 +379,7 @@ const gvAudio = (crestDb: number, bands = audioBands): GoalView =>
   const noTrack = evaluateGoal(goal({ successCriteria: [{ kind: "track_crest_gte", track: "Ghost", db: 6 }] }), before, gvAudio(9));
   check("轨道不存在 → fail 且列出可用轨道", !noTrack.met && /Drums/.test(noTrack.criteriaIssues[0]), noTrack.criteriaIssues.join("|"));
 
-  const noAudio = evaluateGoal(gCrest, before, gv()); // 无 audio 字段的 view
+  const noAudio = evaluateGoal(gCrest, before, gv()); // View without audio fields.
   check("未启用音频分析 → fail 且说明原因", !noAudio.met && /无音频特征/.test(noAudio.criteriaIssues[0]), noAudio.criteriaIssues.join("|"));
 
   const gBand = goal({ successCriteria: [{ kind: "track_band_gte", track: "Bass", band: "sub", pct: 0.15 }] });

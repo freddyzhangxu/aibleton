@@ -10,14 +10,14 @@
  * The scenarios are the acceptance checklist for PR11–15 as one Musical
  * Intelligence + Agent Planning architecture:
  *
- *   A. "让 Drop 更有冲击力"
+ *   A. "Make the Drop hit harder"
  *      — finds the Drop · references the Build · surfaces
  *        increase_section_contrast · contrast really rises after the edit
- *   B. "让第二个 Drop 和第一个 Drop 有变化"
+ *   B. "Make the second Drop different from the first"
  *      — resolves Drop 1 / Drop 2 by ordinal · picks Drop 1 as the
  *        reference · surfaces introduce_variation · variation rises AND
  *        similarity drops after the edit
- *   C. "让 Breakdown 更空一点，但不要太空"
+ *   C. "Make the Breakdown sparser, but not too sparse"
  *      — the planner sees energy + density + active tracks together · a
  *        gut-the-section edit FAILS on the layering guard (never silently
  *        passes) · a surgical thinning PASSES
@@ -100,7 +100,7 @@ function crit(
 }
 
 // ---------------------------------------------------------------------------
-// Scenario A song — "让 Drop 更有冲击力"
+// Scenario A song — "Make the Drop hit harder"
 //
 // The realistic complaint behind the goal: the Drop does NOT hit — it is the
 // same material as the Build (flat arrangement, weak contrast). Kick v100 +
@@ -282,7 +282,7 @@ const goalCRaw: Record<string, unknown> = {
 };
 
 // ---------------------------------------------------------------------------
-// Scenario A — "让 Drop 更有冲击力"
+// Scenario A — "Make the Drop hit harder"
 // ---------------------------------------------------------------------------
 
 test("quality A: make the Drop hit harder — target, Build reference, contrast action, real contrast rise", () => {
@@ -351,7 +351,7 @@ test("quality A: make the Drop hit harder — target, Build reference, contrast 
 });
 
 // ---------------------------------------------------------------------------
-// Scenario B — "让第二个 Drop 和第一个 Drop 有变化"
+// Scenario B — "Make the second Drop different from the first"
 // ---------------------------------------------------------------------------
 
 test("quality B: vary the second Drop — ordinal resolution, Drop 1 reference, variation AND similarity move", () => {
@@ -396,7 +396,7 @@ test("quality B: vary the second Drop — ordinal resolution, Drop 1 reference, 
     `introduce_variation must be surfaced, got: ${ctx.actions.map((a) => a.kind).join(", ")}`,
   );
 
-  // 4. After the edit BOTH halves of "有变化" move: the target's own
+  // 4. After the edit, BOTH parts of "different" move: the target's own
   // variation rises AND the pair's similarity drops — measured, thresholded.
   const afterIntel = intelOf(variedSecondDropSong());
   const ver = verifySectionChange(ctx, beforeIntel, afterIntel, goal);
@@ -423,7 +423,7 @@ test("quality B: vary the second Drop — ordinal resolution, Drop 1 reference, 
 });
 
 // ---------------------------------------------------------------------------
-// Scenario C — "让 Breakdown 更空一点，但不要太空"
+// Scenario C — "Make the Breakdown sparser, but not too sparse"
 // ---------------------------------------------------------------------------
 
 test("quality C: emptier Breakdown, not gutted — planner sees energy+density+tracks; gutting fails, thinning passes", () => {
@@ -434,7 +434,7 @@ test("quality C: emptier Breakdown, not gutted — planner sees energy+density+t
   assert.ok(ctx);
   assert.equal(ctx.target.name, "Breakdown");
 
-  // 1. The planner sees all three axes of "空" at once — energy, note
+  // 1. The planner sees all three axes of "sparse" at once — energy, note
   // density and active tracks — never a single "how loud" number.
   assert.ok(ctx.features.energy !== undefined, "energy must be projected");
   assert.ok(ctx.features.density !== undefined, "density must be projected");
@@ -476,7 +476,7 @@ test("quality C: emptier Breakdown, not gutted — planner sees energy+density+t
     thinTracks.delta !== undefined &&
       Math.abs(thinTracks.delta) <= SECTION_DELTA_THRESHOLDS.active_track_ratio,
   );
-  // Density really went down too — "空" is measured, not asserted.
+  // Density also went down — "sparse" is measured, not assumed.
   const before = ctx.targetFeatures;
   const after = thinnedIntel.features.sections.find((s) => s.sectionId === ctx.target.sectionId);
   assert.ok(after && after.density < before.density);

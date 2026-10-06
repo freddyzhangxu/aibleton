@@ -127,7 +127,7 @@ function judgeTrackNotes(fx: ExpectedEffect, before: GoalView, after: GoalView, 
 
 /** track_crest / track_band_energy: the track's clip SOURCE FILE features
  * move vs baseline. Both views need the audio aggregate — a view built
- * without enrichment fails closed with "无音频特征" as actual. */
+ * without enrichment fails closed with "no audio features" as the actual value. */
 function judgeTrackAudio(
   fx: ExpectedEffect & { metric: "track_crest" | "track_band_energy" },
   before: GoalView,

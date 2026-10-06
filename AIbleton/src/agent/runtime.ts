@@ -117,7 +117,7 @@ import { commonText } from "../i18n/common.js";
 //
 // One declared goal per user turn. set_goal captures the baseline view at
 // declaration time; when the model stops calling tools, goalGate evaluates
-// the criteria and either lets the turn finish, injects a 目标校验 message so
+// the criteria and either lets the turn finish, injects a goal-verification message so
 // the loop keeps going (bounded), or — retries exhausted — appends a
 // server-side note so the user sees the measured outcome, not the model's
 // claim. PR4 verifies single tool calls; this verifies the TASK.

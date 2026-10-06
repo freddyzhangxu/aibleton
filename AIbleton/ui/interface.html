@@ -246,7 +246,7 @@
     #customFields { display: flex; flex-direction: column; gap: 8px; }
     #customFields.hidden { display: none; }
     .cfg-hint { font-size: 10px; color: var(--c-text-dim); line-height: 1.45; }
-    /* Per-provider connection status badge (Settings → AI 配置) */
+    /* Per-provider connection status badge (Settings → AI Configuration) */
     .conn-badge { margin-left: auto; font-size: 10px; color: var(--c-text-dim); display: flex; align-items: center; gap: 4px; }
     .conn-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-text-dim); flex: none; }
     .conn-badge.ok { color: hsl(120, 45%, 60%); }
@@ -573,7 +573,7 @@
       resize: none;
       height: 54px;
       min-height: 54px;
-      max-height: 134px; /* ~6 行，超出后内部滚动 */
+      max-height: 134px; /* About six lines; scroll internally when exceeded. */
       line-height: 20px;
       overflow-y: hidden;
     }
@@ -634,7 +634,7 @@
     #send .ic-stop { display: none; }
     #send.stop .ic-send { display: none; }
     #send.stop .ic-stop { display: block; }
-    /* 设置页底部版本号（构建时由 server 注入）；点击 = 手动检查更新 */
+    /* Version at the bottom of Settings (injected by the server at build time); click to check for updates. */
     #appVersion {
       padding: 10px 14px;
       font-size: 11px;
@@ -642,7 +642,7 @@
       text-align: center;
       cursor: pointer;
     }
-    /* 发现新版时出现在聊天区顶部的提示条 */
+    /* Banner shown at the top of the chat area when an update is available. */
     #updateBar {
       display: flex;
       align-items: center;
@@ -868,7 +868,7 @@
     const input = document.getElementById('input');
     const sendBtn = document.getElementById('send');
     const statusEl = document.getElementById('status');
-    // 未发送草稿的 localStorage 键（与设置同一持久化机制，同源 webview 共享）
+    // localStorage key for the unsent draft (shared by same-origin webviews, like settings).
     const DRAFT_KEY = 'ai.draft';
 
     // ---------- i18n (language list matches Ableton Live's preferences) ----------
@@ -1268,8 +1268,8 @@
       codex:  { name: 'Codex',       base: 'https://api.openai.com/v1', model: 'gpt-5.6-sol' },
       claude: { name: 'Claude',      base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
       gemini: { name: 'Gemini',      base: 'https://generativelanguage.googleapis.com', model: 'gemini-flash-latest' },
-      // OpenAI 兼容端点（Grok / DeepSeek / Kimi / OpenRouter / Ollama…）：
-      // 无内置默认，base/model 必须手填，本地服务可免 key。
+      // OpenAI-compatible endpoints (Grok / DeepSeek / Kimi / OpenRouter / Ollama…):
+      // No built-in defaults; enter a base URL and model. Local servers may not require a key.
       custom: { name: 'Custom',      base: 'https://api.example.com/v1', model: '' },
     };
     const savedProvider = localStorage.getItem('ai.provider');
@@ -1290,8 +1290,8 @@
     };
 
     // Settings persist across dialog openings (same webview origin = same localStorage).
-    // Live 内置 webview 的 localStorage 不持久：服务端 providers.json 才是权威副本，
-    // localStorage 只是缓存 —— 字段改动同步 POST，启动时用服务端值补全空字段。
+    // Live's embedded webview does not persist localStorage. The server's providers.json is authoritative;
+    // localStorage is only a cache. POST field changes and restore server values on startup.
     function saveProviderFields() {
       fetch('/api/provider-config', {
         method: 'POST',
@@ -1310,8 +1310,8 @@
       for (const f of Object.keys(cfgInputs)) {
         cfgInputs[f].value = localStorage.getItem(`ai.${currentProvider}.${f}`) || '';
       }
-      // Custom 端点没有 CLI 配置可跟随、也没有默认值 —— 换专用提示，别让人
-      // 以为留空能自动加载什么。dataset.i18n 一并换，applyLang 切语言不会冲掉。
+      // Custom endpoints have no CLI config to inherit and no defaults. Show a dedicated hint so users
+      // do not expect empty fields to load automatically. Update dataset.i18n so applyLang preserves it.
       const isCustom = currentProvider === 'custom';
       const hintEl = document.getElementById('cfgHint');
       hintEl.dataset.i18n = isCustom ? 'cfgHintCustom' : 'cfgHint';
@@ -1319,9 +1319,8 @@
       cfgInputs.apiKey.placeholder = t(isCustom ? 'apiKeyPhCustom' : 'apiKeyPh');
       cfgInputs.baseUrl.placeholder = PROVIDERS[currentProvider].base;
       cfgInputs.model.placeholder = PROVIDERS[currentProvider].model;
-      // 服务端 providers.json 是唯一权威（= 内置界面显示的内容）：完整镜像
-      // 服务端值，覆盖 localStorage 里可能残留的旧值 —— 两个壳（内置对话框 /
-      // AIbletonBar）的 localStorage 互相隔离，只有这样才能保持一致。
+      // The server's providers.json is authoritative and mirrors the embedded UI exactly. Replace all
+      // localStorage values with server values: the dialog and AIbletonBar use isolated webview storage.
       const p = currentProvider;
       fetch('/api/provider-config?provider=' + p).then(r => r.json()).then(s => {
         if (p !== currentProvider || !s) return;
@@ -1446,8 +1445,8 @@
           if (code !== currentProvider) {
             currentProvider = code;
             localStorage.setItem('ai.provider', code);
-            // Live 内置 webview 的 localStorage 不持久：同时上报服务端，
-            // 下次打开（本地记录丢失时）以服务端记住的为准。
+            // Live's embedded webview does not persist localStorage, so also update the server.
+            // The server value is restored on the next open if local state is lost.
             fetch('/api/last-provider', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
@@ -1464,7 +1463,7 @@
       }
     }
 
-    // ---------- Connection status (Settings → AI 配置) ----------
+    // ---------- Connection status (Settings → AI Configuration) ----------
     // Badge per provider row; quick probes fire when the view opens (free
     // models-list calls only), the button runs the full probe which may spend
     // a 1-token generation on endpoints without a model list.
@@ -1551,7 +1550,7 @@
     }
     connTestBtn.addEventListener('click', () => testProvider(currentProvider, true));
 
-    // ---------- Audio generation providers (Settings → 音频生成) ----------
+    // ---------- Audio generation providers (Settings → Audio Generation) ----------
     const AUDIO_PROVIDERS = {
       'stable-audio': { name: 'Stable Audio', base: 'https://api.stability.ai', site: 'platform.stability.ai' },
       'elevenlabs':   { name: 'ElevenLabs',   base: 'https://api.elevenlabs.io', site: 'elevenlabs.io' },
@@ -1584,8 +1583,8 @@
       pollAudioPath: document.getElementById('cstPollAudioPath'),
     };
 
-    // 与 AI provider 相同：Live 内置 webview 的 localStorage 不持久，音频设置
-    // 也持久化到服务端 providers.json（/api/audio-config），localStorage 只作缓存。
+    // As with AI providers, embedded Live webviews do not persist localStorage. Persist audio settings
+    // in server-side providers.json (/api/audio-config); localStorage is only a cache.
     function saveAudioFields() {
       fetch('/api/audio-config', {
         method: 'POST',
@@ -1624,7 +1623,7 @@
           customInputs[f].value = localStorage.getItem(`ai.audio.custom.${f}`) || '';
         }
       }
-      // 同样以服务端为准做完整镜像（而非只补空），统一两个壳的显示。
+      // Mirror the server values completely, rather than filling only empty fields, so both shells match.
       const code = currentAudioProvider;
       fetch('/api/audio-config').then(r => r.json()).then(s => {
         if (code !== currentAudioProvider || !s) return;
@@ -1703,9 +1702,9 @@
     }
     audioConnTestBtn.addEventListener('click', () => testProvider(currentAudioProvider, false, 'audio'));
 
-    // ---------- Auto-refine toggle (Settings → 音频生成) ----------
-    // 与 webToggle 同一规则：状态以服务端 providers.json 为准（/api/audio-config
-    // 的 autoRefine 字段），localStorage 只作缓存。默认关闭 = 每次生成都确认。
+    // ---------- Auto-refine toggle (Settings → Audio Generation) ----------
+    // Like webToggle, the server's providers.json value (/api/audio-config autoRefine field) is
+    // authoritative; localStorage is only a cache. Off by default, so each generation asks first.
     const autoRefineToggle = document.getElementById('autoRefineToggle');
     autoRefineToggle.checked = localStorage.getItem('ai.audio.autoRefine') === '1';
     autoRefineToggle.addEventListener('change', () => {
@@ -1728,15 +1727,15 @@
     }
     loadAutoRefine();
 
-    // ---------- Web search toggle (Settings → 联网搜索) ----------
-    // 与音频设置同一规则：开关状态以服务端 providers.json 为准（/api/web-config），
-    // localStorage 只作缓存。默认关闭。
+    // ---------- Web search toggle (Settings → Web Search) ----------
+    // As with audio settings, the server's providers.json value (/api/web-config) is authoritative;
+    // localStorage is only a cache. Off by default.
     const webToggle = document.getElementById('webToggle');
     const webVal = document.getElementById('webVal');
     function renderWebVal() {
       webVal.textContent = webToggle.checked ? t('webOn') : t('webOff');
     }
-    webToggle.checked = localStorage.getItem('ai.web.enabled') === '1'; // 默认关
+    webToggle.checked = localStorage.getItem('ai.web.enabled') === '1'; // Off by default.
     renderWebVal();
     webToggle.addEventListener('change', () => {
       localStorage.setItem('ai.web.enabled', webToggle.checked ? '1' : '0');
@@ -1747,7 +1746,8 @@
         body: JSON.stringify({ enabled: webToggle.checked }),
       }).catch(() => {});
     });
-    // 服务端为准做镜像：本地记录丢失（Live webview 不持久）时恢复，两个壳显示统一。
+    // Mirror the server as the source of truth; restore lost local state (Live webviews do not persist it)
+    // so both shells display the same setting.
     function loadWebConfig() {
       fetch('/api/web-config').then(r => r.json()).then(s => {
         if (!s) return;
@@ -1761,9 +1761,9 @@
     }
     loadWebConfig();
 
-    // ---------- Artist memory (Settings → 音乐人记忆) ----------
-    // 内容型数据以服务端 memory.json 为唯一来源（/api/memory），不走
-    // localStorage —— 每次打开面板直接拉取；输入即存（400ms 防抖，无保存按钮）。
+    // ---------- Artist memory (Settings → Artist Memory) ----------
+    // Content lives only in server-side memory.json (/api/memory), not localStorage. Fetch it whenever
+    // the panel opens and save edits automatically (400 ms debounce; no Save button).
     const memoryVal = document.getElementById('memoryVal');
     const memFields = {
       name: document.getElementById('memName'),
@@ -2533,7 +2533,8 @@
     }
 
     // ----- update check -----
-    // 有新版且未忽略时显示顶部提示条；点设置页版本号 = 手动检查（绕过 24h 缓存）。
+    // Show the top banner when an update is available and not dismissed. Clicking the Settings version
+    // manually checks for updates, bypassing the 24-hour cache.
     const updateBar = document.getElementById('updateBar');
     const updateMsg = document.getElementById('updateMsg');
     const versionEl = document.getElementById('appVersion');
@@ -2841,7 +2842,7 @@
       const attachments = pendingAttachments.splice(0);
       renderChips();
       input.value = '';
-      localStorage.setItem(DRAFT_KEY, ''); // 已发送，清掉草稿
+      localStorage.setItem(DRAFT_KEY, ''); // Sent; clear the draft.
       fitInput();
       if (welcome.parentNode) welcome.remove();
       const userMsg = addMsg('user', attachments.length
@@ -2928,14 +2929,14 @@
         send();
       }
     });
-    // ----- Slash 技能选择器：空输入按 "/" 列出 ~/.aibleton/skills -----
-    // 列表来自服务端 /api/skills（每次打开对话框拉一次，新建 skill 重开即见）。
-    // 选中后插入 "/name "，发送时服务端按显式调用强制加载该 skill。
+    // ----- Slash skill picker: type "/" in an empty input to list ~/.aibleton/skills -----
+    // The list comes from /api/skills (fetched whenever the dialog opens, so new skills appear after reopening).
+    // Selecting one inserts "/name "; on send, the server force-loads that explicitly selected skill.
     const skillPop = document.getElementById('skillPop');
     let SKILLS = [];
-    let SKILL_PROBLEMS = []; // 格式错误未能加载的 skill（服务端 /api/skills 返回）
-    let skillSel = 0;   // 当前高亮行
-    let skillHits = []; // 当前过滤结果
+    let SKILL_PROBLEMS = []; // Skills with format errors that could not be loaded (returned by /api/skills).
+    let skillSel = 0;   // Currently highlighted row.
+    let skillHits = []; // Current filtered results.
 
     fetch('/api/skills')
       .then((r) => r.json())
@@ -2945,7 +2946,7 @@
       })
       .catch(() => {});
 
-    // 只有输入框内容形如 "/xxx"（单 token）时才视为正在挑 skill
+    // Treat the input as a skill selection only when it matches a single-token "/xxx" command.
     function slashQuery() {
       const m = /^\/([\w-]*)$/.exec(input.value);
       return m ? m[1].toLowerCase() : null;
@@ -2980,7 +2981,7 @@
         row.addEventListener('mousedown', (e) => { e.preventDefault(); pickSkill(i); });
         skillPop.appendChild(row);
       });
-      // 格式问题的 skill 不再静默消失：在选择器底部指出文件夹与修法。
+      // Do not silently hide skills with format errors; show the folder and fix instructions at the bottom.
       SKILL_PROBLEMS.forEach((p) => {
         const row = document.createElement('div');
         row.className = 'skill-row skill-warn';
@@ -3004,10 +3005,10 @@
     input.addEventListener('input', () => { skillSel = 0; renderSkillPop(); });
 
     input.addEventListener('keydown', (e) => {
-      // 中文输入法组合中（候选窗打开）按回车是确认上屏，不是发送：
-      // isComposing 为标准判断，keyCode 229 兜底老 WebKit。
+      // During IME composition (candidate window open), Enter confirms the candidate instead of sending.
+      // isComposing is the standard check; keyCode 229 is a fallback for older WebKit.
       if (e.isComposing || e.keyCode === 229) return;
-      // 技能选择器打开时，方向键/回车/Tab/Esc 先归它
+      // When the skill picker is open, let it handle arrows, Enter, Tab, and Escape first.
       if (!skillPop.classList.contains('hidden')) {
         if (e.key === 'ArrowDown') { e.preventDefault(); skillSel = (skillSel + 1) % skillHits.length; renderSkillPop(); return; }
         if (e.key === 'ArrowUp') { e.preventDefault(); skillSel = (skillSel - 1 + skillHits.length) % skillHits.length; renderSkillPop(); return; }
@@ -3017,18 +3018,18 @@
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
 
-    // ----- macOS 文本光标键：⌃A/⌃E 与 ⌘←/⌘→ 跳行首/行尾（⇧ 扩展选区）-----
-    // 实测（0.8.4 诊断）：Live 的对话框 webview 没有原生光标绑定，且在原生层
-    // 吞掉 ⌘+方向键（⌘ 键本身的 keydown 能到页面，组合键到不了）——所以
-    // Live 里实际生效的是 ⌃A/⌃E；⌘←/⌘→ 留给 AIbletonBar 和未来宿主。
-    // 兼容老 WebKit 键名（Left/Right）并回退 keyCode；isMac 守卫避免劫持
-    // Windows 的 Ctrl+A 全选。
+    // ----- macOS text-caret keys: Ctrl+A/Ctrl+E and Cmd+Left/Cmd+Right move to line ends (Shift extends selection) -----
+    // Tested in Live (0.8.4): its dialog webview has no native caret bindings, and the native layer swallows
+    // Cmd+arrow combinations (the Cmd keydown reaches the page, but the chord does not). Ctrl+A/Ctrl+E work
+    // in Live; Cmd+Left/Cmd+Right remain available to AIbletonBar and future hosts.
+    // Support older WebKit key names (Left/Right) and fall back to keyCode; the isMac guard avoids
+    // intercepting Ctrl+A select-all on Windows.
     const isMac = /Mac/i.test(navigator.platform || '') || /Mac/i.test(navigator.userAgent);
 
     document.addEventListener('keydown', (e) => {
       const el = e.target;
       if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
-      if (!isMac || el.selectionStart == null) return; // checkbox 等无选区类型
+      if (!isMac || el.selectionStart == null) return; // Controls such as checkboxes have no text selection.
 
       const kc = e.keyCode || 0;
       const isLeft = e.key === 'ArrowLeft' || e.key === 'Left' || kc === 37;
@@ -3042,7 +3043,8 @@
       const caret = toStart ? el.selectionStart : el.selectionEnd;
       let pos;
       if (toStart) {
-        // 特判文首：lastIndexOf 会把负 fromIndex 钳到 0，首字符是 \n 时会误命中
+        // Handle the start of the text separately: lastIndexOf clamps a negative fromIndex to 0 and
+        // can falsely match when the first character is a newline.
         pos = caret === 0 ? 0 : el.value.lastIndexOf('\n', caret - 1) + 1;
       } else {
         const nl = el.value.indexOf('\n', caret);
@@ -3056,29 +3058,31 @@
       }
     });
 
-    // 输入框随内容自动增高（VSCode 式），上限由 CSS max-height 控制
+    // Grow the input as text is entered (VS Code style); CSS max-height sets the limit.
     function fitInput() {
       const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 8;
       input.style.height = 'auto';
-      const h = input.scrollHeight + 2; // +2 上下边框
+      const h = input.scrollHeight + 2; // Add the top and bottom borders.
       input.style.height = Math.min(h, 134) + 'px';
       input.style.overflowY = h > 134 ? 'auto' : 'hidden';
-      // 日志区被输入框压缩后保持贴底，最新消息不被遮挡；用户上翻读历史时不拉动
+      // Keep the log pinned to the bottom when the input shrinks it so new messages stay visible;
+      // do not move it while the user scrolls up through history.
       if (atBottom) log.scrollTop = log.scrollHeight;
     }
     input.addEventListener('input', fitInput);
 
-    // 未发送草稿随输入持久化：对话框每次打开都是全新加载的页面，
-    // 关掉再开不会丢正在编辑的内容。只在本窗口加载时恢复，不做跨窗口
-    // 实时同步（否则两个窗口同时打字会互相覆盖）。
+    // Persist the unsent draft as the dialog loads a fresh page every time. Reopening preserves the text
+    // being edited. Restore only when this window loads; do not sync live across windows, or simultaneous
+    // typing in two windows would overwrite each other.
     input.addEventListener('input', () => localStorage.setItem(DRAFT_KEY, input.value));
 
     // Initial render: settings lists, then localized strings + provider config state.
     renderLangs();
     renderProviders();
     applyLang();
-    // 服务端记住的选择优先（内置界面为准）：即使本地 localStorage 有旧值，
-    // 也以服务端为准校对 —— 两个壳的 localStorage 隔离，这是唯一的同步通道。
+    // Prefer the server's saved choice (the embedded dialog is authoritative), even if localStorage
+    // contains an older value. Server reconciliation is the only sync path because each shell has
+    // isolated localStorage.
     fetch('/api/last-provider').then(r => r.json()).then(s => {
       if (s && PROVIDERS[s.provider] && s.provider !== currentProvider) {
         currentProvider = s.provider;
@@ -3090,7 +3094,7 @@
         refreshHealth();
       }
     }).catch(() => {});
-    // 音频 provider 同理（字段镜像由 loadAudioFields 内部的 GET 完成）。
+    // Do the same for the audio provider (loadAudioFields mirrors fields through its GET request).
     fetch('/api/audio-config').then(r => r.json()).then(s => {
       if (s && AUDIO_PROVIDERS[s.selected] && s.selected !== currentAudioProvider) {
         currentAudioProvider = s.selected;
@@ -3100,7 +3104,7 @@
         renderAudioProviders();
       }
     }).catch(() => {});
-    // 恢复上次未发送的草稿，光标放到末尾。
+    // Restore the last unsent draft and place the caret at the end.
     input.value = localStorage.getItem(DRAFT_KEY) || '';
     if (input.value) {
       fitInput();

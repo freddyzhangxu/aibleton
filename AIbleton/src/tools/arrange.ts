@@ -18,7 +18,7 @@ interface ResolvedPlacement {
   ref: TrackRef;
   kind: "midi" | "audio";
   srcName: string;
-  srcDesc: string; // e.g. 编排 clip 2“Loop A” / 场景 3“Loop A”
+  srcDesc: string; // e.g. arrangement clip 2 "Loop A" / scene 3 "Loop A"
   startBeat: number;
   lenBeats: number;
   name?: string;

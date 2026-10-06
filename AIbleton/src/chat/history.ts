@@ -37,7 +37,7 @@ export function historyWithTools(
 
 /**
  * Attached images ride only on the CURRENT user message (the last one after
- * history replay). Older turns keep just their "[图片: name]" text marker —
+ * history replay). Older turns keep just their "[image: name]" text marker —
  * re-sending base64 on every round would bloat each request. The `apply`
  * callback reshapes that last message into the provider's multimodal shape.
  */
