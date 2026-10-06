@@ -25,6 +25,8 @@
       --c-text-dim: hsl(0, 0%, 45%);
       --c-border: hsl(0, 0%, 7%);
       --c-accent: hsl(31, 100%, 67%);
+      /* Input growth limit — fitInput() reads this same custom property. */
+      --input-max-h: 134px;
     }
 
     html, body { height: 100%; }
@@ -617,7 +619,7 @@
       resize: none;
       height: 54px;
       min-height: 54px;
-      max-height: 134px; /* About six lines; scroll internally when exceeded. */
+      max-height: var(--input-max-h); /* About six lines; scroll internally when exceeded. */
       line-height: 20px;
       overflow-y: hidden;
     }
@@ -1402,10 +1404,9 @@
         }),
       }).catch(() => {});
     }
-    function loadProviderFields() {
-      for (const f of Object.keys(cfgInputs)) {
-        cfgInputs[f].value = localStorage.getItem(`ai.${currentProvider}.${f}`) || '';
-      }
+    // Localized hints/placeholders for the AI config form. Pure rendering — no
+    // field values, no network — so a language switch can call it directly.
+    function renderProviderLabels() {
       // Custom endpoints have no CLI config to inherit and no defaults. Show a dedicated hint so users
       // do not expect empty fields to load automatically. Update dataset.i18n so applyLang preserves it.
       const isCustom = currentProvider === 'custom';
@@ -1415,6 +1416,12 @@
       cfgInputs.apiKey.placeholder = t(isCustom ? 'apiKeyPhCustom' : 'apiKeyPh');
       cfgInputs.baseUrl.placeholder = PROVIDERS[currentProvider].base;
       cfgInputs.model.placeholder = PROVIDERS[currentProvider].model;
+    }
+    function loadProviderFields() {
+      for (const f of Object.keys(cfgInputs)) {
+        cfgInputs[f].value = localStorage.getItem(`ai.${currentProvider}.${f}`) || '';
+      }
+      renderProviderLabels();
       // The server's providers.json is authoritative and mirrors the embedded UI exactly. Replace all
       // localStorage values with server values: the dialog and AIbletonBar use isolated webview storage.
       const p = currentProvider;
@@ -1463,6 +1470,7 @@
       if (provider === currentProvider) return;
       currentProvider = provider;
       healthModel = '';
+      lastHealth = null;
       modelCatalogRequest++;
       closeModelPop();
       // Connection test output is stored per provider; rerender when switching so the previous
@@ -1479,33 +1487,44 @@
     }
 
     // Report which config the extension resolved for the selected provider.
+    // lastHealth caches the latest /api/health response so renderHealth() can
+    // re-localize the status line on a language switch without refetching.
+    let lastHealth = null;
+    function renderHealth() {
+      const connection = connState[currentProvider];
+      if (connection && connection.status === 'auth_expired') {
+        statusEl.textContent = t('connAuthExpired');
+        statusEl.title = connection.detail || '';
+        return;
+      }
+      const pName = PROVIDERS[currentProvider].name;
+      if (lastHealth && lastHealth.hasAuth) {
+        statusEl.textContent = t('cfgLoaded').replace('{p}', pName);
+        statusEl.title = lastHealth.baseUrl || '';
+      } else if (cfgInputs.apiKey.value) {
+        statusEl.textContent = t('cfgKeySet').replace('{p}', pName);
+        statusEl.title = '';
+      } else if (lastHealth) {
+        statusEl.textContent = t('cfgMissing').replace('{p}', pName);
+        statusEl.title = '';
+      }
+    }
     function refreshHealth() {
       const p = currentProvider;
       fetch('/api/health?provider=' + p).then(r => r.json()).then(h => {
         if (p !== currentProvider) return;
+        lastHealth = h;
         healthModel = h.model || '';
         updateModelName(h.model);
         if (!modelPop.classList.contains('hidden')) renderModelPop(modelListCache[p] || null);
-        const connection = connState[currentProvider];
-        if (connection && connection.status === 'auth_expired') {
-          statusEl.textContent = t('connAuthExpired');
-          statusEl.title = connection.detail || '';
-          return;
-        }
-        const pName = PROVIDERS[currentProvider].name;
         if (h.hasAuth) {
-          statusEl.textContent = t('cfgLoaded').replace('{p}', pName);
-          statusEl.title = h.baseUrl || '';
           if (!cfgInputs.model.value && h.model) cfgInputs.model.placeholder = h.model;
-        } else if (cfgInputs.apiKey.value) {
-          statusEl.textContent = t('cfgKeySet').replace('{p}', pName);
-          statusEl.title = '';
-        } else {
-          statusEl.textContent = t('cfgMissing').replace('{p}', pName);
-          statusEl.title = '';
+        } else if (!cfgInputs.apiKey.value) {
+          // No credentials anywhere: surface the config form so the gap is obvious.
           settingsPanel.classList.remove('hidden');
           showView('viewAI');
         }
+        renderHealth();
       }).catch(() => updateModelName());
     }
 
@@ -1733,17 +1752,22 @@
         body: JSON.stringify({ custom }),
       }).catch(() => {});
     }
-    function loadAudioFields() {
-      for (const f of Object.keys(audioCfgInputs)) {
-        audioCfgInputs[f].value = localStorage.getItem(`ai.audio.${currentAudioProvider}.${f}`) || '';
-      }
+    // Localized hints/placeholders for the audio config form (no values, no network).
+    function renderAudioLabels() {
       const p = AUDIO_PROVIDERS[currentAudioProvider];
       const isCustom = currentAudioProvider === 'custom';
-      customFields.classList.toggle('hidden', !isCustom);
       audioCfgInputs.apiKey.placeholder = isCustom ? '(optional)' : p.name + ' API key';
       audioCfgInputs.baseUrl.placeholder = isCustom ? 'https://api.example.com/v1/generate' : p.base;
       audioBaseLabel.textContent = isCustom ? t('customRequestUrl') : t('baseUrl');
       audioCfgHint.textContent = isCustom ? t('customHint') : t('audioCfgHint').replace('{site}', p.site);
+    }
+    function loadAudioFields() {
+      for (const f of Object.keys(audioCfgInputs)) {
+        audioCfgInputs[f].value = localStorage.getItem(`ai.audio.${currentAudioProvider}.${f}`) || '';
+      }
+      const isCustom = currentAudioProvider === 'custom';
+      customFields.classList.toggle('hidden', !isCustom);
+      renderAudioLabels();
       if (isCustom) {
         for (const f of Object.keys(customInputs)) {
           customInputs[f].value = localStorage.getItem(`ai.audio.custom.${f}`) || '';
@@ -2010,10 +2034,12 @@
       providerVal.textContent = PROVIDERS[currentProvider].name;
       audioVal.textContent = AUDIO_PROVIDERS[currentAudioProvider].name;
       renderWebVal();
-      loadProviderFields();
-      loadAudioFields();
+      // Re-localize forms and the status line in place. Field values and
+      // server state do not change with the language, so no reload/refetch.
+      renderProviderLabels();
+      renderAudioLabels();
       renderEfforts();
-      refreshHealth();
+      renderHealth();
       // Status badges + test output hold localized text — re-render on switch.
       for (const p of Object.keys(connBadges)) renderConnBadge(p);
       renderConnOut('chat');
@@ -2896,6 +2922,45 @@
 
     function closeModelPop() { modelPop.classList.add('hidden'); }
 
+    // The row container and tab buttons persist across re-renders, so typing in
+    // the search box only rebuilds the list below — the controls (and their
+    // focus/IME state) are never touched. Both reset to null on each fresh open.
+    let modelRowsEl = null;
+    let modelTabEls = null;
+
+    function buildModelControls() {
+      modelPop.innerHTML = '';
+      const controls = document.createElement('div');
+      controls.className = 'model-controls';
+      const search = document.createElement('input');
+      search.className = 'model-search';
+      search.type = 'search';
+      search.placeholder = t('modelSearch');
+      search.setAttribute('aria-label', t('modelSearch'));
+      search.value = modelQuery;
+      search.addEventListener('input', () => {
+        modelQuery = search.value;
+        renderModelRows(modelListCache[currentProvider] || null);
+      });
+      const tabs = document.createElement('div');
+      tabs.className = 'model-tabs';
+      modelTabEls = [false, true].map((all) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = all ? 'model-view-all' : 'model-view-common';
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          modelShowAll = all;
+          renderModelPop(modelListCache[currentProvider] || null);
+        });
+        tabs.appendChild(button);
+        return button;
+      });
+      controls.append(search, tabs);
+      modelRowsEl = document.createElement('div');
+      modelPop.append(controls, modelRowsEl);
+    }
+
     function saveModelPreference(data, id, favorite) {
       if (!data || !data.scope) return Promise.resolve();
       const p = currentProvider;
@@ -2923,11 +2988,21 @@
       return modelPreferenceWrites;
     }
 
+    // Long catalogs (OpenRouter & co.) render capped; a note carries the rest.
+    const MODEL_ROW_CAP = 50;
+
     function renderModelPop(data) {
+      if (!modelRowsEl) buildModelControls();
+      const ids = Array.isArray(data && data.models) ? data.models : [];
+      modelTabEls[0].textContent = t('modelCommon');
+      modelTabEls[1].textContent = t('modelAll') + ` · ${ids.length}`;
+      modelTabEls[0].setAttribute('aria-pressed', String(!modelShowAll));
+      modelTabEls[1].setAttribute('aria-pressed', String(modelShowAll));
+      renderModelRows(data);
+    }
+
+    function renderModelRows(data) {
       const provider = currentProvider;
-      const wasSearching = document.activeElement && document.activeElement.className === 'model-search';
-      const caret = wasSearching ? document.activeElement.selectionStart : null;
-      modelPop.innerHTML = '';
       const cur = currentModelId();
       const unique = (ids) => [...new Set((Array.isArray(ids) ? ids : []).filter(id => typeof id === 'string' && id))];
       const ids = unique(data && data.models);
@@ -2935,47 +3010,20 @@
       const recent = unique(data && data.recent);
       const suggested = unique(data && Array.isArray(data.suggestedModels) ? data.suggestedModels : ids);
       const preview = unique(data && data.previewModels);
-      const controls = document.createElement('div');
-      controls.className = 'model-controls';
-      const search = document.createElement('input');
-      search.className = 'model-search';
-      search.type = 'search';
-      search.placeholder = t('modelSearch');
-      search.setAttribute('aria-label', t('modelSearch'));
-      search.value = modelQuery;
-      search.addEventListener('input', () => {
-        modelQuery = search.value;
-        renderModelPop(modelListCache[currentProvider] || data);
-      });
-      const tabs = document.createElement('div');
-      tabs.className = 'model-tabs';
-      for (const all of [false, true]) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = all ? 'model-view-all' : 'model-view-common';
-        button.textContent = t(all ? 'modelAll' : 'modelCommon') + (all ? ` · ${ids.length}` : '');
-        button.setAttribute('aria-pressed', String(all === modelShowAll));
-        button.addEventListener('click', (e) => {
-          e.stopPropagation(); modelShowAll = all;
-          renderModelPop(modelListCache[currentProvider] || data);
-        });
-        tabs.appendChild(button);
-      }
-      controls.append(search, tabs);
-      modelPop.appendChild(controls);
+      const list = modelRowsEl;
+      list.innerHTML = '';
       const note = (text) => {
         const row = document.createElement('div');
         row.className = 'model-row model-note';
         row.textContent = text;
-        modelPop.appendChild(row);
+        list.appendChild(row);
       };
       if (!data) {
         note(t('modelLoading'));
       } else {
         const query = modelQuery.trim().toLowerCase();
-        const compact = true;
         const local = unique(data && data.localModels);
-        const common = unique([cur, ...local, ...favorites, ...recent, ...(compact ? suggested : ids)]).slice(0, compact ? 8 : Infinity);
+        const common = unique([cur, ...local, ...favorites, ...recent, ...suggested]).slice(0, 8);
         const pool = query || modelShowAll ? unique([cur, ...favorites, ...recent, ...ids]) : common;
         const matches = query ? pool.filter(id => id.toLowerCase().includes(query)) : pool;
         // Keep the active model first even when a search/catalog omits it.
@@ -2987,7 +3035,8 @@
         if (ids.length && data.partial) note(t('modelListFail') + (data.detail ? ` · ${data.detail}` : ''));
         if (query && !matches.length) note(t('modelNoMatch'));
         if (data.preferenceError) note(t('modelSaveFail'));
-        for (const id of rows) {
+        const shown = rows.slice(0, MODEL_ROW_CAP);
+        for (const id of shown) {
           const row = document.createElement('div');
           row.className = 'model-row';
           const tick = document.createElement('span');
@@ -3029,8 +3078,9 @@
             void saveModelPreference(data, id);
             closeModelPop();
           });
-          modelPop.appendChild(row);
+          list.appendChild(row);
         }
+        if (rows.length > shown.length) note(`… +${rows.length - shown.length}`);
       }
       // Manual entry stays one click away (previous model-button behavior).
       const custom = document.createElement('div');
@@ -3049,12 +3099,7 @@
         settingsPanel.classList.remove('hidden');
         showView('viewAI');
       });
-      modelPop.appendChild(custom);
-      if (wasSearching) {
-        search.focus();
-        // Search inputs do not support setSelectionRange in every webview.
-        try { if (caret !== null) search.setSelectionRange(caret, caret); } catch {}
-      }
+      list.appendChild(custom);
     }
 
     modelBtn.addEventListener('click', (e) => {
@@ -3065,6 +3110,7 @@
       modelPop.classList.remove('hidden');
       modelQuery = '';
       modelShowAll = false;
+      modelRowsEl = null; // Fresh controls on every open (provider/query may differ).
       const p = currentProvider;
       const request = ++modelCatalogRequest;
       renderModelPop(modelListCache[p] || null);
@@ -3092,7 +3138,10 @@
     });
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModelPop();
+      if (e.key !== 'Escape') return;
+      closeModelPop();
+      settingsPanel.classList.add('hidden');
+      historyPanel.classList.add('hidden');
     });
 
     // ----- attachments -----
@@ -3445,13 +3494,15 @@
       }
     });
 
-    // Grow the input as text is entered (VS Code style); CSS max-height sets the limit.
+    // Grow the input as text is entered (VS Code style). The growth limit lives
+    // in exactly one place: the --input-max-h custom property in the stylesheet.
+    const INPUT_MAX_H = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--input-max-h')) || 134;
     function fitInput() {
       const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 8;
       input.style.height = 'auto';
       const h = input.scrollHeight + 2; // Add the top and bottom borders.
-      input.style.height = Math.min(h, 134) + 'px';
-      input.style.overflowY = h > 134 ? 'auto' : 'hidden';
+      input.style.height = Math.min(h, INPUT_MAX_H) + 'px';
+      input.style.overflowY = h > INPUT_MAX_H ? 'auto' : 'hidden';
       // Keep the log pinned to the bottom when the input shrinks it so new messages stay visible;
       // do not move it while the user scrolls up through history.
       if (atBottom) log.scrollTop = log.scrollHeight;
@@ -3469,28 +3520,29 @@
     applyLang();
     // Prefer the server's saved choice (the embedded dialog is authoritative), even if localStorage
     // contains an older value. Server reconciliation is the only sync path because each shell has
-    // isolated localStorage.
+    // isolated localStorage. The config load + health probe run exactly once, in the finally, after
+    // the provider is final — a server-side provider switch no longer causes a wasted second round.
     fetch('/api/last-provider').then(r => r.json()).then(s => {
       if (s && PROVIDERS[s.provider] && s.provider !== currentProvider) {
         setCurrentProvider(s.provider);
         localStorage.setItem('ai.provider', currentProvider);
         providerVal.textContent = PROVIDERS[currentProvider].name;
-        loadProviderFields();
         renderProviders();
-        renderEfforts();
-        refreshHealth();
       }
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => {
+      loadProviderFields();
+      renderEfforts();
+      refreshHealth();
+    });
     // Do the same for the audio provider (loadAudioFields mirrors fields through its GET request).
     fetch('/api/audio-config').then(r => r.json()).then(s => {
       if (s && AUDIO_PROVIDERS[s.selected] && s.selected !== currentAudioProvider) {
         currentAudioProvider = s.selected;
         localStorage.setItem('ai.audio.provider', currentAudioProvider);
         audioVal.textContent = AUDIO_PROVIDERS[currentAudioProvider].name;
-        loadAudioFields();
         renderAudioProviders();
       }
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => loadAudioFields());
     // Restore the last unsent draft and place the caret at the end.
     input.value = localStorage.getItem(DRAFT_KEY) || '';
     if (input.value) {

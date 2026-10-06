@@ -52,23 +52,29 @@ function render(models: string[], detail = "", options: Record<string, unknown> 
 }
 
 const click = { stopPropagation() {} };
-const rows = (pop: Element) => pop.children.filter((row) => row.className === "model-row");
+// Rows live in a container below the persistent controls, so lookups walk the tree.
+function findAll(pop: Element, pred: (el: Element) => boolean): Element[] {
+  const out: Element[] = [];
+  const walk = (el: Element) => { if (pred(el)) out.push(el); el.children.forEach(walk); };
+  walk(pop);
+  return out;
+}
+const rows = (pop: Element) => findAll(pop, (el) => el.className === "model-row");
 const rowIds = (pop: Element) => rows(pop).map((row) => row.children[1].textContent);
 function find(pop: Element, name: string): Element | undefined {
-  if (pop.className === name) return pop;
-  for (const child of pop.children) { const match = find(child, name); if (match) return match; }
+  return findAll(pop, (el) => el.className === name)[0];
 }
 
 test("empty catalog stays silent — no alarming failure note behind the current model", () => {
   const { modelPop } = render([], "HTTP 404");
-  const note = modelPop.children.find((row) => row.className.includes("model-note"));
+  const note = findAll(modelPop, (el) => el.className.includes("model-note"))[0];
   assert.ok(!note, "endpoints without a catalog are not an error — no note shown");
-  assert.ok(modelPop.children.some((row) => row.children[1]?.textContent === "current-model"));
+  assert.ok(rows(modelPop).some((row) => row.children[1]?.textContent === "current-model"));
 });
 
 test("partial catalog keeps the failure note — models are listed but incomplete", () => {
   const { modelPop } = render(["chat"], "catalog pagination incomplete", { partial: true });
-  const note = modelPop.children.find((row) => row.className.includes("model-note"));
+  const note = findAll(modelPop, (el) => el.className.includes("model-note"))[0];
   assert.ok(note, "partial catalog must say so");
   assert.match(note.textContent, /modelListFail · catalog pagination incomplete/);
 });
@@ -103,7 +109,7 @@ test("a search with no matches keeps current model and reports no matches", () =
   search.value = "no-such-model";
   search.listeners.input(click);
   assert.deepEqual(rowIds(modelPop), ["current-model"]);
-  assert.ok(modelPop.children.some((row) => row.textContent === "modelNoMatch"));
+  assert.ok(findAll(modelPop, (el) => el.textContent === "modelNoMatch").length > 0);
 });
 
 test("favoriting persists a scoped preference without selecting the model or closing the popup", async () => {
@@ -161,11 +167,32 @@ test("cross-window provider changes close the picker, invalidate catalogs and cl
 
 test("selecting a discovered model updates the persisted settings field and closes the picker", () => {
   const { modelPop, model } = render(["current-model", "other-model"]);
-  const rows = modelPop.children.filter((row) => row.className === "model-row");
-  assert.equal(rows.length, 2);
-  assert.equal(rows[0].children[0].textContent, "✓");
-  rows[1].listeners.click({ stopPropagation() {} });
+  const pickerRows = rows(modelPop);
+  assert.equal(pickerRows.length, 2);
+  assert.equal(pickerRows[0].children[0].textContent, "✓");
+  pickerRows[1].listeners.click({ stopPropagation() {} });
   assert.equal(model.value, "other-model");
   assert.deepEqual(model.events, ["input", "change"]);
   assert.ok(modelPop.classes.has("hidden"));
+});
+
+test("typing in search rebuilds only the list — the controls element survives", () => {
+  const { modelPop } = render(["chat", "image-only"], "", { suggestedModels: ["chat"] });
+  const before = find(modelPop, "model-search");
+  assert.ok(before);
+  before.value = "IMAGE";
+  before.listeners.input(click);
+  assert.equal(find(modelPop, "model-search"), before, "search input must not be rebuilt per keystroke");
+  assert.deepEqual(rowIds(modelPop), ["current-model", "image-only"]);
+});
+
+test("long catalogs render capped with a count note for the remainder", () => {
+  const ids = Array.from({ length: 60 }, (_, i) => `model-${i}`);
+  const { modelPop } = render(ids);
+  const all = find(modelPop, "model-view-all");
+  assert.ok(all);
+  all.listeners.click(click);
+  // current-model + 60 catalog entries = 61 rows, capped at 50 with a "+11" note.
+  assert.equal(rows(modelPop).length, 50);
+  assert.ok(findAll(modelPop, (el) => el.textContent === "… +11").length > 0);
 });
