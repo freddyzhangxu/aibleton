@@ -29,11 +29,16 @@ import { readChatCompletionsStream } from "./custom-stream.js";
 // ---------- OpenAI-compatible chat/completions (custom endpoint) ----------
 
 type CustomReasoningProfile =
-  | { kind: "effort"; defaultEffort: "low"; efforts: readonly ["low", "high", "max"] }
-  | { kind: "thinking"; defaultEffort: "off"; efforts: readonly ["off", "on"] };
+  // defaultEffort is omitted where support is unverified: only a user-picked
+  // level sends the field, the default option ("Auto") sends nothing.
+  | { kind: "effort"; defaultEffort?: "low"; efforts: readonly ["low", "high", "max"] }
+  | { kind: "thinking"; defaultEffort: "off"; efforts: readonly ["off", "on"] }
+  // Generic OpenAI-spec levels for unlisted endpoints. No default: the field
+  // rides along only when the user picked a level ("Auto" sends nothing).
+  | { kind: "generic"; efforts: readonly ["low", "medium", "high"] };
 
-/** Detect only documented endpoint/model combinations. Unknown OpenAI-compatible
- * relays receive no vendor-specific reasoning fields. */
+/** Documented endpoint/model combinations get their native reasoning control;
+ * everything else falls back to the generic OpenAI-spec levels. */
 function customReasoningProfile(cfg: ResolvedConfig): CustomReasoningProfile | undefined {
   const model = cfg.model.trim().toLowerCase();
   try {
@@ -50,8 +55,10 @@ function customReasoningProfile(cfg: ResolvedConfig): CustomReasoningProfile | u
       return { kind: "effort", defaultEffort: "low", efforts: ["low", "high", "max"] };
     }
     if (hostname.endsWith(".volces.com")) {
-      // Ark Coding Plan Kimi K3 always thinks and does not support disabling it.
-      if (model.startsWith("kimi-k3")) return undefined;
+      // Ark Kimi K3 always thinks, so the thinking switch does not apply; the
+      // model-native effort levels ride along only when the user picks one
+      // (Ark-side support is unverified — "Auto" keeps the body verbatim).
+      if (model.startsWith("kimi-k3")) return { kind: "effort", efforts: ["low", "high", "max"] };
       const supportsThinkingSwitch =
         /^doubao-seed-(?:evolving|2-1-(?:pro|lite))(?:-|$)/.test(model) ||
         /^deepseek-v4-(?:1-)?(?:flash|pro)(?:-|$)/.test(model);
@@ -62,16 +69,16 @@ function customReasoningProfile(cfg: ResolvedConfig): CustomReasoningProfile | u
   } catch {
     // Invalid addresses are reported by the request path below.
   }
-  return undefined;
+  return { kind: "generic", efforts: ["low", "medium", "high"] };
 }
 
 /** Exported for tests; the chat path uses it through the request builder. */
 export function customReasoning(cfg: ResolvedConfig): Record<string, unknown> {
   const profile = customReasoningProfile(cfg);
   if (!profile) return {};
-  const effort = cfg.effort ?? profile.defaultEffort;
-  if (!profile.efforts.some((value) => value === effort)) return {};
-  if (profile.kind === "effort") return { reasoning_effort: effort };
+  const effort = cfg.effort ?? ("defaultEffort" in profile ? profile.defaultEffort : undefined);
+  if (!effort || !profile.efforts.some((value) => value === effort)) return {};
+  if (profile.kind !== "thinking") return { reasoning_effort: effort };
   const type = effort === "off" ? "disabled" : "enabled";
   return { thinking: { type } };
 }
@@ -81,8 +88,9 @@ export function customReasoning(cfg: ResolvedConfig): Record<string, unknown> {
  * flavor every third-party relay, OpenRouter and local server implements —
  * unlike /responses, which most of them lack) with no instructions field and
  * no default field mapping for arbitrary relays, while documented endpoint and
- * model combinations get their native reasoning control. Uses the same bounded
- * provider-round loop as the other providers.
+ * model combinations get their native reasoning control and every other
+ * endpoint falls back to the generic OpenAI-spec levels (only sent when the
+ * user picks one). Uses the same bounded provider-round loop as the others.
  */
 export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatRequest) {
   if (!cfg.baseUrl || !cfg.model) {

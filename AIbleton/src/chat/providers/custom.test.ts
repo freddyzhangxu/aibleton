@@ -62,13 +62,25 @@ test("Custom maps reasoning controls only for documented endpoints", () => {
   assert.deepEqual(customReasoning({ ...ark, effort: "on" }), { thinking: { type: "enabled" } });
   // A thinking-switch model defaults to off when no effort was picked.
   assert.deepEqual(customReasoning(ark), { thinking: { type: "disabled" } });
-  // Ark Kimi K3 always thinks and exposes no switch — never send the field.
+  // Ark Kimi K3 always thinks (no thinking switch) but exposes the model-native
+  // levels — with no default, so an unpicked effort keeps the body verbatim.
+  assert.deepEqual(customReasoning({ ...ark, model: "kimi-k3-250711" }), {});
+  assert.deepEqual(customReasoning({ ...ark, model: "kimi-k3-250711", effort: "low" }), { reasoning_effort: "low" });
+  assert.deepEqual(customReasoning({ ...ark, model: "kimi-k3-250711", effort: "max" }), { reasoning_effort: "max" });
   assert.deepEqual(customReasoning({ ...ark, model: "kimi-k3-250711", effort: "on" }), {});
   const kimi = { ...base, baseUrl: "https://api.moonshot.ai/v1", model: "kimi-k3-0711-preview" };
   assert.deepEqual(customReasoning({ ...kimi, effort: "high" }), { reasoning_effort: "high" });
   assert.deepEqual(customReasoning(kimi), { reasoning_effort: "low" });
-  // Unknown relays receive no vendor-specific fields, even when effort was picked.
-  assert.deepEqual(customReasoning({ ...base, baseUrl: "http://127.0.0.1:8000/v1", model: "test-model", effort: "on" }), {});
+  // Unknown relays use the generic OpenAI-spec levels: a user-picked level
+  // rides along, but no default is invented and out-of-spec values drop.
+  const local = { ...base, baseUrl: "http://127.0.0.1:8000/v1", model: "test-model" };
+  assert.deepEqual(customReasoning(local), {});
+  assert.deepEqual(customReasoning({ ...local, effort: "low" }), { reasoning_effort: "low" });
+  assert.deepEqual(customReasoning({ ...local, effort: "medium" }), { reasoning_effort: "medium" });
+  assert.deepEqual(customReasoning({ ...local, effort: "high" }), { reasoning_effort: "high" });
+  assert.deepEqual(customReasoning({ ...local, effort: "on" }), {});
+  assert.deepEqual(customReasoning({ ...local, effort: "max" }), {});
+  assert.deepEqual(customReasoning({ ...base, baseUrl: "not a url", model: "test-model", effort: "low" }), { reasoning_effort: "low" });
   assert.deepEqual(customReasoning({ ...base, baseUrl: "not a url", model: "test-model", effort: "on" }), {});
 });
 

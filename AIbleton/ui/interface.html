@@ -2836,7 +2836,11 @@
     function customEffortProfile() {
       const model = cfgInputs.model.value.trim().toLowerCase();
       const raw = cfgInputs.baseUrl.value.trim();
-      if (!raw || !model) return null;
+      // Unlisted endpoints get the generic OpenAI-spec levels; "Auto" sends no
+      // reasoning field at all, so unknown relays keep verbatim request bodies
+      // until the user picks a level.
+      const generic = { default: '', levels: ['low', 'medium', 'high'] };
+      if (!raw || !model) return generic;
       try {
         const url = new URL(raw);
         const host = url.hostname.toLowerCase();
@@ -2847,15 +2851,16 @@
           return { default: 'low', levels: ['low', 'high', 'max'] };
         }
         if (host.endsWith('.volces.com')) {
-          // Ark Coding Plan Kimi K3 always thinks; the API does not support disabling it.
-          if (model.startsWith('kimi-k3')) return null;
+          // Ark Kimi K3 always thinks (no thinking switch) but exposes the
+          // model-native levels; no default — "Auto" sends nothing.
+          if (model.startsWith('kimi-k3')) return { default: '', levels: ['low', 'high', 'max'] };
           const supportsThinkingSwitch =
             /^doubao-seed-(?:evolving|2-1-(?:pro|lite))(?:-|$)/.test(model) ||
             /^deepseek-v4-(?:1-)?(?:flash|pro)(?:-|$)/.test(model);
           if (supportsThinkingSwitch) return { default: 'off', levels: ['off', 'on'] };
         }
-      } catch { /* invalid endpoints keep the generic Auto option */ }
-      return null;
+      } catch { /* invalid endpoints fall through to the generic levels */ }
+      return generic;
     }
     function effortStorageKey() {
       const raw = cfgInputs.baseUrl.value.trim().replace(/\/+$/, '');
@@ -2880,7 +2885,9 @@
       const dflt = document.createElement('option');
       const defaultEffort = profile?.default ?? '';
       dflt.value = defaultEffort;
-      dflt.textContent = currentProvider === 'custom' && !profile
+      // Custom profiles without a default send nothing until the user picks a
+      // level, so their first option reads "Auto" rather than "Default".
+      dflt.textContent = currentProvider === 'custom' && !defaultEffort
         ? 'Auto'
         : defaultEffort ? `${t('effortDefault')} (${defaultEffort})` : t('effortDefault');
       effortSel.appendChild(dflt);
