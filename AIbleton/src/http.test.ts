@@ -1,9 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createServer, type Server } from "node:http";
+import { once } from "node:events";
 import { Readable } from "node:stream";
 import { Buffer } from "node:buffer";
-import { readAll, readAllBinary } from "./http.js";
+import { readAll, readAllBinary, rawGet, rawPost } from "./http.js";
+
+/** server.close() hangs while pooled keep-alive sockets sit idle — close them
+ * explicitly so the test process can exit. */
+async function closeServer(server: Server) {
+  server.close();
+  server.closeIdleConnections();
+  await once(server, "close");
+}
 
 const TEXT = "搜索超时 — 检查网络或代理；dark techno 采样已就绪 ✓";
 
@@ -61,4 +71,88 @@ test("readAll works without the Response global", () => {
     { encoding: "utf8" },
   );
   assert.equal(res.status, 0, res.stderr);
+});
+
+test("rawPost reuses one keep-alive connection across sequential requests", async () => {
+  let connections = 0;
+  const server = createServer((req, res) => {
+    req.resume();
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end('{"ok":true}');
+  });
+  server.on("connection", () => connections++);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const url = new URL(`http://127.0.0.1:${address.port}/v1/chat/completions`);
+    for (let i = 0; i < 3; i++) {
+      const res = await rawPost(url, {
+        headers: { "content-type": "application/json" },
+        body: "{}",
+        proxy: null,
+      });
+      assert.equal(res.status, 200);
+      assert.equal(await readAll(res.stream), '{"ok":true}');
+    }
+    assert.equal(connections, 1, "every request after the first must skip the handshake");
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("rawGet retries once when the connection dies before the response", async () => {
+  let requests = 0;
+  let connections = 0;
+  const server = createServer((req, res) => {
+    requests++;
+    if (requests === 1) {
+      // Simulate a connection reset before any response bytes.
+      req.socket.destroy();
+      return;
+    }
+    req.resume();
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end('{"ok":true}');
+  });
+  server.on("connection", () => connections++);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const res = await rawGet(new URL(`http://127.0.0.1:${address.port}/v1`), {
+      headers: {},
+      proxy: null,
+    });
+    assert.equal(await readAll(res.stream), '{"ok":true}');
+    assert.equal(connections, 2, "the retry must dial a fresh connection");
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("rawPost surfaces a proxy CONNECT rejection instead of hanging", async () => {
+  const proxy = createServer();
+  proxy.on("connect", (_req, socket) => {
+    socket.end("HTTP/1.1 407 Proxy Authentication Required\r\n\r\n");
+  });
+  proxy.listen(0, "127.0.0.1");
+  await once(proxy, "listening");
+  try {
+    const address = proxy.address();
+    assert.ok(address && typeof address !== "string");
+    await assert.rejects(
+      rawPost(new URL("https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions"), {
+        headers: { "content-type": "application/json" },
+        body: "{}",
+        proxy: `http://127.0.0.1:${address.port}`,
+      }),
+      /CONNECT 失败.*407/,
+    );
+  } finally {
+    proxy.close();
+    await once(proxy, "close");
+  }
 });
