@@ -39,9 +39,8 @@ function contextWithDeleteSpies() {
 
 test("delete tools call their matching SDK operation with current targets", async () => {
   const { context, calls } = contextWithDeleteSpies();
-  toolState.activeDeleteAuthorization = deleteAuthorizationFor(
-    "删除轨道、场景、设备、编排区片段和会话片段",
-  );
+  toolState.activeDeleteAuthorization = undefined;
+  toolState.activeYolo = true;
   try {
     await runTool(context, "delete_track", { track_index: 0, track_name: "Bass" });
     await runTool(context, "delete_scene", { scene_index: 0 });
@@ -51,6 +50,7 @@ test("delete tools call their matching SDK operation with current targets", asyn
     assert.deepEqual(calls, ["track", "scene", "device", "arrangement_clip", "session_clip"]);
   } finally {
     toolState.activeDeleteAuthorization = undefined;
+    toolState.activeYolo = false;
   }
 });
 

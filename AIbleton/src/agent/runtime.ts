@@ -934,13 +934,14 @@ export async function callTool(
       return JSON.stringify(refused);
     }
   }
-  // Delete permission is never inferred from YOLO, tool history, or a prior
-  // chat message. The dispatcher repeats this guard as defense in depth.
+  // YOLO grants all delete kinds for this request; otherwise delete permission
+  // must be scoped by the current user message. The dispatcher repeats this
+  // guard as defense in depth.
   // Replacing/deleting a device the agent itself inserted this turn is
   // self-correction, not destruction — it bypasses the wording requirement.
   if (
     isDeleteTool(name) &&
-    !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization) &&
+    !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization, yolo) &&
     !targetIsAgentCreatedObject(context, name, input)
   ) {
     const refused = stopAfterRepeatedToolError(
@@ -977,7 +978,7 @@ export async function callTool(
     (pendingGoal?.refinements ?? 0) > 0;
   const needsConfirm =
     !READ_ONLY_TOOLS.has(name) &&
-    !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization) &&
+    !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization, yolo) &&
     !refinePreAuthorized &&
     (!yolo || COSTLY_TOOLS.has(name));
   if (needsConfirm) {

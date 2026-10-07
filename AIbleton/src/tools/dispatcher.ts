@@ -312,7 +312,7 @@ export async function runTool(
   if (selectionRefusal) throw new Error(selectionRefusal);
   if (
     isDeleteTool(name) &&
-    !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization) &&
+    !deleteToolIsAuthorized(name, toolState.activeDeleteAuthorization, toolState.activeYolo) &&
     !targetIsAgentCreatedObject(context, name, input)
   ) {
     return deleteAuthorizationError(name, toolState.activeLanguage);

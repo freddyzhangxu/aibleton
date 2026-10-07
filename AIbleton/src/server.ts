@@ -988,6 +988,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         toolState.activeLanguage = languageContext.replyLanguage;
         toolState.activeLanguageContext = languageContext;
         toolState.activeDeleteAuthorization = deleteAuthorizationFor(text);
+        toolState.activeYolo = parsed.yolo !== false;
         toolState.activeGlobalIntent = hasGlobalIntent(text);
         toolState.activeExplicitEditScope = explicitEditScopeFor(context, text);
         toolState.activeMasterIntent = hasMasterIntent(text);
@@ -1024,6 +1025,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             toolState.activeLanguage = undefined;
             toolState.activeLanguageContext = null;
             toolState.activeDeleteAuthorization = undefined;
+            toolState.activeYolo = false;
             toolState.activeCreatedDeviceHandles.clear();
             toolState.activeCreatedTrackHandles.clear();
             toolState.activeGlobalIntent = false;

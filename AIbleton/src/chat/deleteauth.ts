@@ -103,8 +103,12 @@ export function isDeleteTool(name: string): name is keyof typeof DELETE_TOOL_KIN
   return name in DELETE_TOOL_KINDS;
 }
 
-export function deleteToolIsAuthorized(name: string, authorization: DeleteAuthorization | undefined): boolean {
-  return isDeleteTool(name) && authorization?.has(DELETE_TOOL_KINDS[name]) === true;
+export function deleteToolIsAuthorized(
+  name: string,
+  authorization: DeleteAuthorization | undefined,
+  yolo = false,
+): boolean {
+  return isDeleteTool(name) && (yolo || authorization?.has(DELETE_TOOL_KINDS[name]) === true);
 }
 
 export function deleteAuthorizationError(name: string, language?: string): { error: string; delete_authorization_required: true } {

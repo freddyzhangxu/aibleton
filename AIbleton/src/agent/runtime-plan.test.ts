@@ -34,6 +34,7 @@ afterEach(() => {
   toolState.stopReason = null;
   toolState.activeGlobalIntent = false;
   toolState.activeExplicitEditScope = { trackIndices: [], arrangementRanges: [] };
+  toolState.activeYolo = false;
 });
 
 async function declareTempoGoal(context: Ctx, actions: ToolAction[]): Promise<void> {
@@ -116,6 +117,49 @@ test("a goal-free batch stops after a denied delete and leaves later steps uncal
   assert.equal(result.execution.status, "partial");
   assert.equal(result.execution.failed_step_id, "delete");
   assert.deepEqual(result.execution.skipped_step_ids, ["last"]);
+});
+
+test("YOLO lets callTool delete an arrangement clip without per-message authorization", async () => {
+  resetTurnState();
+  toolHooks.debugLog = () => {};
+  const calls: string[] = [];
+  const clip = { name: "Old loop" };
+  const track = {
+    name: "Bass",
+    devices: [],
+    arrangementClips: [clip],
+    clipSlots: [],
+    deleteClip: async (target: unknown) => {
+      assert.equal(target, clip);
+      calls.push("delete_arrangement_clip");
+    },
+  };
+  const song = {
+    tempo: 120,
+    scaleMode: false,
+    rootNote: 0,
+    scaleName: "C Major",
+    scaleIntervals: [0, 2, 4, 5, 7, 9, 11],
+    scenes: [{ signatureNumerator: 4, signatureDenominator: 4 }],
+    tracks: [track],
+    returnTracks: [],
+    cuePoints: [],
+  };
+  const context = {
+    application: { song },
+    withinTransaction: <T>(fn: () => T) => fn(),
+  } as unknown as Ctx;
+  toolState.activeDeleteAuthorization = undefined;
+  toolState.activeYolo = true;
+
+  const result = JSON.parse(await callTool(context, [], "delete_arrangement_clip", {
+    track_index: 0,
+    track_name: "Bass",
+    clip_index: 0,
+  }, true)) as { deleted?: string; error?: string };
+
+  assert.equal(result.deleted, "arrangement_clip");
+  assert.deepEqual(calls, ["delete_arrangement_clip"]);
 });
 
 test("executable normalization never silently drops malformed steps before writing", async () => {

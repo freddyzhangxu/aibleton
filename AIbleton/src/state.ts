@@ -54,6 +54,8 @@ export const toolState = {
   activeLanguageContext: null as TurnLanguageContext | null,
   /** Kind-scoped delete permission derived from the CURRENT user message. */
   activeDeleteAuthorization: undefined as DeleteAuthorization | undefined,
+  /** Whether the CURRENT request enabled YOLO, including delete operations. */
+  activeYolo: false,
   /** Host-assigned handle ids (as strings) of devices the agent itself
    * inserted during the CURRENT turn. Deleting/replacing one of these is
    * self-correction, not destruction of user work, so it bypasses the

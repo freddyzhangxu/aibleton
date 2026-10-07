@@ -1,12 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deleteAuthorizationFor, deleteToolIsAuthorized } from "./deleteauth.js";
+import { deleteAuthorizationFor, deleteToolIsAuthorized, type DeleteKind } from "./deleteauth.js";
 
 test("authorizes explicitly named deletion kinds only", () => {
   const auth = deleteAuthorizationFor("删除 Bass 轨道，并 remove the old scene");
   assert.equal(deleteToolIsAuthorized("delete_track", auth), true);
   assert.equal(deleteToolIsAuthorized("delete_scene", auth), true);
   assert.equal(deleteToolIsAuthorized("delete_device", auth), false);
+});
+
+test("YOLO authorizes every supported deletion tool without message-scoped wording", () => {
+  const noMessageAuthorization = new Set<DeleteKind>();
+  for (const tool of [
+    "delete_track",
+    "delete_scene",
+    "delete_device",
+    "replace_device",
+    "delete_drum_pad_device",
+    "delete_arrangement_clip",
+    "delete_session_clip",
+  ]) {
+    assert.equal(deleteToolIsAuthorized(tool, noMessageAuthorization, true), true, tool);
+  }
+  assert.equal(deleteToolIsAuthorized("delete_arrangement_clip", noMessageAuthorization, false), false);
 });
 
 test("requires a delete verb and a specific object kind", () => {
