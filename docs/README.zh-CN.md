@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../AIbletonBar/Resources/AIbleton.png" alt="AIbleton" width="420">
+  <img src="aibleton-logo-gray-orange.svg" alt="AIbleton" width="420">
 </p>
 
 <h1 align="center">AIbleton</h1>
