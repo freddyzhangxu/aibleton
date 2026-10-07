@@ -550,16 +550,38 @@
     }
     .bar-btn:hover { color: var(--c-accent); }
     .bar-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    select.bar-btn {
-      appearance: none;
-      -webkit-appearance: none;
-      padding-right: 14px;
-      background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
-      background-position: calc(100% - 9px) 55%, calc(100% - 5px) 55%;
-      background-size: 4px 4px;
-      background-repeat: no-repeat;
+    .effort-control { position: relative; }
+    #effortPop.hidden { display: none; }
+    #effortPop {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 0;
+      min-width: 154px;
+      max-width: min(220px, calc(100vw - 28px));
+      background: var(--c-input-bg);
+      border: 1px solid var(--c-border);
+      border-radius: 6px;
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+      z-index: 30;
+      padding: 2px 0;
     }
-    select.bar-btn option { background: var(--c-panel); color: var(--c-text); }
+    .effort-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      background: transparent;
+      border: 0;
+      color: var(--c-text);
+      font: inherit;
+      font-size: 11px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .effort-row:hover, .effort-row:focus-visible { background: var(--c-border); outline: none; }
+    .effort-row .tick { width: 14px; flex: none; color: var(--c-accent); font-size: 11px; }
+    .effort-row .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bar .spacer { flex: 1; }
 
     /* YOLO toggle switch */
@@ -891,7 +913,12 @@
     <div class="bar">
       <div id="modelPop" class="hidden"></div>
       <button id="modelBtn" class="bar-btn" title=""><span id="modelName">…</span></button>
-      <select id="effortSel" class="bar-btn" title=""></select>
+      <div class="effort-control">
+        <button id="effortBtn" class="bar-btn" type="button" title="" aria-haspopup="menu" aria-expanded="false">
+          <span id="effortLabel"></span>
+        </button>
+        <div id="effortPop" class="hidden" role="menu" aria-label="Effort"></div>
+      </div>
       <button id="attachBtn" class="bar-btn" title="">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
       </button>
@@ -1968,6 +1995,7 @@
 
     document.getElementById('showSettings').addEventListener('click', (e) => {
       e.stopPropagation();
+      closeEffortPop();
       document.getElementById('modelPop').classList.add('hidden');
       const opening = settingsPanel.classList.contains('hidden');
       settingsPanel.classList.toggle('hidden');
@@ -2021,7 +2049,8 @@
       document.getElementById('showHistory').title = t('history');
       document.getElementById('showSettings').title = t('settings');
       document.getElementById('modelBtn').title = t('modelTitle');
-      document.getElementById('effortSel').title = t('effortTitle');
+      document.getElementById('effortBtn').title = t('effortTitle');
+      document.getElementById('effortPop').setAttribute('aria-label', t('effortTitle'));
       document.getElementById('attachBtn').title = t('attachTitle');
       document.getElementById('yoloLabel').title = t('yoloTitle');
       document.getElementById('confirmAllow').textContent = t('allow');
@@ -2812,6 +2841,7 @@
 
     document.getElementById('showHistory').addEventListener('click', (e) => {
       e.stopPropagation();
+      closeEffortPop();
       settingsPanel.classList.add('hidden');
       document.getElementById('modelPop').classList.add('hidden');
       historyPanel.classList.toggle('hidden');
@@ -2832,7 +2862,10 @@
       codex:  ['minimal', 'low', 'medium', 'high', 'xhigh'],
       gemini: ['low', 'medium', 'high', 'max'],
     };
-    const effortSel = document.getElementById('effortSel');
+    const effortBtn = document.getElementById('effortBtn');
+    const effortLabel = document.getElementById('effortLabel');
+    const effortPop = document.getElementById('effortPop');
+    let selectedEffort = '';
     function customEffortProfile() {
       const model = cfgInputs.model.value.trim().toLowerCase();
       const raw = cfgInputs.baseUrl.value.trim();
@@ -2879,9 +2912,8 @@
     function renderEfforts() {
       const profile = currentProvider === 'custom' ? customEffortProfile() : null;
       const levels = profile?.levels ?? EFFORT_LEVELS[currentProvider] ?? [];
-      effortSel.style.display = levels.length || currentProvider === 'custom' ? '' : 'none';
+      effortBtn.style.display = levels.length || currentProvider === 'custom' ? '' : 'none';
       const saved = localStorage.getItem(effortStorageKey()) || '';
-      effortSel.innerHTML = '';
       const dflt = document.createElement('option');
       const defaultEffort = profile?.default ?? '';
       dflt.value = defaultEffort;
@@ -2890,20 +2922,89 @@
       dflt.textContent = currentProvider === 'custom' && !defaultEffort
         ? 'Auto'
         : defaultEffort ? `${t('effortDefault')} (${defaultEffort})` : t('effortDefault');
-      effortSel.appendChild(dflt);
+      const options = [dflt];
       for (const lv of levels) {
         if (lv === defaultEffort) continue;
         const opt = document.createElement('option');
         opt.value = lv;
         opt.textContent = lv;
-        effortSel.appendChild(opt);
+        options.push(opt);
       }
       // Custom preferences are model-scoped; unsupported values use the
       // detected profile default or the generic Auto option.
-      effortSel.value = levels.includes(saved) ? saved : defaultEffort;
+      selectedEffort = levels.includes(saved) ? saved : defaultEffort;
+      const selected = options.find(option => option.value === selectedEffort) || dflt;
+      effortLabel.textContent = selected.textContent;
+      effortPop.innerHTML = '';
+      options.forEach(option => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'effort-row';
+        row.setAttribute('role', 'menuitemradio');
+        row.setAttribute('aria-checked', String(option.value === selectedEffort));
+        row.dataset.effort = option.value;
+        const tick = document.createElement('span');
+        tick.className = 'tick';
+        tick.textContent = option.value === selectedEffort ? '✓' : '';
+        const label = document.createElement('span');
+        label.className = 'label';
+        label.textContent = option.textContent;
+        row.append(tick, label);
+        row.addEventListener('click', () => setEffort(option.value));
+        effortPop.appendChild(row);
+      });
     }
     renderEfforts();
-    effortSel.addEventListener('change', () => localStorage.setItem(effortStorageKey(), effortSel.value));
+    function closeEffortPop() {
+      effortPop.classList.add('hidden');
+      effortBtn.setAttribute('aria-expanded', 'false');
+    }
+    function setEffort(value) {
+      selectedEffort = value;
+      localStorage.setItem(effortStorageKey(), value);
+      renderEfforts();
+      closeEffortPop();
+      effortBtn.focus();
+    }
+    effortBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      historyPanel.classList.add('hidden');
+      settingsPanel.classList.add('hidden');
+      closeModelPop();
+      if (!effortPop.classList.contains('hidden')) { closeEffortPop(); return; }
+      effortPop.classList.remove('hidden');
+      effortBtn.setAttribute('aria-expanded', 'true');
+      effortPop.querySelector(`[data-effort="${CSS.escape(selectedEffort)}"]`)?.focus();
+    });
+    effortPop.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', (e) => {
+      if (!effortPop.parentElement.contains(e.target)) closeEffortPop();
+    });
+    effortBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (effortPop.classList.contains('hidden')) effortBtn.click();
+        else effortPop.querySelector('.effort-row')?.focus();
+      }
+    });
+    effortPop.addEventListener('keydown', (e) => {
+      const rows = [...effortPop.querySelectorAll('.effort-row')];
+      const index = rows.indexOf(document.activeElement);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeEffortPop();
+        effortBtn.focus();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const next = (index + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length;
+        rows[next]?.focus();
+      } else if (e.key === 'Home' || e.key === 'End') {
+        e.preventDefault();
+        (e.key === 'Home' ? rows[0] : rows[rows.length - 1])?.focus();
+      } else if (e.key === 'Tab') {
+        closeEffortPop();
+      }
+    });
 
     const yoloToggle = document.getElementById('yoloToggle');
     const yoloLabel = document.getElementById('yoloLabel');
@@ -3111,6 +3212,7 @@
 
     modelBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      closeEffortPop();
       historyPanel.classList.add('hidden');
       settingsPanel.classList.add('hidden');
       if (!modelPop.classList.contains('hidden')) { closeModelPop(); return; }
@@ -3304,7 +3406,7 @@
             apiKey: cfgInputs.apiKey.value || undefined,
             baseUrl: cfgInputs.baseUrl.value || undefined,
             model: cfgInputs.model.value || undefined,
-            effort: effortSel.value || undefined,
+            effort: selectedEffort || undefined,
             yolo: yoloToggle.checked,
             attachments: attachments.length ? attachments : undefined,
             audio: (() => {
