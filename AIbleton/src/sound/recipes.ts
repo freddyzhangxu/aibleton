@@ -14,7 +14,13 @@ export type SoundRecipeId =
   | "pluck_warm"
   | "pluck_bell"
   | "pluck_guitar"
-  | "pluck_kalimba";
+  | "pluck_kalimba"
+  | "pad_warm"
+  | "pad_airy"
+  | "pad_dark"
+  | "lead_clean"
+  | "lead_analog"
+  | "lead_aggressive";
 
 export type NumericRecipeTarget = {
   id: string;
@@ -34,7 +40,7 @@ export type RecipeParameterTarget = NumericRecipeTarget | EnumRecipeTarget;
 
 export type SoundRecipe = {
   id: SoundRecipeId;
-  role: "bass" | "pluck";
+  role: "bass" | "pad" | "pluck" | "lead";
   label: string;
   genreTerms: readonly string[];
   source: "sample" | "synth" | "contextual";
@@ -117,6 +123,61 @@ const operatorBellPluckControls: readonly RecipeParameterTarget[] = [
   { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.16 },
   { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.42 },
   { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.55 },
+];
+
+const driftWarmPadControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Env 1 Attack"], normalizedValue: 0.18 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Env 1 Decay"], normalizedValue: 0.58 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Env 1 Sustain"], normalizedValue: 0.7 },
+  { id: "amp_release", kind: "numeric", aliases: ["Env 1 Release"], normalizedValue: 0.5 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["LP Freq"], normalizedValue: 0.28 },
+  { id: "filter_resonance", kind: "numeric", aliases: ["LP Res"], normalizedValue: 0.04 },
+];
+
+const wavetableAiryPadControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Amp Attack"], normalizedValue: 0.28 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Amp Decay"], normalizedValue: 0.62 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain"], normalizedValue: 0.68 },
+  { id: "amp_release", kind: "numeric", aliases: ["Amp Release"], normalizedValue: 0.68 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.76 },
+  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.06 },
+];
+
+const operatorDarkPadControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.2 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.64 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.62 },
+  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.55 },
+  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.12 },
+  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.26 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.28 },
+];
+
+const driftCleanLeadControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Env 1 Attack"], normalizedValue: 0.006 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Env 1 Decay"], normalizedValue: 0.34 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Env 1 Sustain"], normalizedValue: 0.58 },
+  { id: "amp_release", kind: "numeric", aliases: ["Env 1 Release"], normalizedValue: 0.1 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["LP Freq"], normalizedValue: 0.46 },
+  { id: "filter_resonance", kind: "numeric", aliases: ["LP Res"], normalizedValue: 0.035 },
+];
+
+const driftAnalogLeadControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Env 1 Attack"], normalizedValue: 0.012 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Env 1 Decay"], normalizedValue: 0.42 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Env 1 Sustain"], normalizedValue: 0.64 },
+  { id: "amp_release", kind: "numeric", aliases: ["Env 1 Release"], normalizedValue: 0.15 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["LP Freq"], normalizedValue: 0.36 },
+  { id: "filter_resonance", kind: "numeric", aliases: ["LP Res"], normalizedValue: 0.08 },
+];
+
+const wavetableAggressiveLeadControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Amp Attack"], normalizedValue: 0.0005 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Amp Decay"], normalizedValue: 0.32 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain"], normalizedValue: 0.48 },
+  { id: "amp_release", kind: "numeric", aliases: ["Amp Release"], normalizedValue: 0.04 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.82 },
+  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.14 },
 ];
 
 export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
@@ -321,6 +382,72 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
       Simpler: simplePluckEnvelope(0.0001, 0.14, 0.03, 0.035),
       Operator: operatorBellPluckControls,
     },
+  },
+  pad_warm: {
+    id: "pad_warm",
+    role: "pad",
+    label: "Warm soft Pad",
+    genreTerms: ["warm", "soft", "mellow", "house", "techno", "温暖", "柔和", "铺底"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Drift",
+    fallbackInstrument: "Drift",
+    targets: { Drift: driftWarmPadControls },
+  },
+  pad_airy: {
+    id: "pad_airy",
+    role: "pad",
+    label: "Airy bright Pad",
+    genreTerms: ["airy", "shimmering", "bright", "ambient", "空灵", "闪耀", "明亮", "氛围"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Wavetable",
+    fallbackInstrument: "Wavetable",
+    targets: { Wavetable: wavetableAiryPadControls },
+  },
+  pad_dark: {
+    id: "pad_dark",
+    role: "pad",
+    label: "Dark cinematic Pad",
+    genreTerms: ["dark", "cinematic", "drone", "暗色", "电影感", "持续音"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Operator",
+    fallbackInstrument: "Operator",
+    targets: { Operator: operatorDarkPadControls },
+  },
+  lead_clean: {
+    id: "lead_clean",
+    role: "lead",
+    label: "Clean rounded Lead",
+    genreTerms: ["clean", "clear", "rounded", "pop", "干净", "清晰", "圆润", "流行"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Drift",
+    fallbackInstrument: "Drift",
+    targets: { Drift: driftCleanLeadControls },
+  },
+  lead_analog: {
+    id: "lead_analog",
+    role: "lead",
+    label: "Warm analog-style Lead",
+    genreTerms: ["analog", "warm", "vintage", "funk", "disco", "模拟", "温暖", "复古", "放克", "迪斯科"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Drift",
+    fallbackInstrument: "Drift",
+    targets: { Drift: driftAnalogLeadControls },
+  },
+  lead_aggressive: {
+    id: "lead_aggressive",
+    role: "lead",
+    label: "Bright aggressive Lead",
+    genreTerms: ["aggressive", "bright", "punchy", "house", "techno", "强劲", "明亮", "有冲击力"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Wavetable",
+    fallbackInstrument: "Wavetable",
+    targets: { Wavetable: wavetableAggressiveLeadControls },
   },
 };
 
