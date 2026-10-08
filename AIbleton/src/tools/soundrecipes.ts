@@ -133,7 +133,7 @@ async function ensurePrimaryDevice(
   } catch (error) {
     return {
       failure: trackResult(ref, {
-        executed: false,
+        executed: !!current,
         replacement_not_applied: true,
         source_deleted: !!current,
         ...(current ? { source: current.device.name } : {}),
@@ -187,9 +187,14 @@ export async function applySoundRecipe(
 
   let sourceKind = contextualSource(recipe, current, input.source_preference);
   let selectedSample: string | undefined;
+  let sampleSearchFailure: string | undefined;
   let fallback = false;
   if (sourceKind === "sample") {
-    selectedSample = findSample(recipe);
+    try {
+      selectedSample = findSample(recipe);
+    } catch (error) {
+      sampleSearchFailure = error instanceof Error ? error.message : String(error);
+    }
     if (!selectedSample) {
       sourceKind = "synth";
       fallback = true;
@@ -274,7 +279,12 @@ export async function applySoundRecipe(
       kind: sourceKind,
       device: device.name,
       ...(importedSample ? { file: importedSample } : {}),
-      ...(fallback ? { fallback: true, note: "本地没有匹配采样，已改用合成器近似。" } : {}),
+      ...(fallback ? {
+        fallback: true,
+        note: sampleSearchFailure
+          ? `本地采样搜索失败，已改用合成器近似：${sampleSearchFailure}`
+          : "本地没有匹配采样，已改用合成器近似。",
+      } : {}),
       ...(ensured.replaced ? { replaced: ensured.replaced } : {}),
     },
     applied,
