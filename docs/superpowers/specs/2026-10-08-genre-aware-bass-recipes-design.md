@@ -3,16 +3,18 @@
 ## Goal
 
 Make AIbleton choose and apply a reusable bass sound recipe that fits the music
-style. The first release covers rock/band bass, electronic/dance bass, and
-Hip-hop/R&B 808 or sub bass. It should use the Live Set's actual devices and
-the user's locally available samples instead of guessing parameter names or
-assuming a sample pack is installed.
+style. The first release covers rock/band bass, reggae bass, electronic/dance
+bass, and Hip-hop/R&B 808 or sub bass. It should use the Live Set's actual
+devices and the user's locally available samples instead of guessing
+parameter names or assuming a sample pack is installed.
 
 ## User intent and success criteria
 
 - A request for a bass sound should use the stated genre and role together.
 - Rock bass should favor a picked or fingered electric-bass sample when one is
   available locally.
+- Reggae bass should favor a warm, round electric-bass sample with a softer
+  attack when one is available locally.
 - Electronic/dance bass should use a synthesized bass sound.
 - Hip-hop/R&B bass should favor an 808 or sub-bass sample.
 - When a sample route has no usable local result, use a clearly reported
@@ -30,8 +32,10 @@ assuming a sample pack is installed.
 
 ### Included
 
-- Three bass recipes:
+- Four bass recipes:
   - `rock_bass`: local electric-bass sample, with a synth fallback.
+  - `reggae_bass`: warm, round local electric-bass sample, softer attack, with
+    a synth fallback.
   - `electronic_bass`: Operator-based synthesized bass.
   - `hiphop_808_bass`: local 808/sub sample, with an Operator fallback.
 - A recipe catalog that stores each recipe's genre, role, source strategy,
@@ -48,6 +52,8 @@ assuming a sample pack is installed.
 ### Excluded
 
 - Pad and Pluck recipes.
+- Reggae bassline rhythm and note-pattern generation; this release changes
+  timbre only.
 - Genre classification from audio using a new classifier.
 - Third-party plug-in loading or preset-file loading.
 - Automatic rendering/listening analysis of MIDI instruments through their
@@ -74,7 +80,11 @@ Set as a genre solely from a track name.
 
 Keep recipe data separate from dispatcher logic. Each recipe has a stable ID,
 display name, genre/role tags, source strategy, ordered local search terms,
-fallback instrument, and zero or more device-specific parameter targets.
+fallback instrument, and zero or more device-specific parameter targets. The
+Reggae sample recipe should favor fingered, muted, or otherwise warm electric
+bass samples and set a gentle Simpler envelope when the current device exposes
+matching controls. Rock should favor a clearer picked/plucked attack; the
+Hip-hop/R&B recipe should search for 808/sub samples.
 
 Parameter targets use semantic aliases plus a normalized target value in
 `[0, 1]`. At application time, convert that target to the current parameter's
@@ -133,7 +143,7 @@ result in Live.
 
 ## Testing plan
 
-- Recipe catalog contains the three stable IDs and their intended source
+- Recipe catalog contains the four stable IDs and their intended source
   strategies.
 - Genre resolution prioritizes the current explicit request and does not
   treat unrelated memory as the current genre.
