@@ -655,7 +655,7 @@ export const TOOLS = [
   {
     name: "apply_sound_recipe",
     description:
-      "Apply one of AIbleton's genre-aware Bass or Pluck recipes to a MIDI track. Bass and sampled Pluck recipes search local sample libraries and use a declared built-in synth fallback when no suitable sample exists; synth Pluck recipes use their specified built-in device. It inspects Live's current parameters, applies only exact supported controls, and reports selected source and skipped controls. It changes only the target track's primary sound source; it does not edit clips, mixer settings, effects, or other tracks. Use only when the sound style and target track are clear.",
+      "Apply one of AIbleton's reusable Bass, Pad, Pluck, or Lead sound recipes to a MIDI track. Current Bass recipes and the guitar/kalimba Pluck recipes may search local samples and use their declared built-in synth fallback; synth Pluck, Pad, and Lead recipes use their specified built-in device, and Pad/Lead never search samples. The tool inspects Live's current parameters, applies only exact supported controls, and reports the source and skipped controls. It changes only the target track's primary sound source; it does not edit clips, mixer settings, effects, or other tracks. Use only when the sound style and target track are clear.",
     input_schema: {
       type: "object",
       properties: {
