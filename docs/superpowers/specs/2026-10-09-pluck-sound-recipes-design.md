@@ -3,9 +3,9 @@
 ## Goal
 
 Extend AIbleton's existing sound recipe workflow from Bass-only recipes to
-reusable synthesizer Pluck recipes. Keep the current Bass recipe IDs and
-behavior intact while making the shared catalog, tool schema, prompts, and
-results role-aware.
+reusable synthesizer and sampled Pluck recipes. Keep the current Bass recipe
+IDs and behavior intact while making the shared catalog, tool schema, prompts,
+and results role-aware.
 
 ## User intent and success criteria
 
@@ -13,6 +13,8 @@ results role-aware.
   short/bright, warm/soft, or bell-like/metallic.
 - Use Wavetable for short/bright, Drift for warm/soft, and Operator for
   bell-like/metallic as the initial Live-native mappings.
+- Guitar and Kalimba requests should prefer suitable local samples; if none
+  are available, use a clearly identified Drift or Operator approximation.
 - Explicit timbre words in the current request take priority over broad genre
   defaults.
 - If the request gives only a clear music style, map House/Techno to
@@ -32,10 +34,12 @@ results role-aware.
 
 ### Included
 
-- Three new Pluck recipes:
+- Five new Pluck recipes:
   - `pluck_bright`: short, bright synth Pluck using Wavetable.
   - `pluck_warm`: warm, soft synth Pluck using Drift.
   - `pluck_bell`: bell-like or metallic synth Pluck using Operator.
+  - `pluck_guitar`: guitar/nylon/electric Pluck sample, with a Drift fallback.
+  - `pluck_kalimba`: Kalimba/mbira/thumb-piano sample, with an Operator fallback.
 - Generalize the recipe ID/type and catalog from `BassRecipeId` and
   `BASS_SOUND_RECIPES` to role-aware `SoundRecipeId` and `SOUND_RECIPES`;
   preserve all existing Bass recipe IDs and recipe content.
@@ -48,7 +52,7 @@ results role-aware.
 
 ### Excluded
 
-- Guitar, kalimba, piano, or other sampled Pluck recipes.
+- Sampled piano and other sampled Pluck instruments outside guitar and Kalimba.
 - New rhythm, note generation, arpeggiation, or MIDI articulation behavior.
 - Third-party plug-in or preset-file loading.
 - Automatic rendering/listening analysis of the instrument device chain.
@@ -60,8 +64,10 @@ results role-aware.
 
 Each recipe has a `role` (`bass` or `pluck`), stable `id`, display label,
 genre/timbre terms, source strategy, target Live instrument, and device-specific
-parameter targets. Bass entries remain unchanged apart from adding
-`role: "bass"`; the Pluck entries use `role: "pluck"` and synth sources.
+parameter targets. Sample Pluck entries include filename evidence terms so the
+executor can reject unrelated samples. Bass entries remain unchanged apart
+from adding `role: "bass"`; Pluck entries use `role: "pluck"` and declare
+whether they use synth or sample sources.
 
 The `apply_sound_recipe` input keeps `track_index`, `track_name`, and
 `recipe_id`, with the full `SoundRecipeId` union. `source_preference` remains
@@ -69,22 +75,29 @@ optional and applies only to the existing contextual `pop_bass` recipe.
 
 ### Pluck parameters
 
-Pluck targets use exact aliases for each chosen device's amp envelope, filter
-brightness, and, where relevant, oscillator/FM character. A device changes
-only controls it exposes under an exact alias. The existing normalized-value
-mapping and reported min/max range handling remain in place. If an alias is
-missing or duplicated, skip it and include the target and reason in the
-result.
+Synth Pluck targets use exact aliases for each chosen device's amp envelope,
+filter brightness, and, where relevant, oscillator/FM character. A device
+changes only controls it exposes under an exact alias. The existing
+normalized-value mapping and reported min/max range handling remain in place.
+If an alias is missing or duplicated, skip it and include the target and
+reason in the result.
+
+Sample Pluck recipes search local libraries in recipe-defined order. Guitar
+samples require guitar/gtr filename evidence; Kalimba samples require
+kalimba/mbira/thumb-piano evidence. Continue through ranked candidates and
+queries until a suitable file is found. Reject drum and loop filenames using
+the existing sample-suitability policy. When no candidate qualifies, use the
+recipe's declared synth fallback and report it as an approximation.
 
 ### Source and authorization behavior
 
 The preflight accepts an empty MIDI track or one identifiable primary built-in
 instrument. It refuses `Instrument Rack`, `Drum Rack`, unknown devices, and
-multiple primary instruments before mutation. If applying a named Pluck
-recipe requires changing the primary instrument on an existing named/selected
-track, the current request must clearly ask for that Pluck recipe. The recipe
-source authorization remains distinct from generic device deletion
-authorization and cannot authorize deleting unrelated devices.
+multiple primary instruments before mutation. If applying a named Pluck recipe
+requires changing the primary instrument or sample on an existing
+named/selected track, the current request must clearly ask for that Pluck
+recipe. The recipe source authorization remains distinct from generic device
+deletion authorization and cannot authorize deleting unrelated devices.
 
 An empty MIDI track receives the recipe's specified built-in instrument.
 An already-compatible instrument is reused. A source change follows the
@@ -93,10 +106,12 @@ track's effects and all other Set content.
 
 ### Prompt routing
 
-The prompt lists all recipe IDs. Explicit sound descriptors take priority:
-bright/short/punchy selects `pluck_bright`, warm/soft/mellow selects
-`pluck_warm`, and bell/metallic/FM selects `pluck_bell`. When only a clear
-genre is stated, route House/Techno to `pluck_bright`, Jazz/Bossa to
+The prompt lists all recipe IDs. Explicit sampled instrument names guitar,
+nylon/electric guitar, or muted guitar select `pluck_guitar`; Kalimba, mbira,
+or thumb piano select `pluck_kalimba`. Otherwise explicit sound descriptors
+take priority: bright/short/punchy selects `pluck_bright`, warm/soft/mellow
+selects `pluck_warm`, and bell/metallic/FM selects `pluck_bell`. When only a
+clear genre is stated, route House/Techno to `pluck_bright`, Jazz/Bossa to
 `pluck_warm`, and Pop/Cinematic to `pluck_bell`. When the current request,
 relevant artist memory, and current musical context do not resolve the style,
 ask the user rather than choosing silently.

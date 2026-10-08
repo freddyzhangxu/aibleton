@@ -83,10 +83,14 @@ function isSuitableSample(recipe: SoundRecipe, filePath: string): boolean {
     return false;
   }
   const compact = fileName.replace(/[^a-z0-9]/g, "");
-  const hasBassEvidence = compact.includes("bass") || compact.includes("sub") || compact.includes("808");
-  if (!hasBassEvidence) return false;
-  if (recipe.id === "hiphop_808_bass") return compact.includes("808") || compact.includes("sub");
-  return compact.includes("bass");
+  if (recipe.role === "bass") {
+    const hasBassEvidence = compact.includes("bass") || compact.includes("sub") || compact.includes("808");
+    if (!hasBassEvidence) return false;
+    if (recipe.id === "hiphop_808_bass") return compact.includes("808") || compact.includes("sub");
+    return compact.includes("bass");
+  }
+  const evidence = recipe.sampleEvidence ?? [];
+  return evidence.some((term) => compact.includes(term.replace(/[^a-z0-9]/gi, "").toLocaleLowerCase()));
 }
 
 function findSample(recipe: SoundRecipe): string | undefined {
@@ -172,8 +176,11 @@ export async function applySoundRecipe(
     return trackResult(ref, { executed: false, error: "音色方案目前只能应用到 MIDI 轨道。" });
   }
   const recipe = recipeFor(input.recipe_id);
-  if (recipe.role === "pluck" && recipe.source !== "synth") {
-    throw new Error(`Pluck recipe ${recipe.id} must use a synth source`);
+  if (recipe.role === "pluck" && recipe.source === "contextual") {
+    throw new Error(`Pluck recipe ${recipe.id} must choose a specific synth or sample source`);
+  }
+  if (recipe.role === "pluck" && recipe.source === "sample" && !recipe.sampleEvidence?.length) {
+    throw new Error(`Pluck sample recipe ${recipe.id} needs filename evidence terms`);
   }
   const current = findPrimarySource(ref.track);
   if (current === "ambiguous") {

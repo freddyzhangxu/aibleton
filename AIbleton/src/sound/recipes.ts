@@ -12,7 +12,9 @@ export type SoundRecipeId =
   | "funk_slap_bass"
   | "pluck_bright"
   | "pluck_warm"
-  | "pluck_bell";
+  | "pluck_bell"
+  | "pluck_guitar"
+  | "pluck_kalimba";
 
 export type NumericRecipeTarget = {
   id: string;
@@ -37,12 +39,14 @@ export type SoundRecipe = {
   genreTerms: readonly string[];
   source: "sample" | "synth" | "contextual";
   sampleQueries: readonly string[];
+  /** Filename evidence required before a local sample is accepted. */
+  sampleEvidence?: readonly string[];
   instrument?: string;
   fallbackInstrument: string;
   targets: Readonly<Record<string, readonly RecipeParameterTarget[]>>;
 };
 
-const simpleBassEnvelope = (
+const simpleSampleEnvelope = (
   attack: number,
   sustain: number,
   release: number,
@@ -50,6 +54,18 @@ const simpleBassEnvelope = (
   // Live's envelope times can span many seconds, so bass transients use small
   // fractions of the device range while sustain stays near its target level.
   { id: "attack", kind: "numeric", aliases: ["Amp Attack", "Volume Attack"], normalizedValue: attack },
+  { id: "sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain"], normalizedValue: sustain },
+  { id: "release", kind: "numeric", aliases: ["Amp Release", "Volume Release"], normalizedValue: release },
+];
+
+const simplePluckEnvelope = (
+  attack: number,
+  decay: number,
+  sustain: number,
+  release: number,
+): readonly RecipeParameterTarget[] => [
+  { id: "attack", kind: "numeric", aliases: ["Amp Attack", "Volume Attack"], normalizedValue: attack },
+  { id: "decay", kind: "numeric", aliases: ["Amp Decay", "Volume Decay"], normalizedValue: decay },
   { id: "sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain"], normalizedValue: sustain },
   { id: "release", kind: "numeric", aliases: ["Amp Release", "Volume Release"], normalizedValue: release },
 ];
@@ -113,7 +129,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["picked electric bass", "plucked bass", "rock bass"],
     fallbackInstrument: "Operator",
     targets: {
-      Simpler: simpleBassEnvelope(0.0002, 0.72, 0.003),
+      Simpler: simpleSampleEnvelope(0.0002, 0.72, 0.003),
       Operator: operatorBassControls,
     },
   },
@@ -126,7 +142,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["reggae bass", "fingered bass", "muted electric bass"],
     fallbackInstrument: "Operator",
     targets: {
-      Simpler: simpleBassEnvelope(0.0005, 0.9, 0.005),
+      Simpler: simpleSampleEnvelope(0.0005, 0.9, 0.005),
       Operator: operatorBassControls,
     },
   },
@@ -139,7 +155,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["clean electric bass", "pop bass", "synth bass"],
     fallbackInstrument: "Operator",
     targets: {
-      Simpler: simpleBassEnvelope(0.0002, 0.8, 0.003),
+      Simpler: simpleSampleEnvelope(0.0002, 0.8, 0.003),
       Operator: operatorBassControls,
     },
   },
@@ -163,7 +179,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["808 bass", "808 sub", "sub bass"],
     fallbackInstrument: "Operator",
     targets: {
-      Simpler: simpleBassEnvelope(0, 1, 0.002),
+      Simpler: simpleSampleEnvelope(0, 1, 0.002),
       Operator: operatorBassControls,
     },
   },
@@ -176,7 +192,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["upright bass", "double bass", "jazz bass"],
     fallbackInstrument: "Operator",
     targets: {
-      Simpler: simpleBassEnvelope(0.0003, 0.82, 0.004),
+      Simpler: simpleSampleEnvelope(0.0003, 0.82, 0.004),
       Operator: warmOperatorBassControls,
     },
   },
@@ -189,7 +205,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["flatwound electric bass", "fingerstyle electric bass", "jazz electric bass"],
     fallbackInstrument: "Operator",
     targets: {
-      Simpler: simpleBassEnvelope(0.0002, 0.76, 0.003),
+      Simpler: simpleSampleEnvelope(0.0002, 0.76, 0.003),
       Operator: warmOperatorBassControls,
     },
   },
@@ -202,7 +218,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["bossa upright bass", "upright bass", "mellow electric bass"],
     fallbackInstrument: "Operator",
     targets: {
-      Simpler: simpleBassEnvelope(0.0004, 0.8, 0.003),
+      Simpler: simpleSampleEnvelope(0.0004, 0.8, 0.003),
       Operator: warmOperatorBassControls,
     },
   },
@@ -215,7 +231,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["funk finger bass", "fingerstyle bass", "funk bass"],
     fallbackInstrument: "Operator",
     targets: {
-      Simpler: simpleBassEnvelope(0.0001, 0.78, 0.002),
+      Simpler: simpleSampleEnvelope(0.0001, 0.78, 0.002),
       Operator: punchyOperatorBassControls,
     },
   },
@@ -228,7 +244,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["picked electric bass", "funk pick bass", "pick bass"],
     fallbackInstrument: "Operator",
     targets: {
-      Simpler: simpleBassEnvelope(0.00005, 0.72, 0.0015),
+      Simpler: simpleSampleEnvelope(0.00005, 0.72, 0.0015),
       Operator: punchyOperatorBassControls,
     },
   },
@@ -241,7 +257,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["slap electric bass", "funk slap bass", "slap bass"],
     fallbackInstrument: "Operator",
     targets: {
-      Simpler: simpleBassEnvelope(0, 0.66, 0.001),
+      Simpler: simpleSampleEnvelope(0, 0.66, 0.001),
       Operator: punchyOperatorBassControls,
     },
   },
@@ -277,6 +293,34 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     instrument: "Operator",
     fallbackInstrument: "Operator",
     targets: { Operator: operatorBellPluckControls },
+  },
+  pluck_guitar: {
+    id: "pluck_guitar",
+    role: "pluck",
+    label: "Guitar Pluck sample",
+    genreTerms: ["guitar", "nylon guitar", "muted guitar", "吉他", "尼龙弦"],
+    source: "sample",
+    sampleQueries: ["nylon guitar", "muted guitar", "clean electric guitar", "guitar"],
+    sampleEvidence: ["guitar", "gtr"],
+    fallbackInstrument: "Drift",
+    targets: {
+      Simpler: simplePluckEnvelope(0.0003, 0.24, 0.1, 0.04),
+      Drift: driftWarmPluckControls,
+    },
+  },
+  pluck_kalimba: {
+    id: "pluck_kalimba",
+    role: "pluck",
+    label: "Kalimba / thumb piano Pluck sample",
+    genreTerms: ["kalimba", "mbira", "thumb piano", "卡林巴", "拇指琴"],
+    source: "sample",
+    sampleQueries: ["kalimba", "mbira", "thumb piano"],
+    sampleEvidence: ["kalimba", "mbira", "thumb piano"],
+    fallbackInstrument: "Operator",
+    targets: {
+      Simpler: simplePluckEnvelope(0.0001, 0.14, 0.03, 0.035),
+      Operator: operatorBellPluckControls,
+    },
   },
 };
 
