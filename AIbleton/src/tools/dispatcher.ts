@@ -35,6 +35,7 @@ import {
 } from "../move.js";
 import { moveExtras, moveSongToSnapshot, parseMoveBundle } from "../movebundle.js";
 import { searchSampleIndex } from "../samplemeta.js";
+import { applySoundRecipe } from "./soundrecipes.js";
 import { webFetch, webSearch } from "../websearch.js";
 import {
   analyzeMusicState,
@@ -1009,6 +1010,13 @@ export async function runTool(
       const q = String(input.query ?? "").trim();
       if (!q) throw new Error("query 不能为空");
       return searchSampleIndex(toolHooks.buildSampleIndex(), q, 30, toolState.activeLanguage);
+    }
+    case "apply_sound_recipe": {
+      return applySoundRecipe(context, {
+        track_index: Number(input.track_index),
+        track_name: String(input.track_name ?? ""),
+        recipe_id: String(input.recipe_id ?? "") as import("../sound/recipes.js").BassRecipeId,
+      });
     }
     case "web_search": {
       // Should be unreachable (the tools list already hides it when off) —
