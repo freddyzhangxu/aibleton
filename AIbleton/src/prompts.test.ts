@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { SYSTEM_PROMPT, systemPromptFor } from "./prompts.js";
-import { RANDOM_MELODIC_INSTRUMENTS } from "./tools/instruments.js";
+import { DEFAULT_INSTRUMENT_BY_ROLE } from "./tools/instruments.js";
 
 test("keeps track indices internal and presents user-facing tracks one-based", () => {
   assert.match(SYSTEM_PROMPT, /0-based INTERNAL tool coordinates/);
@@ -70,8 +70,11 @@ test("auto-creates a MIDI track when MIDI writing targets an Audio Track", () =>
   assert.match(SYSTEM_PROMPT, /Do not retry the same write after an auto-created result/);
 });
 
-test("uses code-side random melodic instrument selection when no device is named", () => {
+test("selects a stable instrument by musical role when none is named", () => {
   const prompt = systemPromptFor("en");
-  assert.match(prompt, /call insert_device with device_name "random"/);
-  for (const device of RANDOM_MELODIC_INSTRUMENTS) assert.match(prompt, new RegExp(device));
+  assert.match(prompt, /Never pass device_name "random"/);
+  for (const [role, device] of Object.entries(DEFAULT_INSTRUMENT_BY_ROLE)) {
+    assert.match(prompt, new RegExp(`${role}: ${device}`));
+  }
+  assert.match(prompt, /ask the user when the musical role is unclear/i);
 });

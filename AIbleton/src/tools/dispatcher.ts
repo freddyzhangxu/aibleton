@@ -82,7 +82,6 @@ import {
   recordCreatedTrack,
   targetIsAgentCreatedObject,
 } from "./created-devices.js";
-import { pickRandomMelodicInstrument } from "./instruments.js";
 
 // ---------- Factory drum kits (Drum Essentials pack) ----------
 
@@ -578,16 +577,16 @@ export async function runTool(
       const track = ref.track;
       const requestedName = String(input.device_name ?? "").trim();
       if (!requestedName) throw new Error("请提供 device_name");
-      const isRandom = requestedName.toLowerCase() === "random";
-      const deviceName = isRandom ? pickRandomMelodicInstrument() : requestedName;
+      if (requestedName.toLowerCase() === "random") {
+        throw new Error('device_name "random" is no longer supported; choose a specific Live instrument');
+      }
       const device = await context.withinTransaction(() =>
-        track.insertDevice(deviceName, track.devices.length),
+        track.insertDevice(requestedName, track.devices.length),
       );
       recordCreatedDevice(device);
       return trackResult(ref, {
         inserted: device.name,
         into: track.name,
-        ...(isRandom ? { requested: "random", selected: device.name } : {}),
       });
     }
     case "replace_device": {

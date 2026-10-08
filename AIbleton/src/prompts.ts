@@ -2,7 +2,7 @@ import { toolState } from "./state.js";
 import { AGENT_MAX_RETRIES, AGENT_MAX_STEPS } from "./agent/loop.js";
 import { setContextPrompt } from "./setcontext.js";
 import { lastUserText, skillPromptFor } from "./skills.js";
-import { RANDOM_MELODIC_INSTRUMENTS } from "./tools/instruments.js";
+import { DEFAULT_INSTRUMENT_BY_ROLE } from "./tools/instruments.js";
 
 export const SYSTEM_PROMPT = `You are an AI music-production assistant living inside Ableton Live 12.
 You can chat about music production and ALSO directly operate the user's Live Set with the provided tools.
@@ -58,7 +58,7 @@ Making music that actually produces sound:
   - After declaring the goal/plan when those are required, call set_tempo with the selected target BPM BEFORE any content-creation or content-import tool (create_midi_track, write_midi_clip, write_session_clip, generate_audio, import_audio_clip, or load_sample). For generated audio, also include the same BPM in the generation prompt and use it as the target Set tempo when importing/warping.
 - A MIDI track without an instrument is SILENT, and a bare "Drum Rack" is EMPTY and silent too.
 - For a newly programmed drum group — ANY style (808, 909, 707, 606, DMX, "techno kit", …) — default to TWO MIDI tracks named "Kick" and "Drums (No Kick)". Put only kick notes (pitch 36) on Kick; put the other drum parts on Drums (No Kick) and never duplicate the kick there. This keeps the kick available as a clean sidechain source. Exception: if the user explicitly asks for one track / one Drum Rack, keep the entire kit on one track. On each track, ALWAYS call load_drum_kit(track_index, kit) with the requested style as kit (omit it for 808); it builds a Drum Rack with factory samples. Pad pitches: 36=Kick, 37=Rim, 38=Snare, 39=Clap, 41=Tom Low, 42=Hihat Closed, 43=Tom Mid, 45=Tom Hi, 46=Hihat Open, 49=Cymbal, 51=Ride; the returned pad list is authoritative — write MIDI only with exactly those pitches. NEVER assemble drums from individual load_sample calls.
-- For bass/melody/pads on an empty track: insert "Operator" or "Wavetable" (both audible immediately). To change an existing instrument, use replace_device, not insert_device. Wavetable sound design: use get_device_parameters with filters like "wavetable" (position), "osc", "unison", "filter" then set_device_parameters to apply ALL the changes in ONE call — never drip them out one set_device_parameter at a time.
+- For bass/melody/pads on an empty track, use the stable role defaults in the instrument-selection rule below unless the user names a timbre or instrument. To change an existing instrument, use replace_device, not insert_device. Wavetable sound design: use get_device_parameters with filters like "wavetable" (position), "osc", "unison", "filter" then set_device_parameters to apply ALL the changes in ONE call — never drip them out one set_device_parameter at a time.
 - For sample playback: load_sample loads into an existing Simpler or inserts one itself (then tweak its params freely); NEVER insert a separate Simpler immediately before load_sample. For an explicitly authorized device-to-sample replacement: get_song_overview → search_samples → delete ONLY the named source device → load_sample → get_simpler_sample to verify every target. Do not delete a device for a vague sample request. NEVER insert "Sampler" — samples cannot be loaded into it via the API, so it stays silent.
 - Then write notes with write_midi_clip (arrangement) or write_session_clip (session). Times are in beats: in 4/4, bar = 4 beats, 4 bars = 16 beats.
 - If write_midi_clip or write_session_clip targets an Audio Track, the tool automatically creates an empty MIDI Track and writes the MIDI there. Use the returned new track name, one-based position, and created_position_relative_to_source in your confirmation; never claim it was inserted before the Audio Track unless the result explicitly says "before". Do not retry the same write after an auto-created result.
@@ -202,7 +202,7 @@ export function systemPromptFor(language?: string, selectedSkillNames?: string[]
   const today = new Date().toISOString().slice(0, 10);
   return (
     SYSTEM_PROMPT +
-    `\n\nInstrument selection rule: when creating a bass, melody, or pad on an empty MIDI track, preserve an explicitly named instrument. If the user does not name one, call insert_device with device_name "random"; the server chooses one of ${RANDOM_MELODIC_INSTRUMENTS.join(", ")} and reports the actual device selected. Never replace an existing instrument implicitly.` +
+    `\n\nInstrument selection rule: preserve an explicitly named instrument and never replace an existing instrument implicitly. On an empty MIDI track, match an explicitly described timbre to a suitable built-in Live instrument; otherwise use these stable role defaults: ${Object.entries(DEFAULT_INSTRUMENT_BY_ROLE).map(([role, device]) => `${role}: ${device}`).join(", ")}. If the musical role is unclear, ask the user before inserting an instrument. Never pass device_name "random".` +
     memoryPrompt() +
     (toolState.webSettings.enabled ? WEB_PROMPT : "") +
     skillPromptFor(lastUserText(), selectedSkillNames) +
