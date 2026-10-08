@@ -77,6 +77,11 @@ export function listenHintFor(
   };
 
   switch (name) {
+    case "apply_sound_recipe": {
+      const failed = Array.isArray(result.failed) && result.failed.length > 0;
+      if (result.executed === false || result.replacement_not_applied === true || failed) return undefined;
+      return finish(one(result), {});
+    }
     case "write_midi_clip":
       return finish(one(result), bars(toNum(result.start), toNum(result.length)));
     case "set_clip_notes":

@@ -194,6 +194,76 @@ const setDeviceParameter: PostconditionRule = (_input, result) => {
   ];
 };
 
+const applySoundRecipe: PostconditionRule = (_input, result) => {
+  if (result.executed === false || result.replacement_not_applied === true) return [];
+  const ti = Number(result.track_index);
+  const source = result.source as Record<string, unknown> | undefined;
+  if (!source || typeof source.device !== "string") return [];
+  const deviceName = source.device;
+  const specs: CheckSpec[] = [{
+    id: `track[${ti}].recipe-source`,
+    expected: `Bass 音源「${deviceName}」存在`,
+    probe: (song) => {
+      const track = trackAt(song, ti);
+      if (!track) return noTrack(ti);
+      const devices = track.devices.map((device) => device.name);
+      const replaced = typeof source.replaced === "string" ? source.replaced : undefined;
+      const present = devices.includes(deviceName);
+      const oldRemoved = !replaced || !devices.includes(replaced);
+      return {
+        passed: present && oldRemoved,
+        actual: `${devices.join(", ") || "(无设备)"}${replaced ? `; 原音源「${replaced}」${oldRemoved ? "已移除" : "仍存在"}` : ""}`,
+      };
+    },
+  }];
+
+  if (typeof source.file === "string") {
+    const expectedFile = source.file;
+    specs.push({
+      id: `track[${ti}].${deviceName}.sample`,
+      expected: `Simpler sample=${expectedFile}`,
+      probe: (song) => {
+        const track = trackAt(song, ti);
+        if (!track) return noTrack(ti);
+        const device = track.devices.find((candidate) => candidate.name === deviceName);
+        if (!device) return { passed: false, actual: `设备「${deviceName}」不存在` };
+        const actual = device.sample?.filePath;
+        return {
+          passed: actual === expectedFile,
+          actual: actual ?? "没有已加载的 sample",
+        };
+      },
+    });
+  }
+
+  const applied = Array.isArray(result.applied) ? result.applied as Record<string, unknown>[] : [];
+  for (const item of applied) {
+    const parameterName = String(item.parameter ?? "");
+    const expected = item.value;
+    const numeric = typeof expected === "number";
+    specs.push({
+      id: `track[${ti}].${deviceName}.${parameterName}`,
+      expected: `${parameterName}=${String(expected)}`,
+      probe: async (song) => {
+        const track = trackAt(song, ti);
+        if (!track) return noTrack(ti);
+        const device = track.devices.find((candidate) => candidate.name === deviceName);
+        if (!device) return { passed: false, actual: `设备「${deviceName}」不存在` };
+        const parameter = device.parameters.find((candidate) => candidate.name === parameterName);
+        if (!parameter) return { passed: false, actual: `参数「${parameterName}」不存在` };
+        const raw = toNum(await parameter.getValue());
+        if (numeric) return { passed: approx(raw, expected), actual: fmt(raw) };
+        const actual = parameter.valueItems?.[Math.round(raw)]?.name ?? fmt(raw);
+        return {
+          passed: actual.toLocaleLowerCase() === String(expected).trim().toLocaleLowerCase(),
+          actual,
+        };
+      },
+    });
+  }
+  return specs;
+};
+
 // ---------------------------------------------------------------------------
 // Clips
 // ---------------------------------------------------------------------------
@@ -280,6 +350,7 @@ const POSTCONDITIONS: Record<string, PostconditionRule> = {
   insert_device: insertDevice,
   replace_device: replaceDevice,
   set_device_parameter: setDeviceParameter,
+  apply_sound_recipe: applySoundRecipe,
   write_midi_clip: writeMidiClip,
   write_session_clip: writeSessionClip,
   set_clip_notes: setClipNotes,

@@ -23,6 +23,8 @@ export interface ProbeParam {
 export interface ProbeDevice {
   name: string;
   parameters: ProbeParam[];
+  /** Present only on Simpler; used to verify recipe sample replacement. */
+  sample?: { filePath: string } | null;
 }
 
 export interface ProbeClip {
