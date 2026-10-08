@@ -1,0 +1,115 @@
+export type BassRecipeId =
+  | "rock_bass"
+  | "reggae_bass"
+  | "pop_bass"
+  | "electronic_bass"
+  | "hiphop_808_bass";
+
+export type NumericRecipeTarget = {
+  id: string;
+  kind: "numeric";
+  aliases: readonly string[];
+  normalizedValue: number;
+};
+
+export type EnumRecipeTarget = {
+  id: string;
+  kind: "enum";
+  aliases: readonly string[];
+  optionAliases: readonly string[];
+};
+
+export type RecipeParameterTarget = NumericRecipeTarget | EnumRecipeTarget;
+
+export type SoundRecipe = {
+  id: BassRecipeId;
+  label: string;
+  genreTerms: readonly string[];
+  source: "sample" | "synth" | "contextual";
+  sampleQueries: readonly string[];
+  instrument?: string;
+  fallbackInstrument: string;
+  targets: Readonly<Record<string, readonly RecipeParameterTarget[]>>;
+};
+
+const simpleBassEnvelope = (
+  attack: number,
+  sustain: number,
+  release: number,
+): readonly RecipeParameterTarget[] => [
+  // Live's envelope times can span many seconds, so bass transients use small
+  // fractions of the device range while sustain stays near its target level.
+  { id: "attack", kind: "numeric", aliases: ["Amp Attack", "Volume Attack", "Attack"], normalizedValue: attack },
+  { id: "sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain", "Sustain"], normalizedValue: sustain },
+  { id: "release", kind: "numeric", aliases: ["Amp Release", "Volume Release", "Release"], normalizedValue: release },
+];
+
+const operatorBassControls: readonly RecipeParameterTarget[] = [
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.04 },
+  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.12 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain"], normalizedValue: 0.34 },
+  { id: "amp_release", kind: "numeric", aliases: ["Amp Release", "Volume Release"], normalizedValue: 0.003 },
+];
+
+export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
+  rock_bass: {
+    id: "rock_bass",
+    label: "Rock / band electric bass",
+    genreTerms: ["rock", "band", "pop rock", "摇滚", "乐队"],
+    source: "sample",
+    sampleQueries: ["picked electric bass", "plucked bass", "rock bass"],
+    fallbackInstrument: "Operator",
+    targets: {
+      Simpler: simpleBassEnvelope(0.0002, 0.72, 0.003),
+      Operator: operatorBassControls,
+    },
+  },
+  reggae_bass: {
+    id: "reggae_bass",
+    label: "Reggae warm electric bass",
+    genreTerms: ["reggae", "雷鬼"],
+    source: "sample",
+    sampleQueries: ["reggae bass", "fingered bass", "muted electric bass"],
+    fallbackInstrument: "Operator",
+    targets: {
+      Simpler: simpleBassEnvelope(0.0005, 0.9, 0.005),
+      Operator: operatorBassControls,
+    },
+  },
+  pop_bass: {
+    id: "pop_bass",
+    label: "Pop clean supportive bass",
+    genreTerms: ["pop", "pop rock", "dance pop", "流行"],
+    source: "contextual",
+    sampleQueries: ["clean electric bass", "pop bass", "synth bass"],
+    fallbackInstrument: "Operator",
+    targets: {
+      Simpler: simpleBassEnvelope(0.0002, 0.8, 0.003),
+      Operator: operatorBassControls,
+    },
+  },
+  electronic_bass: {
+    id: "electronic_bass",
+    label: "Electronic / dance synth bass",
+    genreTerms: ["electronic", "dance", "house", "techno", "edm", "电子", "电音", "舞曲"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Operator",
+    fallbackInstrument: "Operator",
+    targets: { Operator: operatorBassControls },
+  },
+  hiphop_808_bass: {
+    id: "hiphop_808_bass",
+    label: "Hip-hop / R&B 808 or sub bass",
+    genreTerms: ["hip-hop", "hip hop", "rap", "r&b", "808", "嘻哈", "说唱"],
+    source: "sample",
+    sampleQueries: ["808 bass", "808 sub", "sub bass"],
+    fallbackInstrument: "Operator",
+    targets: {
+      Simpler: simpleBassEnvelope(0, 1, 0.002),
+      Operator: operatorBassControls,
+    },
+  },
+};
+
+export const BASS_RECIPE_IDS = Object.keys(BASS_SOUND_RECIPES) as BassRecipeId[];
