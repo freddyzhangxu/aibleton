@@ -4,9 +4,10 @@
 
 Make AIbleton choose and apply a reusable bass sound recipe that fits the music
 style. The first release covers rock/band bass, reggae bass, pop bass,
-electronic/dance bass, and Hip-hop/R&B 808 or sub bass. It should use the Live
-Set's actual devices and the user's locally available samples instead of
-guessing parameter names or assuming a sample pack is installed.
+electronic/dance bass, Hip-hop/R&B 808 or sub bass, Jazz, Bossa Nova, and Funk.
+It should use the Live Set's actual devices and the user's locally available
+samples instead of guessing parameter names or assuming a sample pack is
+installed.
 
 ## User intent and success criteria
 
@@ -20,6 +21,12 @@ guessing parameter names or assuming a sample pack is installed.
   arrangement. If those clues are unclear, use a neutral Operator sound.
 - Electronic/dance bass should use a synthesized bass sound.
 - Hip-hop/R&B bass should favor an 808 or sub-bass sample.
+- Jazz should default to a warm upright/double-bass sample; Fusion requests may
+  choose a fingerstyle or flatwound electric-bass sample.
+- Bossa Nova should favor a soft, rounded upright-bass sample with a gentle
+  attack and controlled sustain.
+- Funk should default to fingerstyle electric bass. Pick and slap recipes are
+  selected only when the user asks for those techniques explicitly.
 - When a sample route has no usable local result, use a clearly reported
   built-in-synth approximation rather than silently stopping.
 - Application results should identify the chosen source and list parameter
@@ -35,7 +42,7 @@ guessing parameter names or assuming a sample pack is installed.
 
 ### Included
 
-- Five bass recipes:
+- Eleven bass recipes:
   - `rock_bass`: local electric-bass sample, with a synth fallback.
   - `reggae_bass`: warm, round local electric-bass sample, softer attack, with
     a synth fallback.
@@ -43,6 +50,12 @@ guessing parameter names or assuming a sample pack is installed.
     substyle/arrangement, with Operator as the neutral fallback.
   - `electronic_bass`: Operator-based synthesized bass.
   - `hiphop_808_bass`: local 808/sub sample, with an Operator fallback.
+  - `jazz_bass`: local upright/double-bass sample, with a warm synth fallback.
+  - `jazz_fusion_bass`: fingerstyle/flatwound electric-bass sample.
+  - `bossa_bass`: soft upright-bass sample with a warm synth fallback.
+  - `funk_bass`: fingerstyle electric-bass sample, the default Funk recipe.
+  - `funk_pick_bass`: picked electric-bass sample.
+  - `funk_slap_bass`: slap electric-bass sample.
 - A recipe catalog that stores each recipe's genre, role, source strategy,
   sample-search terms, target Live instrument, and parameter targets.
 - A mutating `apply_sound_recipe` tool that runs a read-only preflight and then
@@ -57,8 +70,8 @@ guessing parameter names or assuming a sample pack is installed.
 ### Excluded
 
 - Pad and Pluck recipes.
-- Reggae bassline rhythm and note-pattern generation; this release changes
-  timbre only.
+- Genre-specific bassline rhythm, articulation, and note-pattern generation;
+  this release changes timbre only.
 - Genre classification from audio using a new classifier.
 - Third-party plug-in loading or preset-file loading.
 - Automatic rendering/listening analysis of MIDI instruments through their
@@ -101,10 +114,16 @@ For `pop_bass`, explicit substyle terms in the current request take priority
 context to choose sample or synth; if that context does not point clearly to
 one source, use the neutral Operator fallback.
 
+For Jazz, use `jazz_bass` unless the request specifies Jazz Fusion or an
+electric/flatwound tone, in which case use `jazz_fusion_bass`. Use `bossa_bass`
+for Bossa Nova. For Funk, use `funk_bass` by default; select `funk_pick_bass`
+or `funk_slap_bass` only when the user explicitly asks for that articulation.
+
 ### `apply_sound_recipe`
 
 Inputs identify a track by the existing track index/name pair and a recipe ID.
-The tool will:
+`pop_bass` also accepts an optional `source_preference` (`sample` or `synth`)
+when the substyle or arrangement makes the source clear. The tool will:
 
 1. Resolve and validate the target track and recipe.
 2. Inspect its current device chain and actual device parameters.
@@ -153,7 +172,7 @@ result in Live.
 
 ## Testing plan
 
-- Recipe catalog contains the five stable IDs and their intended source
+- Recipe catalog contains the eleven stable IDs and their intended source
   strategies.
 - Genre resolution prioritizes the current explicit request and does not
   treat unrelated memory as the current genre.
