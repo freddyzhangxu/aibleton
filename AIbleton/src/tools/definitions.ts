@@ -662,6 +662,11 @@ export const TOOLS = [
         track_index: { type: "number", description: "0-based MIDI track index" },
         track_name: { type: "string", description: TRACK_NAME_DESC },
         recipe_id: { type: "string", enum: BASS_RECIPE_IDS },
+        source_preference: {
+          type: "string",
+          enum: ["sample", "synth"],
+          description: "Optional for pop_bass: choose sample for a band/acoustic arrangement or synth for a synth/dance arrangement. Omit when unclear; the tool uses the current primary source or its neutral Operator fallback.",
+        },
       },
       required: ["track_index", "track_name", "recipe_id"],
     },

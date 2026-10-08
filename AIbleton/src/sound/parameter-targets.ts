@@ -40,18 +40,7 @@ function parameterMatches<T extends RuntimeParameter>(
       if (normalizeName(parameter.name) === normalizedAlias) exact.add(parameter);
     }
   }
-  if (exact.size) return [...exact];
-
-  const partial = new Set<T>();
-  for (const alias of aliases) {
-    const words = alias.normalize("NFKC").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-    if (!words.length) continue;
-    for (const parameter of parameters) {
-      const name = parameter.name.normalize("NFKC").toLocaleLowerCase();
-      if (words.every((word) => name.includes(word))) partial.add(parameter);
-    }
-  }
-  return [...partial];
+  return [...exact];
 }
 
 function optionIndex(options: readonly { name: string }[], aliases: readonly string[]): number {
@@ -63,17 +52,7 @@ function optionIndex(options: readonly { name: string }[], aliases: readonly str
     });
   }
   if (exact.size === 1) return [...exact][0];
-  if (exact.size > 1) return -2;
-
-  const partial = new Set<number>();
-  for (const alias of aliases) {
-    const normalizedAlias = normalizeName(alias);
-    options.forEach((option, index) => {
-      if (normalizeName(option.name).includes(normalizedAlias)) partial.add(index);
-    });
-  }
-  if (partial.size === 1) return [...partial][0];
-  return partial.size > 1 ? -2 : -1;
+  return exact.size > 1 ? -2 : -1;
 }
 
 export function matchRecipeTargets<T extends RuntimeParameter>(

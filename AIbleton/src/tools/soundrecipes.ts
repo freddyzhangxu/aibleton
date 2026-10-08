@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { MidiTrack, Simpler, type Device } from "@ableton-extensions/sdk";
 import { searchSampleIndex } from "../samplemeta.js";
 import { soundRecipeSourceChangeAuthorized } from "../chat/deleteauth.js";
@@ -6,11 +7,11 @@ import { matchRecipeTargets } from "../sound/parameter-targets.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
 import { resolvedSelection } from "../setcontext.js";
 import { resolveTrack, setParamValue, trackResult } from "./helpers.js";
-import { forgetCreatedDevice, recordCreatedDevice } from "./created-devices.js";
+import { forgetCreatedDevice, handleIdOf, recordCreatedDevice } from "./created-devices.js";
 
 const INSTRUMENT_NAMES = new Set([
-  "analog", "collision", "drift", "drum rack", "electric", "impulse", "instrument rack",
-  "meld", "operator", "sampler", "simpler", "tension", "wavetable",
+  "analog", "collision", "drift", "electric", "impulse", "meld", "operator", "sampler",
+  "simpler", "tension", "wavetable",
 ]);
 
 const EFFECT_NAMES = new Set([
@@ -43,11 +44,20 @@ function selectedTrackIndices(context: Ctx): number[] {
     : [...new Set(selection.slots.map((slot) => slot.trackIndex))];
 }
 
+function trackIsInCurrentScope(context: Ctx, ref: TrackRef): boolean {
+  if (toolState.activeGlobalIntent) return true;
+  const explicit = toolState.activeExplicitEditScope.trackIndices;
+  const selected = selectedTrackIndices(context);
+  const inExplicitScope = !explicit.length || explicit.includes(ref.index);
+  const inSelection = !selected.length || selected.includes(ref.index);
+  if (inExplicitScope && inSelection && (explicit.length > 0 || selected.length > 0)) return true;
+  const id = handleIdOf(ref.track);
+  return id !== undefined && toolState.activeCreatedTrackHandles.has(id);
+}
+
 function sourceChangeIsAuthorized(context: Ctx, ref: TrackRef): boolean {
   if (!soundRecipeSourceChangeAuthorized(toolState.activeDeleteAuthorization, toolState.activeYolo)) return false;
-  const inExplicitScope = toolState.activeExplicitEditScope.trackIndices.includes(ref.index);
-  const inSelection = selectedTrackIndices(context).includes(ref.index);
-  return inExplicitScope || inSelection;
+  return trackIsInCurrentScope(context, ref);
 }
 
 function recipeFor(id: unknown): SoundRecipe {
@@ -57,16 +67,34 @@ function recipeFor(id: unknown): SoundRecipe {
   return BASS_SOUND_RECIPES[id as BassRecipeId];
 }
 
-function contextualSource(recipe: SoundRecipe, current: PrimarySource): "sample" | "synth" {
+function contextualSource(
+  recipe: SoundRecipe,
+  current: PrimarySource,
+  preferred?: "sample" | "synth",
+): "sample" | "synth" {
   if (recipe.source !== "contextual") return recipe.source;
+  if (preferred) return preferred;
   return current?.device instanceof Simpler ? "sample" : "synth";
+}
+
+function isSuitableSample(recipe: SoundRecipe, filePath: string): boolean {
+  const fileName = basename(filePath).replace(/\.[^.]+$/, "").normalize("NFKC").toLocaleLowerCase();
+  if (/(?:^|[^a-z0-9])(?:kick|snare|clap|hi[ -]?hat|hihat|cymbal|tom|rim|drum|percussion|perc|loop|fill)(?:$|[^a-z0-9])/i.test(fileName)) {
+    return false;
+  }
+  const compact = fileName.replace(/[^a-z0-9]/g, "");
+  const hasBassEvidence = compact.includes("bass") || compact.includes("sub") || compact.includes("808");
+  if (!hasBassEvidence) return false;
+  if (recipe.id === "hiphop_808_bass") return compact.includes("808") || compact.includes("sub");
+  return compact.includes("bass");
 }
 
 function findSample(recipe: SoundRecipe): string | undefined {
   const index = toolHooks.buildSampleIndex();
   for (const query of recipe.sampleQueries) {
     const result = searchSampleIndex(index, query, 30, toolState.activeLanguage);
-    if (result.results.length) return result.results[0];
+    const suitable = result.results.find((filePath) => isSuitableSample(recipe, filePath));
+    if (suitable) return suitable;
   }
   return undefined;
 }
@@ -125,9 +153,21 @@ function formattedValue(device: Device<"1.0.0">, targetId: string, value: number
 
 export async function applySoundRecipe(
   context: Ctx,
-  input: { track_index: number; track_name: string; recipe_id: BassRecipeId },
+  input: {
+    track_index: number;
+    track_name: string;
+    recipe_id: BassRecipeId;
+    source_preference?: "sample" | "synth";
+  },
 ): Promise<Record<string, unknown>> {
   const ref = resolveTrack(context, input, "track_index");
+  if (!trackIsInCurrentScope(context, ref)) {
+    return trackResult(ref, {
+      executed: false,
+      selection_scope_refused: true,
+      message: "目标轨道不在当前请求或 Live 选择范围内；没有改动工程。",
+    });
+  }
   if (!(ref.track instanceof MidiTrack)) {
     return trackResult(ref, { executed: false, error: "Bass 音色方案目前只能应用到 MIDI 轨道。" });
   }
@@ -142,7 +182,7 @@ export async function applySoundRecipe(
     });
   }
 
-  let sourceKind = contextualSource(recipe, current);
+  let sourceKind = contextualSource(recipe, current, input.source_preference);
   let selectedSample: string | undefined;
   let fallback = false;
   if (sourceKind === "sample") {

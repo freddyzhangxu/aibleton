@@ -39,9 +39,9 @@ const simpleBassEnvelope = (
 ): readonly RecipeParameterTarget[] => [
   // Live's envelope times can span many seconds, so bass transients use small
   // fractions of the device range while sustain stays near its target level.
-  { id: "attack", kind: "numeric", aliases: ["Amp Attack", "Volume Attack", "Attack"], normalizedValue: attack },
-  { id: "sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain", "Sustain"], normalizedValue: sustain },
-  { id: "release", kind: "numeric", aliases: ["Amp Release", "Volume Release", "Release"], normalizedValue: release },
+  { id: "attack", kind: "numeric", aliases: ["Amp Attack", "Volume Attack"], normalizedValue: attack },
+  { id: "sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain"], normalizedValue: sustain },
+  { id: "release", kind: "numeric", aliases: ["Amp Release", "Volume Release"], normalizedValue: release },
 ];
 
 const operatorBassControls: readonly RecipeParameterTarget[] = [
