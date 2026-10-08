@@ -1,4 +1,4 @@
-export type BassRecipeId =
+export type SoundRecipeId =
   | "rock_bass"
   | "reggae_bass"
   | "pop_bass"
@@ -9,7 +9,10 @@ export type BassRecipeId =
   | "bossa_bass"
   | "funk_bass"
   | "funk_pick_bass"
-  | "funk_slap_bass";
+  | "funk_slap_bass"
+  | "pluck_bright"
+  | "pluck_warm"
+  | "pluck_bell";
 
 export type NumericRecipeTarget = {
   id: string;
@@ -28,7 +31,8 @@ export type EnumRecipeTarget = {
 export type RecipeParameterTarget = NumericRecipeTarget | EnumRecipeTarget;
 
 export type SoundRecipe = {
-  id: BassRecipeId;
+  id: SoundRecipeId;
+  role: "bass" | "pluck";
   label: string;
   genreTerms: readonly string[];
   source: "sample" | "synth" | "contextual";
@@ -71,9 +75,38 @@ const punchyOperatorBassControls: readonly RecipeParameterTarget[] = [
   { id: "amp_release", kind: "numeric", aliases: ["Amp Release", "Volume Release"], normalizedValue: 0.0015 },
 ];
 
-export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
+const wavetableBrightPluckControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Amp Attack"], normalizedValue: 0.0005 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Amp Decay"], normalizedValue: 0.22 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain"], normalizedValue: 0.08 },
+  { id: "amp_release", kind: "numeric", aliases: ["Amp Release"], normalizedValue: 0.03 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.65 },
+  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.08 },
+];
+
+const driftWarmPluckControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Amp Attack"], normalizedValue: 0.002 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Amp Decay"], normalizedValue: 0.3 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain"], normalizedValue: 0.12 },
+  { id: "amp_release", kind: "numeric", aliases: ["Amp Release"], normalizedValue: 0.05 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.3 },
+  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.03 },
+];
+
+const operatorBellPluckControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Amp Attack"], normalizedValue: 0.0001 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Amp Decay"], normalizedValue: 0.18 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain"], normalizedValue: 0.02 },
+  { id: "amp_release", kind: "numeric", aliases: ["Amp Release"], normalizedValue: 0.04 },
+  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.16 },
+  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.42 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.55 },
+];
+
+export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
   rock_bass: {
     id: "rock_bass",
+    role: "bass",
     label: "Rock / band electric bass",
     genreTerms: ["rock", "band", "pop rock", "摇滚", "乐队"],
     source: "sample",
@@ -86,6 +119,7 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
   },
   reggae_bass: {
     id: "reggae_bass",
+    role: "bass",
     label: "Reggae warm electric bass",
     genreTerms: ["reggae", "雷鬼"],
     source: "sample",
@@ -98,6 +132,7 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
   },
   pop_bass: {
     id: "pop_bass",
+    role: "bass",
     label: "Pop clean supportive bass",
     genreTerms: ["pop", "pop rock", "dance pop", "流行"],
     source: "contextual",
@@ -110,6 +145,7 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
   },
   electronic_bass: {
     id: "electronic_bass",
+    role: "bass",
     label: "Electronic / dance synth bass",
     genreTerms: ["electronic", "dance", "house", "techno", "edm", "电子", "电音", "舞曲"],
     source: "synth",
@@ -120,6 +156,7 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
   },
   hiphop_808_bass: {
     id: "hiphop_808_bass",
+    role: "bass",
     label: "Hip-hop / R&B 808 or sub bass",
     genreTerms: ["hip-hop", "hip hop", "rap", "r&b", "808", "嘻哈", "说唱"],
     source: "sample",
@@ -132,6 +169,7 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
   },
   jazz_bass: {
     id: "jazz_bass",
+    role: "bass",
     label: "Jazz upright / double bass",
     genreTerms: ["jazz", "straight-ahead jazz", "爵士"],
     source: "sample",
@@ -144,6 +182,7 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
   },
   jazz_fusion_bass: {
     id: "jazz_fusion_bass",
+    role: "bass",
     label: "Jazz fusion fingerstyle electric bass",
     genreTerms: ["jazz fusion", "fusion", "flatwound bass", "爵士融合"],
     source: "sample",
@@ -156,6 +195,7 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
   },
   bossa_bass: {
     id: "bossa_bass",
+    role: "bass",
     label: "Bossa Nova soft upright bass",
     genreTerms: ["bossa nova", "bossanova", "bossa", "波萨诺瓦", "巴萨诺瓦"],
     source: "sample",
@@ -168,6 +208,7 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
   },
   funk_bass: {
     id: "funk_bass",
+    role: "bass",
     label: "Funk fingerstyle electric bass",
     genreTerms: ["funk", "fingerstyle funk", "放克"],
     source: "sample",
@@ -180,6 +221,7 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
   },
   funk_pick_bass: {
     id: "funk_pick_bass",
+    role: "bass",
     label: "Funk picked electric bass",
     genreTerms: ["funk pick", "picked funk bass", "拨片放克"],
     source: "sample",
@@ -192,6 +234,7 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
   },
   funk_slap_bass: {
     id: "funk_slap_bass",
+    role: "bass",
     label: "Funk slap electric bass",
     genreTerms: ["funk slap", "slap bass", "slap funk", "击弦放克"],
     source: "sample",
@@ -202,6 +245,39 @@ export const BASS_SOUND_RECIPES: Readonly<Record<BassRecipeId, SoundRecipe>> = {
       Operator: punchyOperatorBassControls,
     },
   },
+  pluck_bright: {
+    id: "pluck_bright",
+    role: "pluck",
+    label: "Bright short synth Pluck",
+    genreTerms: ["house", "techno", "bright", "short", "punchy", "明亮", "短促"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Wavetable",
+    fallbackInstrument: "Wavetable",
+    targets: { Wavetable: wavetableBrightPluckControls },
+  },
+  pluck_warm: {
+    id: "pluck_warm",
+    role: "pluck",
+    label: "Warm soft synth Pluck",
+    genreTerms: ["jazz", "bossa", "warm", "soft", "mellow", "温暖", "柔和"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Drift",
+    fallbackInstrument: "Drift",
+    targets: { Drift: driftWarmPluckControls },
+  },
+  pluck_bell: {
+    id: "pluck_bell",
+    role: "pluck",
+    label: "Bell-like metallic synth Pluck",
+    genreTerms: ["pop", "cinematic", "bell", "metallic", "fm", "铃声感", "金属感"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Operator",
+    fallbackInstrument: "Operator",
+    targets: { Operator: operatorBellPluckControls },
+  },
 };
 
-export const BASS_RECIPE_IDS = Object.keys(BASS_SOUND_RECIPES) as BassRecipeId[];
+export const SOUND_RECIPE_IDS = Object.keys(SOUND_RECIPES) as SoundRecipeId[];

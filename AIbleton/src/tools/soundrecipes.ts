@@ -2,7 +2,7 @@ import { basename } from "node:path";
 import { MidiTrack, Simpler, type Device } from "@ableton-extensions/sdk";
 import { searchSampleIndex } from "../samplemeta.js";
 import { soundRecipeSourceChangeAuthorized } from "../chat/deleteauth.js";
-import { BASS_SOUND_RECIPES, type BassRecipeId, type SoundRecipe } from "../sound/recipes.js";
+import { SOUND_RECIPES, type SoundRecipeId, type SoundRecipe } from "../sound/recipes.js";
 import { matchRecipeTargets } from "../sound/parameter-targets.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
 import { resolvedSelection } from "../setcontext.js";
@@ -61,10 +61,10 @@ function sourceChangeIsAuthorized(context: Ctx, ref: TrackRef): boolean {
 }
 
 function recipeFor(id: unknown): SoundRecipe {
-  if (typeof id !== "string" || !Object.hasOwn(BASS_SOUND_RECIPES, id)) {
-    throw new Error(`未知 Bass 音色方案；可用方案：${Object.keys(BASS_SOUND_RECIPES).join(", ")}`);
+  if (typeof id !== "string" || !Object.hasOwn(SOUND_RECIPES, id)) {
+    throw new Error(`未知音色方案；可用方案：${Object.keys(SOUND_RECIPES).join(", ")}`);
   }
-  return BASS_SOUND_RECIPES[id as BassRecipeId];
+  return SOUND_RECIPES[id as SoundRecipeId];
 }
 
 function contextualSource(
@@ -156,7 +156,7 @@ export async function applySoundRecipe(
   input: {
     track_index: number;
     track_name: string;
-    recipe_id: BassRecipeId;
+    recipe_id: SoundRecipeId;
     source_preference?: "sample" | "synth";
   },
 ): Promise<Record<string, unknown>> {
@@ -169,7 +169,7 @@ export async function applySoundRecipe(
     });
   }
   if (!(ref.track instanceof MidiTrack)) {
-    return trackResult(ref, { executed: false, error: "Bass 音色方案目前只能应用到 MIDI 轨道。" });
+    return trackResult(ref, { executed: false, error: "音色方案目前只能应用到 MIDI 轨道。" });
   }
   const recipe = recipeFor(input.recipe_id);
   const current = findPrimarySource(ref.track);

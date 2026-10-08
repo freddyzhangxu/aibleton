@@ -3,7 +3,7 @@ import { AGENT_MAX_RETRIES, AGENT_MAX_STEPS } from "./agent/loop.js";
 import { setContextPrompt } from "./setcontext.js";
 import { lastUserText, skillPromptFor } from "./skills.js";
 import { DEFAULT_INSTRUMENT_BY_ROLE } from "./tools/instruments.js";
-import { BASS_SOUND_RECIPES } from "./sound/recipes.js";
+import { SOUND_RECIPES } from "./sound/recipes.js";
 
 export const SYSTEM_PROMPT = `You are an AI music-production assistant living inside Ableton Live 12.
 You can chat about music production and ALSO directly operate the user's Live Set with the provided tools.
@@ -201,7 +201,7 @@ export function systemPromptFor(language?: string, selectedSkillNames?: string[]
   // The date anchors "latest/recent" web searches — the model's training
   // cutoff alone can't resolve them.
   const today = new Date().toISOString().slice(0, 10);
-  const bassRecipes = Object.values(BASS_SOUND_RECIPES)
+  const bassRecipes = Object.values(SOUND_RECIPES).filter((recipe) => recipe.role === "bass")
     .map((recipe) => `${recipe.id} (${recipe.label})`)
     .join(", ");
   const nonBassDefaults = Object.entries(DEFAULT_INSTRUMENT_BY_ROLE)

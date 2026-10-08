@@ -1,7 +1,7 @@
 import { CRITERION_KINDS, GOAL_TYPES } from "../goal/types.js";
 import { EFFECT_METRICS } from "../plan/types.js";
 import { toolState } from "../state.js";
-import { BASS_RECIPE_IDS } from "../sound/recipes.js";
+import { SOUND_RECIPE_IDS } from "../sound/recipes.js";
 
 // ---------- Claude tool definitions ----------
 
@@ -655,13 +655,13 @@ export const TOOLS = [
   {
     name: "apply_sound_recipe",
     description:
-      "Apply one of AIbleton's five genre-aware Bass recipes to a MIDI track. Uses only local sample libraries, chooses the highest-ranked match, and falls back to a built-in synth when no sample is available. It inspects Live's current parameters, applies only unique supported controls, and reports selected source, skipped controls, and fallback. It changes only the target track's primary Bass sound source; it does not edit clips, mixer settings, effects, or other tracks. Use only when the genre and target track are clear.",
+      "Apply one of AIbleton's genre-aware Bass or synth Pluck recipes to a MIDI track. Bass recipes may use local samples and a built-in synth fallback; Pluck recipes use only their specified built-in synth. It inspects Live's current parameters, applies only exact supported controls, and reports selected source and skipped controls. It changes only the target track's primary sound source; it does not edit clips, mixer settings, effects, or other tracks. Use only when the sound style and target track are clear.",
     input_schema: {
       type: "object",
       properties: {
         track_index: { type: "number", description: "0-based MIDI track index" },
         track_name: { type: "string", description: TRACK_NAME_DESC },
-        recipe_id: { type: "string", enum: BASS_RECIPE_IDS },
+        recipe_id: { type: "string", enum: SOUND_RECIPE_IDS },
         source_preference: {
           type: "string",
           enum: ["sample", "synth"],
