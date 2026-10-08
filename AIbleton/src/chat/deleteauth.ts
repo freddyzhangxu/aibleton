@@ -61,9 +61,9 @@ const REPLACEMENT_REQUEST = new RegExp([
   String.raw`\S+(?:を|は)\s*\S+(?:に|へ)\s*(?:置き換|差し替|入れ替|交換|変更|切り替)\S*`,
   String.raw`\S+(?:을|를|은|는)\s*\S+(?:로|으로)\s*(?:교체|대체|바꾸|변경)\S*`,
 ].join("|"), "iu");
-const SOUND_RECIPE_ACTION = /(?:\b(?:make|create|apply|use|set|design|shape|change|turn|switch|give|add|load|insert|replace|swap|convert)\b|做成|做一条|制作|应用|套用|设为|改成|换成|调成|调出|调整|制作成|变成|变为|改用|加入|加载)/iu;
-const SOUND_RECIPE_STYLE = /(?:\b(?:rock|reggae|pop|electronic|dance|house|techno|edm|hip[ -]?hop|rap|r\s*&\s*b|808|jazz|fusion|bossa(?:\s*nova)?|bossanova|funk|slap|pick|fingerstyle|bright|short|punchy|warm|soft|mellow|bell|metallic|fm|cinematic|guitar|kalimba|mbira|nylon|muted|acoustic|electric|thumb\s*piano)\b|摇滚|雷鬼|流行|电子|电音|舞曲|嘻哈|说唱|爵士|波萨诺瓦|巴萨诺瓦|放克|击弦|拨片|明亮|短促|温暖|柔和|钟声|铃声感|金属感|电影感|吉他|卡林巴|拇指琴)/iu;
-const SOUND_RECIPE_ROLE = /(?:\b(?:bass(?:line)?|sub\s*bass|pluck(?:s)?|guitar|kalimba|mbira|thumb\s*piano)\b|贝斯|贝司|低音|拨弦(?:音色)?|合成器拨弦|吉他|卡林巴|拇指琴)/iu;
+const SOUND_RECIPE_ACTION = /(?:\b(?:make|create|apply|use|set|design|shape|change|turn|switch|give|add|load|insert|replace|swap|convert|optimi[sz]e|improve|refine|tune)\b|做成|做一条|制作|应用|套用|设为|改成|换成|调成|调出|调整|优化|改善|打磨|制作成|变成|变为|改用|加入|加载)/iu;
+const SOUND_RECIPE_STYLE = /(?:\b(?:rock|reggae|pop|electronic|dance|house|techno|edm|hip[ -]?hop|rap|r\s*&\s*b|808|jazz|fusion|bossa(?:\s*nova)?|bossanova|funk|disco|slap|pick|fingerstyle|bright|short|punchy|warm|soft|mellow|bell|metallic|fm|cinematic|ambient|shimmering|drone|clean|clear|rounded|analog|vintage|aggressive|airy|dark|guitar|kalimba|mbira|nylon|muted|acoustic|electric|thumb\s*piano)\b|摇滚|雷鬼|流行|电子|电音|舞曲|嘻哈|说唱|爵士|波萨诺瓦|巴萨诺瓦|放克|迪斯科|击弦|拨片|明亮|短促|温暖|柔和|钟声|铃声感|金属感|电影感|氛围|空灵|闪耀|持续音|干净|清晰|圆润|模拟|复古|强劲|暗色|吉他|卡林巴|拇指琴)/iu;
+const SOUND_RECIPE_ROLE = /(?:\b(?:bass(?:line)?|sub\s*bass|pluck(?:s)?|pads?|leads?|guitar|kalimba|mbira|thumb\s*piano)\b|贝斯|贝司|低音|拨弦(?:音色)?|合成器拨弦|铺底|垫底|主音|吉他|卡林巴|拇指琴)/iu;
 const SOUND_RECIPE_ID = new RegExp(
   `(?:^|[^\\p{L}\\p{N}])(?:${SOUND_RECIPE_IDS.join("|")})(?=$|[^\\p{L}\\p{N}])`,
   "iu",
