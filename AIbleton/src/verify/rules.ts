@@ -202,7 +202,7 @@ const applySoundRecipe: PostconditionRule = (_input, result) => {
   const deviceName = source.device;
   const specs: CheckSpec[] = [{
     id: `track[${ti}].recipe-source`,
-    expected: `Bass 音源「${deviceName}」存在`,
+    expected: `音色方案音源「${deviceName}」存在`,
     probe: (song) => {
       const track = trackAt(song, ti);
       if (!track) return noTrack(ti);

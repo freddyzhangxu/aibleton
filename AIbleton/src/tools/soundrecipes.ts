@@ -116,7 +116,7 @@ async function ensurePrimaryDevice(
         requires_source_authorization: true,
         current_source: current.device.name,
         requested_source: deviceName,
-        message: "需要用户明确要求将该 Bass 轨应用此音色方案，才能更换主音源。",
+        message: "需要用户明确要求将该轨应用此音色方案，才能更换主音源。",
       }),
     };
   }
@@ -172,6 +172,9 @@ export async function applySoundRecipe(
     return trackResult(ref, { executed: false, error: "音色方案目前只能应用到 MIDI 轨道。" });
   }
   const recipe = recipeFor(input.recipe_id);
+  if (recipe.role === "pluck" && recipe.source !== "synth") {
+    throw new Error(`Pluck recipe ${recipe.id} must use a synth source`);
+  }
   const current = findPrimarySource(ref.track);
   if (current === "ambiguous") {
     return trackResult(ref, {
@@ -205,7 +208,7 @@ export async function applySoundRecipe(
       requires_source_authorization: true,
       current_source: current?.device.name ?? "none",
       requested_source: requestedDevice,
-      message: "请明确要求将这条 Bass 轨应用该风格方案后再更换主音源。",
+      message: "请明确要求将这条轨道应用该风格方案后再更换主音源。",
     });
   }
 
@@ -265,6 +268,7 @@ export async function applySoundRecipe(
 
   return trackResult(ref, {
     recipe: recipe.id,
+    role: recipe.role,
     track: ref.track.name,
     source: {
       kind: sourceKind,
