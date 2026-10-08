@@ -6,6 +6,7 @@
  * device only — it is not a license to remove other object kinds.
  */
 import { commonText } from "../i18n/common.js";
+import { SOUND_RECIPE_IDS } from "../sound/recipes.js";
 export type DeleteKind =
   | "track"
   | "scene"
@@ -61,8 +62,12 @@ const REPLACEMENT_REQUEST = new RegExp([
   String.raw`\S+(?:을|를|은|는)\s*\S+(?:로|으로)\s*(?:교체|대체|바꾸|변경)\S*`,
 ].join("|"), "iu");
 const SOUND_RECIPE_ACTION = /(?:\b(?:make|create|apply|use|set|design|shape|change|turn|switch|give)\b|做成|做一条|制作|应用|套用|设为|改成|换成|调成|调出|调整|制作成)/iu;
-const SOUND_RECIPE_STYLE = /(?:\b(?:rock|reggae|pop|electronic|dance|house|techno|edm|hip[ -]?hop|rap|r\s*&\s*b|808|jazz|fusion|bossa(?:\s*nova)?|bossanova|funk|slap|pick|fingerstyle|bright|short|punchy|warm|soft|mellow|bell|metallic|fm|cinematic)\b|摇滚|雷鬼|流行|电子|电音|舞曲|嘻哈|说唱|爵士|波萨诺瓦|巴萨诺瓦|放克|击弦|拨片|明亮|短促|温暖|柔和|钟声|金属感|电影感)/iu;
+const SOUND_RECIPE_STYLE = /(?:\b(?:rock|reggae|pop|electronic|dance|house|techno|edm|hip[ -]?hop|rap|r\s*&\s*b|808|jazz|fusion|bossa(?:\s*nova)?|bossanova|funk|slap|pick|fingerstyle|bright|short|punchy|warm|soft|mellow|bell|metallic|fm|cinematic)\b|摇滚|雷鬼|流行|电子|电音|舞曲|嘻哈|说唱|爵士|波萨诺瓦|巴萨诺瓦|放克|击弦|拨片|明亮|短促|温暖|柔和|钟声|铃声感|金属感|电影感)/iu;
 const SOUND_RECIPE_ROLE = /(?:\b(?:bass(?:line)?|sub\s*bass|pluck(?:s)?)\b|贝斯|贝司|低音|拨弦(?:音色)?|合成器拨弦)/iu;
+const SOUND_RECIPE_ID = new RegExp(
+  `(?:^|[^\\p{L}\\p{N}])(?:${SOUND_RECIPE_IDS.join("|")})(?=$|[^\\p{L}\\p{N}])`,
+  "iu",
+);
 const KIND_PATTERNS: Readonly<Record<Exclude<DeleteKind, "sound_source">, RegExp>> = {
   track: /(?:\btracks?\b|轨道)/i,
   scene: /(?:\bscenes?\b|场景)/i,
@@ -100,7 +105,9 @@ export function deleteAuthorizationFor(userText: string): DeleteAuthorization {
     if (EXPLICIT_ARRANGEMENT_CLIP.test(userText)) kinds.add("arrangement_clip");
     if (EXPLICIT_SESSION_CLIP.test(userText)) kinds.add("session_clip");
   }
-  if (SOUND_RECIPE_ACTION.test(userText) && SOUND_RECIPE_STYLE.test(userText) && SOUND_RECIPE_ROLE.test(userText)) {
+  const recipeIntent = SOUND_RECIPE_ID.test(userText) ||
+    (SOUND_RECIPE_STYLE.test(userText) && SOUND_RECIPE_ROLE.test(userText));
+  if (SOUND_RECIPE_ACTION.test(userText) && recipeIntent) {
     kinds.add("sound_source");
   }
   return kinds;
