@@ -85,19 +85,19 @@ const wavetableBrightPluckControls: readonly RecipeParameterTarget[] = [
 ];
 
 const driftWarmPluckControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Amp Attack"], normalizedValue: 0.002 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Amp Decay"], normalizedValue: 0.3 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain"], normalizedValue: 0.12 },
-  { id: "amp_release", kind: "numeric", aliases: ["Amp Release"], normalizedValue: 0.05 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.3 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.03 },
+  { id: "amp_attack", kind: "numeric", aliases: ["Env 1 Attack"], normalizedValue: 0.002 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Env 1 Decay"], normalizedValue: 0.3 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Env 1 Sustain"], normalizedValue: 0.12 },
+  { id: "amp_release", kind: "numeric", aliases: ["Env 1 Release"], normalizedValue: 0.05 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["LP Freq"], normalizedValue: 0.3 },
+  { id: "filter_resonance", kind: "numeric", aliases: ["LP Res"], normalizedValue: 0.03 },
 ];
 
 const operatorBellPluckControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Amp Attack"], normalizedValue: 0.0001 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Amp Decay"], normalizedValue: 0.18 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain"], normalizedValue: 0.02 },
-  { id: "amp_release", kind: "numeric", aliases: ["Amp Release"], normalizedValue: 0.04 },
+  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.0001 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.18 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.02 },
+  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.04 },
   { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.16 },
   { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.42 },
   { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.55 },
