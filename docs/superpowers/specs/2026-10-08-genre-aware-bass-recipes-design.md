@@ -3,10 +3,10 @@
 ## Goal
 
 Make AIbleton choose and apply a reusable bass sound recipe that fits the music
-style. The first release covers rock/band bass, reggae bass, electronic/dance
-bass, and Hip-hop/R&B 808 or sub bass. It should use the Live Set's actual
-devices and the user's locally available samples instead of guessing
-parameter names or assuming a sample pack is installed.
+style. The first release covers rock/band bass, reggae bass, pop bass,
+electronic/dance bass, and Hip-hop/R&B 808 or sub bass. It should use the Live
+Set's actual devices and the user's locally available samples instead of
+guessing parameter names or assuming a sample pack is installed.
 
 ## User intent and success criteria
 
@@ -15,6 +15,9 @@ parameter names or assuming a sample pack is installed.
   available locally.
 - Reggae bass should favor a warm, round electric-bass sample with a softer
   attack when one is available locally.
+- Pop bass should support the song with a clean, controlled tone; choose an
+  electric-bass sample or synth according to the pop substyle and current
+  arrangement. If those clues are unclear, use a neutral Operator sound.
 - Electronic/dance bass should use a synthesized bass sound.
 - Hip-hop/R&B bass should favor an 808 or sub-bass sample.
 - When a sample route has no usable local result, use a clearly reported
@@ -32,10 +35,12 @@ parameter names or assuming a sample pack is installed.
 
 ### Included
 
-- Four bass recipes:
+- Five bass recipes:
   - `rock_bass`: local electric-bass sample, with a synth fallback.
   - `reggae_bass`: warm, round local electric-bass sample, softer attack, with
     a synth fallback.
+  - `pop_bass`: clean, controlled bass; choose sample or synth from the
+    substyle/arrangement, with Operator as the neutral fallback.
   - `electronic_bass`: Operator-based synthesized bass.
   - `hiphop_808_bass`: local 808/sub sample, with an Operator fallback.
 - A recipe catalog that stores each recipe's genre, role, source strategy,
@@ -91,6 +96,11 @@ Parameter targets use semantic aliases plus a normalized target value in
 reported `[min, max]` range. Enum targets use explicit option-name aliases and
 are applied only when exactly one current option matches.
 
+For `pop_bass`, explicit substyle terms in the current request take priority
+(for example, pop-rock or dance-pop). Otherwise, use available arrangement
+context to choose sample or synth; if that context does not point clearly to
+one source, use the neutral Operator fallback.
+
 ### `apply_sound_recipe`
 
 Inputs identify a track by the existing track index/name pair and a recipe ID.
@@ -143,7 +153,7 @@ result in Live.
 
 ## Testing plan
 
-- Recipe catalog contains the four stable IDs and their intended source
+- Recipe catalog contains the five stable IDs and their intended source
   strategies.
 - Genre resolution prioritizes the current explicit request and does not
   treat unrelated memory as the current genre.
