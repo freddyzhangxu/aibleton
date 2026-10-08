@@ -884,6 +884,7 @@ function activityForTool(name: string, input: Record<string, unknown>): { key: s
     replace_device: "activity_edit_device",
     set_device_parameter: "activity_edit_device",
     set_device_parameters: "activity_edit_device",
+    apply_sound_recipe: "activity_edit_device",
     generate_audio: "activity_generate",
     search_samples: "activity_search_samples",
     web_search: "activity_search_web",
