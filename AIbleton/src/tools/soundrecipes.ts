@@ -123,8 +123,11 @@ async function ensurePrimaryDevice(
   current: PrimarySource,
   deviceName: string,
   allowSourceChange: boolean,
+  forceReplace = false,
 ): Promise<{ device?: Device<"1.0.0">; replaced?: string; failure?: Record<string, unknown> }> {
-  if (current?.device.name.toLocaleLowerCase() === deviceName.toLocaleLowerCase()) {
+  const currentName = current?.device.name;
+  const currentId = current ? handleIdOf(current.device) : undefined;
+  if (!forceReplace && current && currentName?.toLocaleLowerCase() === deviceName.toLocaleLowerCase()) {
     return { device: current.device };
   }
   if (current && !allowSourceChange) {
@@ -132,7 +135,7 @@ async function ensurePrimaryDevice(
       failure: trackResult(ref, {
         executed: false,
         requires_source_authorization: true,
-        current_source: current.device.name,
+        current_source: currentName,
         requested_source: deviceName,
         message: "需要用户明确要求将该轨应用此音色方案，才能更换主音源。",
       }),
@@ -141,20 +144,38 @@ async function ensurePrimaryDevice(
 
   const insertAt = current?.index ?? 0;
   if (current) {
-    await context.withinTransaction(() => ref.track.deleteDevice(current.device));
+    try {
+      await context.withinTransaction(() => ref.track.deleteDevice(current.device));
+    } catch (error) {
+      const sourceStillPresent = ref.track.devices.some((device) =>
+        currentId !== undefined ? handleIdOf(device) === currentId : device === current.device,
+      );
+      const sourceDeleted = !sourceStillPresent;
+      return {
+        failure: trackResult(ref, {
+          executed: sourceDeleted,
+          replacement_not_applied: true,
+          source_deleted: sourceDeleted,
+          ...(currentName ? { source: currentName } : {}),
+          replacement: deviceName,
+          reason: error instanceof Error ? error.message : String(error),
+          ...(sourceDeleted ? { undo: "原音源已删除；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。" } : {}),
+        }),
+      };
+    }
     forgetCreatedDevice(current.device);
   }
   try {
     const device = await context.withinTransaction(() => ref.track.insertDevice(deviceName, insertAt));
     recordCreatedDevice(device);
-    return { device, ...(current ? { replaced: current.device.name } : {}) };
+    return { device, ...(currentName ? { replaced: currentName } : {}) };
   } catch (error) {
     return {
       failure: trackResult(ref, {
         executed: !!current,
         replacement_not_applied: true,
         source_deleted: !!current,
-        ...(current ? { source: current.device.name } : {}),
+        ...(currentName ? { source: currentName } : {}),
         replacement: deviceName,
         reason: error instanceof Error ? error.message : String(error),
         ...(current ? { undo: "原音源已删除但替换失败；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。" } : {}),
@@ -189,45 +210,64 @@ function stagedSampleFailure(
   stagedName: string,
   reason: string,
   cleanupError?: string,
+  replaced?: string,
   extra: Record<string, unknown> = {},
 ): Record<string, unknown> {
   return trackResult(ref, {
     recipe: recipe.id,
     role: recipe.role,
-    executed: !!cleanupError,
+    executed: !!cleanupError || !!replaced,
+    replacement_not_applied: true,
     sample_setup_failed: true,
     ...(cleanupError ? { partial_change: true, cleanup_error: cleanupError } : {}),
+    ...(replaced ? {
+      source_deleted: true,
+      source: {
+        kind: "sample",
+        device: "Simpler",
+        playback_mode: recipe.samplePlayback,
+        ...(typeof extra.file === "string" ? { file: extra.file } : {}),
+        replaced,
+      },
+    } : {}),
     current_source: extra.current_source ?? "none",
     staged_device: stagedName,
     reason,
     current_devices: ref.track.devices.map((device) => device.name),
     ...extra,
-    ...(cleanupError ? { undo: "暂存音源未能清理；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。" } : {}),
+    ...(replaced
+      ? { undo: "原音源已删除，采样配方设置失败；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。" }
+      : cleanupError
+        ? { undo: "新插入的 Simpler 未能清理；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。" }
+        : {}),
   });
 }
 
-async function applyStagedSampleRecipe(
+async function applyDeleteFirstSampleRecipe(
   context: Ctx,
   ref: TrackRef,
+  current: PrimarySource,
   recipe: SoundRecipe,
   selectedSample: string,
 ): Promise<Record<string, unknown>> {
-  const insertAt = 0;
-  let staged: Simpler<"1.0.0">;
+  let importedSample: string;
   try {
-    staged = await context.withinTransaction(() => ref.track.insertDevice("Simpler", insertAt)) as Simpler<"1.0.0">;
-    recordCreatedDevice(staged);
+    importedSample = await context.resources.importIntoProject(selectedSample);
   } catch (error) {
     return trackResult(ref, {
       recipe: recipe.id,
       role: recipe.role,
       executed: false,
-      sample_setup_failed: true,
-      current_source: "none",
-      requested_source: "Simpler",
+      sample_import_failed: true,
+      file: selectedSample,
       reason: error instanceof Error ? error.message : String(error),
     });
   }
+
+  const ensured = await ensurePrimaryDevice(context, ref, current, "Simpler", true, true);
+  if (ensured.failure) return ensured.failure;
+  const staged = ensured.device as Simpler<"1.0.0">;
+  const replaced = ensured.replaced;
   const stagedName = staged.name;
 
   const targets = recipe.targets.Simpler ?? [];
@@ -243,11 +283,9 @@ async function applyStagedSampleRecipe(
       stagedName,
       "Simpler 缺少唯一可用的循环控制：" + missingRequired.join(", "),
       cleanupError,
+      replaced,
       {
-        executed: !!cleanupError,
-        replacement_not_applied: true,
-        source_deleted: false,
-        current_source: "none",
+        current_source: replaced ?? "none",
         requested_source: "Simpler",
         skipped: match.skipped.map(({ target, reason }) => ({ target: target.id, reason })),
       },
@@ -274,24 +312,10 @@ async function applyStagedSampleRecipe(
         stagedName,
         error instanceof Error ? error.message : String(error),
         cleanupError,
-        { current_source: "none", target: item.target.id, parameter: item.parameter.name },
+        replaced,
+        { current_source: replaced ?? "none", target: item.target.id, parameter: item.parameter.name },
       );
     }
-  }
-
-  let importedSample: string;
-  try {
-    importedSample = await context.resources.importIntoProject(selectedSample);
-  } catch (error) {
-    const cleanupError = await cleanupStagedSampleDevice(context, ref, staged);
-    return stagedSampleFailure(
-      ref,
-      recipe,
-      stagedName,
-      error instanceof Error ? error.message : String(error),
-      cleanupError,
-      { current_source: "none", file: selectedSample },
-    );
   }
 
   try {
@@ -304,7 +328,8 @@ async function applyStagedSampleRecipe(
       stagedName,
       error instanceof Error ? error.message : String(error),
       cleanupError,
-      { current_source: "none", file: importedSample },
+      replaced,
+      { current_source: replaced ?? "none", file: importedSample },
     );
   }
 
@@ -332,9 +357,10 @@ async function applyStagedSampleRecipe(
       ref,
       recipe,
       stagedName,
-      "无法应用一个或多个匹配的 Simpler 包络参数；保留原音源。",
+      "无法应用一个或多个匹配的 Simpler 包络参数。",
       cleanupError,
-      { current_source: "none", file: importedSample, failed },
+      replaced,
+      { current_source: replaced ?? "none", file: importedSample, failed },
     );
   }
 
@@ -347,6 +373,7 @@ async function applyStagedSampleRecipe(
       device: stagedName,
       file: importedSample,
       playback_mode: recipe.samplePlayback,
+      ...(replaced ? { replaced } : {}),
     },
     applied,
     skipped: match.skipped.map(({ target, reason }) => ({ target: target.id, reason })),
@@ -405,18 +432,6 @@ export async function applySoundRecipe(
       fallback = true;
     }
   }
-  if (sourceKind === "sample" && selectedSample && recipe.samplePlayback && current) {
-    return trackResult(ref, {
-      recipe: recipe.id,
-      role: recipe.role,
-      executed: false,
-      sample_setup_failed: true,
-      sample_source_replacement_unsupported: true,
-      current_source: current.device.name,
-      requested_source: "Simpler",
-      message: "当前 Live 设备链不支持在现有乐器旁暂存第二个乐器。请将新采样配方应用到没有主音源的 MIDI 轨道；原音源没有改动。",
-    });
-  }
   const requestedDevice = sourceKind === "sample" ? "Simpler" : recipe.instrument ?? recipe.fallbackInstrument;
   const currentSample = current?.device instanceof Simpler ? current.device.sample?.filePath : undefined;
   const sampleChange = sourceKind === "sample" && !!current &&
@@ -436,7 +451,7 @@ export async function applySoundRecipe(
   }
 
   if (sourceKind === "sample" && selectedSample && recipe.samplePlayback) {
-    return applyStagedSampleRecipe(context, ref, recipe, selectedSample);
+    return applyDeleteFirstSampleRecipe(context, ref, current, recipe, selectedSample);
   }
 
   let importedSample: string | undefined;
