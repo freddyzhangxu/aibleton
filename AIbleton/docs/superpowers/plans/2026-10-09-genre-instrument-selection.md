@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Use one typed, testable profile catalog to guide candidate parts, instrument choices, recipes, and safe fallbacks for Pop, Rock, Jazz, Funk, and R&B, including useful subgenres.
+**Goal:** Use one typed, testable profile catalog to map already selected roles to suitable instruments, recipes, and safe fallbacks for Pop, Rock, Jazz, Funk, and R&B, including useful subgenres.
 
-**Architecture:** Extend `src/sound/genre-profiles.ts` into the single source of truth for genre and subgenre aliases, core/optional parts, instrument choices, recipe references, conditions, and limitations. Render that data into the existing system prompt and align the `apply_sound_recipe` tool description; keep actual recipe execution in the current recipe dispatcher and do not add a new selector tool.
+**Architecture:** Extend `src/sound/genre-profiles.ts` into the single source of truth for genre and subgenre aliases, role-to-sound mappings, instrument choices, recipe references, conditions, and limitations. Render that data into the existing system prompt and align the `apply_sound_recipe` tool description; keep actual recipe execution in the current recipe dispatcher and do not add a new selector tool.
 
 **Tech Stack:** TypeScript, Node.js built-in test runner via `tsx`, existing `SOUND_RECIPES` catalog.
 
@@ -14,7 +14,7 @@
 
 - No new sound recipes, Live devices, third-party plug-ins, UI, or selection tool in this phase.
 - No automatic replacement of existing sources.
-- No requirement to create every candidate role in a profile.
+- Profiles only guide timbre for already selected roles; they do not determine the role lineup.
 - Profile data references existing recipes; source kind and fallback are derived from `SOUND_RECIPES`.
 - Explicit instrument/timbre selection takes precedence over profile guidance.
 - Subgenre guidance takes precedence over its parent genre.
@@ -270,3 +270,53 @@ Expected: no whitespace errors. Confirm `src/server.ts` and `src/setcontext.ts` 
 ## Execution note
 
 Before implementation, use the `using-git-worktrees` skill to choose an isolated execution workspace if the approved execution method requires it. Preserve unrelated workspace edits in `src/server.ts` and `src/setcontext.ts`.
+
+## Approved follow-up amendment: keep role selection independent
+
+The user clarified that genre profiles should guide timbre only after a role is selected. They must not tell the model which roles to create or omit. The updated design is recorded in the Spec amendment. This supersedes the earlier `coreParts` / `optionalParts` structure and the full-arrangement subset instruction.
+
+### Task 5: Make profiles sound maps, not role lineups
+
+**Files:**
+- Modify: `src/sound/genre-profiles.ts`
+- Modify: `src/prompts.ts`
+- Modify: `src/tools/definitions.ts`
+- Test: `src/sound/genre-profiles.test.ts`
+- Test: `src/prompts.test.ts`
+- Test: `src/tools/definitions.test.ts`
+
+**Interfaces:**
+- Keep `GenrePartProfile` and `GenreInstrumentChoice` mappings from a selected role to supported instruments/recipes.
+- Replace `GenreProfile.coreParts` and `.optionalParts` with one role mapping list; preserve subgenre overrides.
+- `genreInstrumentProfilePrompt()` states that profiles only guide the sound of already selected roles, and never add, omit, require, forbid, or whitelist roles.
+
+- [ ] **Step 1: Write and run failing boundary tests**
+
+The new assertions in `src/sound/genre-profiles.test.ts` and `src/prompts.test.ts` assert that the profile guide maps timbre for an already selected role and omits the `Core parts` / `Optional parts` and compact-subset language. Extend `src/tools/definitions.test.ts` to assert the tool description no longer calls genre profiles a core/optional role lineup.
+
+Run: `npx tsx --test src/sound/genre-profiles.test.ts src/prompts.test.ts src/tools/definitions.test.ts`
+
+Expected: FAIL because the current profile data and prompt still include role priority and compact-subset instructions.
+
+- [ ] **Step 2: Remove role priority from profile data and formatter**
+
+In `src/sound/genre-profiles.ts`, replace `coreParts` and `optionalParts` with `parts: readonly GenrePartProfile[]`. Flatten existing role mappings without changing recipe choices, aliases, source preferences, capability notes, or subgenre overrides. Format the parent genre's entries as sound mappings by role; do not label them core or optional.
+
+In `genreInstrumentProfilePrompt()`, state that the table only chooses a sound for an already selected role; it never chooses, requires, omits, forbids, or whitelists roles. Keep the parent/subgenre fallback and unsupported-timbre guidance.
+
+- [ ] **Step 3: Remove arrangement constraints from prompt and tool text**
+
+In `src/prompts.ts`, replace the compact-subset instruction with the role/timbre-only rule. In `src/tools/definitions.ts`, describe profiles as role-to-sound mappings and remove the statement that they define core/optional parts. Keep genre/subgenre priority, explicit instrument precedence, existing-source protection, recipe authorization, and declared fallbacks unchanged.
+
+- [ ] **Step 4: Run focused regression tests**
+
+Run: `npx tsx --test src/sound/genre-profiles.test.ts src/prompts.test.ts src/tools/definitions.test.ts`
+
+Expected: all focused tests PASS; the profile guide contains no role-lineup restriction and retains every sound mapping.
+
+- [ ] **Step 5: Commit the role-selection boundary change**
+
+```bash
+git add src/sound/genre-profiles.ts src/sound/genre-profiles.test.ts src/prompts.ts src/prompts.test.ts src/tools/definitions.ts src/tools/definitions.test.ts docs/superpowers/specs/2026-10-09-genre-instrument-selection-design.md docs/superpowers/plans/2026-10-09-genre-instrument-selection.md
+git commit -m "fix: keep genre profiles from limiting roles"
+```

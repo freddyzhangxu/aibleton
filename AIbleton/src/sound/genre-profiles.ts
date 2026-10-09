@@ -24,8 +24,7 @@ export type GenreSubgenreProfile = {
 export type GenreProfile = {
   label: string;
   aliases: readonly string[];
-  coreParts: readonly GenrePartProfile[];
-  optionalParts: readonly GenrePartProfile[];
+  parts: readonly GenrePartProfile[];
   subgenres: readonly GenreSubgenreProfile[];
 };
 
@@ -34,7 +33,7 @@ export const GENRE_INSTRUMENT_PROFILES = {
   pop: {
     label: "Pop",
     aliases: ["pop", "popular music"],
-    coreParts: [
+    parts: [
       {
         role: "Bass",
         choices: [
@@ -42,8 +41,6 @@ export const GENRE_INSTRUMENT_PROFILES = {
           { instrument: "synth bass", recipe: "pop_bass", sourcePreference: "synth", when: "synth/dance arrangement" },
         ],
       },
-    ],
-    optionalParts: [
       { role: "Lead", choices: [{ instrument: "clean rounded synth lead", recipe: "lead_clean" }] },
       { role: "Pluck", choices: [{ instrument: "bell-like synth pluck", recipe: "pluck_bell" }] },
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
@@ -76,11 +73,9 @@ export const GENRE_INSTRUMENT_PROFILES = {
   rock: {
     label: "Rock",
     aliases: ["rock", "rock music"],
-    coreParts: [
+    parts: [
       { role: "Bass", choices: [{ instrument: "electric bass", recipe: "rock_bass" }] },
       { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific electric-guitar tone" }] },
-    ],
-    optionalParts: [
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
     ],
     subgenres: [
@@ -99,11 +94,9 @@ export const GENRE_INSTRUMENT_PROFILES = {
   jazz: {
     label: "Jazz",
     aliases: ["jazz"],
-    coreParts: [
+    parts: [
       { role: "Bass", choices: [{ instrument: "upright bass", recipe: "jazz_bass" }] },
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
-    ],
-    optionalParts: [
       { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific guitar tone" }] },
       { role: "Pluck", choices: [{ instrument: "warm synth pluck", recipe: "pluck_warm" }] },
     ],
@@ -131,10 +124,8 @@ export const GENRE_INSTRUMENT_PROFILES = {
   funk: {
     label: "Funk",
     aliases: ["funk", "funk music"],
-    coreParts: [
+    parts: [
       { role: "Bass", choices: [{ instrument: "fingerstyle electric bass", recipe: "funk_bass" }] },
-    ],
-    optionalParts: [
       { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific electric-guitar tone" }] },
       { role: "Keys", choices: [{ instrument: "FM keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation, not a Clavinet preset" }] },
       { role: "Lead", choices: [{ instrument: "analog synth lead", recipe: "lead_analog" }] },
@@ -161,7 +152,7 @@ export const GENRE_INSTRUMENT_PROFILES = {
   rnb: {
     label: "R&B",
     aliases: ["R&B", "R and B", "rhythm and blues"],
-    coreParts: [
+    parts: [
       {
         role: "Bass",
         choices: [
@@ -169,8 +160,6 @@ export const GENRE_INSTRUMENT_PROFILES = {
           { instrument: "808 or sub bass", recipe: "hiphop_808_bass", when: "a modern/trap production" },
         ],
       },
-    ],
-    optionalParts: [
       { role: "Keys", choices: [{ instrument: "FM/electric keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation; not a guaranteed Rhodes or Clavinet" }] },
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
       { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific tone" }] },
@@ -225,10 +214,9 @@ function formatSubgenre(subgenre: GenreSubgenreProfile): string {
 }
 
 function formatProfile(profile: GenreProfile): string {
-  const core = profile.coreParts.map(formatPart).join("; ") || "none declared";
-  const optional = profile.optionalParts.map(formatPart).join("; ") || "none declared";
+  const parts = profile.parts.map(formatPart).join("; ") || "no profile-specific mappings";
   const subgenres = profile.subgenres.map(formatSubgenre).join(". ");
-  return `${profile.label} aliases: ${profile.aliases.join(", ")}. Core parts: ${core}. Optional parts: ${optional}.${subgenres ? ` ${subgenres}.` : ""}`;
+  return `${profile.label} aliases: ${profile.aliases.join(", ")}. Role-to-sound mappings: ${parts}.${subgenres ? ` ${subgenres}.` : ""}`;
 }
 
 /** Build the prompt section from the same recipe catalog used by apply_sound_recipe. */
@@ -236,11 +224,11 @@ export function genreInstrumentProfilePrompt(): string {
   const profiles = Object.values(GENRE_INSTRUMENT_PROFILES).map(formatProfile);
   return [
     `Genre-to-instrument profiles for new parts only: ${profiles.join(" ")}`,
+    "Use profiles only to choose an instrument or timbre for a role already selected by the user or arrangement.",
+    "Never add, omit, require, or forbid parts because of a genre profile; profiles are not a role whitelist.",
     "An explicit subgenre overrides the parent genre for listed roles; inherit the parent profile for roles it does not change.",
     "If no listed subgenre matches, retain the parent genre profile and do not guess a subgenre override.",
-    "For a complete genre-led arrangement, choose a compact, conventional subset of core and optional parts; for a named-part request, apply only that role's mapping. Do not create every listed part automatically.",
-    "For the remaining role and genre pairs, continue using an existing role-specific timbre match; if none applies, use the role default when defined.",
-    "Leave unsupported role and genre combinations unresolved and ask one concise question.",
+    "For an unlisted role, keep the selected role and use normal role-specific defaults or current Set context; ask only when that role's sound remains unclear.",
     "When a listed sample is unavailable, use its declared synth fallback and explain the approximation.",
     "Do not invent a recipe or imply an unsupported genre-specific sound.",
   ].join(" ");

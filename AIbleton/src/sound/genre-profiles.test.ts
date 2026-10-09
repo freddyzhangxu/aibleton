@@ -3,13 +3,13 @@ import test from "node:test";
 
 import { genreInstrumentProfilePrompt } from "./genre-profiles.js";
 
-test("profile guide distinguishes core and optional parts and gives subgenres precedence", () => {
+test("profile guide maps sound by role and gives subgenres precedence", () => {
   const guide = genreInstrumentProfilePrompt();
-  assert.match(guide, /Core parts/);
-  assert.match(guide, /Optional parts/);
+  assert.match(guide, /Role-to-sound mappings: Bass/);
   assert.match(guide, /An explicit subgenre overrides the parent genre for listed roles/);
   assert.match(guide, /If no listed subgenre matches, retain the parent genre profile/);
-  assert.match(guide, /Leave unsupported role and genre combinations unresolved and ask one concise question/);
+  assert.match(guide, /For an unlisted role, keep the selected role and use normal role-specific defaults or current Set context/);
+  assert.doesNotMatch(guide, /Core parts:|Optional parts:/);
 });
 
 test("profile guide derives recipe source and fallback from the recipe catalog", () => {
@@ -42,4 +42,11 @@ test("contextual Pop Bass exposes sample and synth preferences", () => {
   const guide = genreInstrumentProfilePrompt();
   assert.match(guide, /Pop aliases:[\s\S]*Bass → electric bass when band\/acoustic arrangement \(pop_bass, contextual source; fallback Operator; prefer sample\)/);
   assert.match(guide, /synth bass when synth\/dance arrangement \(pop_bass, contextual source; fallback Operator; prefer synth\)/);
+});
+
+test("genre profiles guide timbre for selected roles without constraining the role lineup", () => {
+  const guide = genreInstrumentProfilePrompt();
+  assert.match(guide, /Use profiles only to choose an instrument or timbre for a role already selected by the user or arrangement/);
+  assert.match(guide, /Never add, omit, require, or forbid parts because of a genre profile/);
+  assert.doesNotMatch(guide, /Core parts:|Optional parts:/);
 });

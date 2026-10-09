@@ -6,11 +6,11 @@ Draft for user review. No product code changes are part of this document.
 
 ## Goal
 
-When a user asks for a genre-led part or arrangement without naming every instrument, AIbleton should choose suitable candidate parts and instruments, then use only sound recipes and sample sources the app can actually apply. The choice should reflect subgenre and musical function, preserve explicit user choices, and explain any fallback.
+When a user or arrangement has selected a part but not its instrument or timbre, AIbleton should use the requested genre/subgenre and the part's musical function to choose among supported sound recipes and sample sources. It should preserve explicit user choices and explain any fallback.
 
 ## Current problem
 
-Genre guidance is split between prose in `prompts.ts` and a small table in `sound/genre-profiles.ts`. The table combines part labels, instrument names, and recipes in a single list. It has no subgenre model, no core-versus-optional distinction, and limited resource capability information. This has led to several confusing cases:
+Genre guidance is split between prose in `prompts.ts` and a typed table in `sound/genre-profiles.ts`. Some mappings are duplicated in prose, and the profile formatter had started presenting core/optional roles as an arrangement template. That makes timbre guidance look like a restriction on which parts a genre can contain. Resource capability information is also limited. These issues have led to several confusing cases:
 
 - Generic Keys was previously treated as Piano, even though Piano is one instrument within the Keys family.
 - Rock, Jazz, and Funk have only a few role mappings; R&B has an 808/Sub Bass recipe but no full part profile.
@@ -20,18 +20,17 @@ Genre guidance is split between prose in `prompts.ts` and a small table in `soun
 ## Approaches considered
 
 1. **Expand prompt prose only.** Fast to write, but mapping rules can conflict and are difficult to validate.
-2. **Use typed genre profiles as the source of truth and render them into the prompt. Recommended.** Keeps supported genres, subgenres, candidate parts, instruments, recipe IDs, and fallbacks together; prompt generation remains compatible with the current agent/tool flow.
+2. **Use typed genre profiles as the source of truth and render them into the prompt. Recommended.** Keeps supported genres, subgenres, role-to-instrument choices, recipe IDs, and fallbacks together; prompt generation remains compatible with the current agent/tool flow.
 3. **Add a deterministic instrument-selection tool.** Could enforce a mapping before the model acts, but would add a new tool contract and prematurely lock subjective arrangement choices into code.
 
-The first release uses approach 2. Profile data guides model choices; the model still chooses a suitable subset for a complete arrangement and does not create every listed part automatically.
+The first release uses approach 2. Profile data guides sound choices only after a role is selected. The model chooses roles from the user's request and normal arrangement reasoning, independent of the profile table.
 
 ## Proposed profile model
 
 Represent each profile with:
 
 - `genre` and optional `subgenre` aliases;
-- candidate parts, each marked `core` or `optional`;
-- the part role (for example Bass, Guitar, Piano, Keys, Lead, Pad);
+- role-to-sound mappings for parts that may already be selected (for example Bass, Guitar, Piano, Keys, Lead, Pad);
 - one or more instrument candidates and a short condition for choosing among them;
 - an existing `SoundRecipeId` when a supported recipe exists;
 - source kind, fallback instrument, and a capability note when the recipe is approximate;
@@ -60,7 +59,7 @@ Apply these rules in order:
 2. Prefer an explicit subgenre in the current request, then its parent genre.
 3. Use current Set context to avoid duplicating an existing role and to complement existing parts.
 4. Use relevant artist memory only as a preference when the current request leaves a choice open; do not infer the current song's genre from artist memory.
-5. For a full genre-led arrangement, choose a compact conventional subset from the profile's core and optional parts. For a named-part request, apply only that part's mapping.
+5. Profiles never choose, require, omit, forbid, or whitelist roles. For a named part, apply only that role's profile mapping; for a full arrangement, choose parts from the user's request and normal arrangement reasoning, then use profiles for their sound.
 6. Never replace an existing primary instrument implicitly.
 7. If the recipe's sample cannot be found, use only its declared fallback and state the approximation. Do not describe a generic guitar sample as a genre-specific guitar tone or DX7 as a Clavinet.
 8. If no suitable candidate or safe fallback exists, ask one concise question rather than inventing a recipe.
@@ -69,12 +68,12 @@ Apply these rules in order:
 
 - No new sound recipes, Live devices, third-party plug-ins, UI, or selection tool in this phase.
 - No automatic replacement of existing sources.
-- No requirement to create every candidate role in a profile.
+- Genre profiles do not restrict which roles may appear.
 - New recipe work for Clavinet, genre-specific electric guitar, or broader synth-keyboard sounds can follow after the profile table reveals the actual coverage gaps.
 
 ## Data flow
 
-Typed profile data references existing recipes. A formatter resolves recipe labels, source types, and fallback instruments from `SOUND_RECIPES`, then injects a compact selection guide into the system prompt. The model uses that guide together with the current request and Set context before creating a part or applying a recipe.
+Typed profile data references existing recipes. A formatter resolves recipe labels, source types, and fallback instruments from `SOUND_RECIPES`, then injects a compact sound-selection guide into the system prompt. The user request and normal arrangement reasoning select roles; the model uses the profile guide and current Set context only after a role is selected.
 
 ## Validation
 
@@ -89,5 +88,11 @@ Typed profile data references existing recipes. A formatter resolves recipe labe
 - Piano and generic Keys resolve differently.
 - R&B distinguishes at least Modern R&B, Neo-Soul, and trap-influenced R&B where existing recipes permit; unresolved choices are explicit.
 - Rock/Jazz/Funk mappings cover instrument choices beyond Bass where available, with capability notes for approximate recipes.
-- A complete arrangement selects a suitable subset instead of mechanically creating every listed role.
+- Profiles only guide sounds for selected roles and do not restrict a complete arrangement's role lineup.
 - Explicit user choices and existing instruments retain precedence and protection.
+
+## Amendment: profiles do not choose the role lineup (2026-10-09)
+
+The genre-profile layer only maps a role that the user or arrangement has already selected to suitable instrument/timbre recipes. It must not choose, require, omit, forbid, or whitelist roles based on genre. Part selection for a complete arrangement remains with the assistant's normal arrangement reasoning and the user's request; the profile supplies sound choices once a role is selected.
+
+This amendment supersedes the earlier `core`/`optional` role priorities and the acceptance criterion that asked a full arrangement to select a subset from those priorities. Profiles must not encode arrangement-level role priority. They may still use subgenre overrides for the timbre choices of named roles, recipe capabilities, and safe fallbacks.
