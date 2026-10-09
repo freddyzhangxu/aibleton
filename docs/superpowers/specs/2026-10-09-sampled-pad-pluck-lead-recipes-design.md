@@ -35,7 +35,7 @@ pitched one-shots in Simpler.
 
 ## Current state to preserve
 
-- Preserve all eleven Bass recipes and the six synth recipes already available
+- Preserve all eleven Bass recipes and the nine synth recipes already available
   for Pad, Pluck, and Lead.
 - Preserve the existing sample Pluck recipes `pluck_guitar` and
   `pluck_kalimba`, including their IDs, sample queries, filename evidence, and
@@ -102,8 +102,9 @@ require a specific sampled instrument to be named.
 - New Pad sample recipes also require exact unique Simpler controls for
   playback `Mode` (`Classic`) and `Loop` (`On`). Use only exact aliases and
   exact quantized option names exposed by Live. Missing, duplicate, or
-  unsupported required controls fail preflight before a source replacement.
-- Pluck/Lead one-shot recipes use a freshly staged Simpler with its default
+  unsupported required controls after source deletion return the deleted
+  source and Undo guidance; do not fall back to synth.
+- Pluck/Lead one-shot recipes use a newly inserted Simpler with its default
   non-loop playback state. Optional envelope controls that cannot be matched
   are reported as skipped, consistent with the existing recipe behavior.
 - Fallback targets reuse the corresponding synth profile's current targets;

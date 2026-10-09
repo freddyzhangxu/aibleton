@@ -213,6 +213,8 @@ function stagedSampleFailure(
   replaced?: string,
   extra: Record<string, unknown> = {},
 ): Record<string, unknown> {
+  const currentPrimary = findPrimarySource(ref.track as MidiTrack<"1.0.0">);
+  const currentSource = currentPrimary === "ambiguous" ? "ambiguous" : currentPrimary?.device.name ?? "none";
   return trackResult(ref, {
     recipe: recipe.id,
     role: recipe.role,
@@ -220,23 +222,16 @@ function stagedSampleFailure(
     replacement_not_applied: true,
     sample_setup_failed: true,
     ...(cleanupError ? { partial_change: true, cleanup_error: cleanupError } : {}),
-    ...(replaced ? {
-      source_deleted: true,
-      source: {
-        kind: "sample",
-        device: "Simpler",
-        playback_mode: recipe.samplePlayback,
-        ...(typeof extra.file === "string" ? { file: extra.file } : {}),
-        replaced,
-      },
-    } : {}),
-    current_source: extra.current_source ?? "none",
+    ...(replaced ? { source_deleted: true, replaced_source: replaced } : {}),
+    current_source: currentSource,
+    requested_source: stagedName,
     staged_device: stagedName,
+    playback_mode: recipe.samplePlayback,
     reason,
     current_devices: ref.track.devices.map((device) => device.name),
     ...extra,
     ...(replaced
-      ? { undo: "原音源已删除，采样配方设置失败；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。" }
+      ? { undo: `原音源「${replaced}」已删除，采样配方设置失败；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。` }
       : cleanupError
         ? { undo: "新插入的 Simpler 未能清理；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。" }
         : {}),
@@ -285,8 +280,6 @@ async function applyDeleteFirstSampleRecipe(
       cleanupError,
       replaced,
       {
-        current_source: replaced ?? "none",
-        requested_source: "Simpler",
         skipped: match.skipped.map(({ target, reason }) => ({ target: target.id, reason })),
       },
     );
@@ -313,7 +306,7 @@ async function applyDeleteFirstSampleRecipe(
         error instanceof Error ? error.message : String(error),
         cleanupError,
         replaced,
-        { current_source: replaced ?? "none", target: item.target.id, parameter: item.parameter.name },
+        { target: item.target.id, parameter: item.parameter.name },
       );
     }
   }
@@ -329,7 +322,7 @@ async function applyDeleteFirstSampleRecipe(
       error instanceof Error ? error.message : String(error),
       cleanupError,
       replaced,
-      { current_source: replaced ?? "none", file: importedSample },
+      { file: importedSample },
     );
   }
 
@@ -360,7 +353,7 @@ async function applyDeleteFirstSampleRecipe(
       "无法应用一个或多个匹配的 Simpler 包络参数。",
       cleanupError,
       replaced,
-      { current_source: replaced ?? "none", file: importedSample, failed },
+      { file: importedSample, failed },
     );
   }
 
