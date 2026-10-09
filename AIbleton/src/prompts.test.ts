@@ -121,3 +121,8 @@ test("separates Piano samples from the broader Keys family", () => {
   assert.match(prompt, /DX7, FM, electric piano, or Rhodes selects keys_dx7_synth/);
   assert.doesNotMatch(prompt, /Generic Keys or Pop Keys defaults to keys_piano_sample/);
 });
+
+test("uses current Set context before artist memory when a sound choice is open", () => {
+  const prompt = systemPromptFor("en");
+  assert.match(prompt, /prefer the genre\/subgenre in the current request, then inspect the current Set context[\s\S]*use relevant artist memory only as a preference when both leave the choice open/);
+});
