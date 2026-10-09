@@ -46,8 +46,9 @@ const NEGATED_DESTRUCTIVE_ACTION = new RegExp([
 ].join("|"), "iu");
 const NEGATED_SAMPLE_RECIPE_REQUEST = new RegExp([
   String.raw`\b(?:do not|don't|dont|never)\s+(?:use|choose|select|load|apply)\b[\s\S]{0,80}\b(?:sample(?:d)?|one[ -]?shot|loop(?:ed|ing)?)\b`,
+  String.raw`\bno\s+(?:samples?|sampling)\b`,
   String.raw`\bwithout\s+(?:using\s+)?(?:samples?|sampled)\b`,
-  String.raw`(?:不要|别|別|不|无需|无须)(?:使用|用|采用|选用|选择|加载|应用)?(?:采样|样本|单次采样|循环)`,
+  String.raw`(?:不要|别|別|不|无需|无须)(?:需要用|需要|想用|想|使用|用|采用|选用|选择|加载|应用)?(?:采样|样本|单次采样|循环)`,
 ].join("|"), "iu");
 const DEVICE_SOURCE_PATTERN =
   /(?:\b(?:devices?|instruments?|plugins?|effects?|analog|operator|wavetable|drift|meld|collision|tension|simpler|sampler|impulse|drum rack|instrument rack|audio effect rack|midi effect rack|eq eight|auto filter|compressor|reverb|delay)\b|设备|插件|效果器|乐器)/i;
@@ -68,7 +69,7 @@ const REPLACEMENT_REQUEST = new RegExp([
 ].join("|"), "iu");
 const SOUND_RECIPE_ACTION = /(?:\b(?:make|create|apply|use|set|design|shape|change|turn|switch|give|add|load|insert|replace|swap|convert|optimi[sz]e|improve|refine|tune)\b|做成|做一条|制作|应用|套用|使用|采用|选用|选择|设为|改成|换成|调成|调出|调整|优化|改善|打磨|制作成|变成|变为|改用|加入|加载)/iu;
 const SOUND_RECIPE_STYLE = /(?:\b(?:rock|reggae|pop|electronic|dance|house|techno|edm|hip[ -]?hop|rap|r\s*&\s*b|808|jazz|fusion|bossa(?:\s*nova)?|bossanova|funk|disco|slap|pick|fingerstyle|bright|short|punchy|warm|soft|mellow|bell|metallic|fm|dx7|cinematic|ambient|shimmering|drone|clean|clear|rounded|analog|vintage|aggressive|airy|dark|sample(?:d)?|one[ -]?shot|loop(?:ed|ing)?|guitar|kalimba|mbira|nylon|muted|acoustic|electric|e-?piano|keys?|keyboard|piano|thumb\s*piano)\b|摇滚|雷鬼|流行|电子|电音|舞曲|嘻哈|说唱|爵士|波萨诺瓦|巴萨诺瓦|放克|迪斯科|击弦|拨片|明亮|短促|温暖|柔和|钟声|铃声感|金属感|电影感|氛围|空灵|闪耀|持续音|干净|清晰|圆润|模拟|复古|强劲|暗色|采样音色|采样|吉他|卡林巴|拇指琴|钢琴|键盘|电钢)/iu;
-const SOUND_RECIPE_ROLE = /(?:\b(?:bass(?:line)?|sub\s*bass|pluck(?:s)?|pads?|leads?|keys?|keyboard|piano|guitar|kalimba|mbira|thumb\s*piano)\b|贝斯|贝司|低音|拨弦(?:音色)?|合成器拨弦|铺底|垫底|主音|吉他|卡林巴|拇指琴|钢琴|键盘)/iu;
+const SOUND_RECIPE_ROLE = /(?:\b(?:bass(?:line)?|sub\s*bass|pluck(?:s)?|pads?|leads?|keys?|keyboard|piano|guitar|kalimba|mbira|thumb\s*piano)\b|贝斯|贝司|低音|拨弦(?:音色)?|合成器拨弦|铺底|垫底|主音|吉他|卡林巴|拇指琴|钢琴|键盘|电钢(?:琴)?)/iu;
 const KEYS_OPERATOR_RECIPE_REQUEST = /(?:(?:\b(?:keys?|keyboard|piano)\b|钢琴|键盘)[\s\S]{0,100}\b(?:dx7|fm|electric(?:\s+piano)?|e-?piano)\b|\b(?:dx7|fm|electric|e-?piano)\b[\s\S]{0,100}(?:\b(?:keys?|keyboard|piano)\b|钢琴|键盘)|\b(?:dx7|fm|electric\s+piano|e-?piano)\b|电钢(?:琴)?|keys_dx7_synth)/iu;
 const SOUND_RECIPE_ID = new RegExp(
   `(?:^|[^\\p{L}\\p{N}])(?:${SOUND_RECIPE_IDS.join("|")})(?=$|[^\\p{L}\\p{N}])`,
