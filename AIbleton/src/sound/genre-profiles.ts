@@ -31,6 +31,48 @@ export type GenreProfile = {
 
 /** Profiles reference only recipes that apply_sound_recipe already supports. */
 export const GENRE_INSTRUMENT_PROFILES = {
+  pop: {
+    label: "Pop",
+    aliases: ["pop", "popular music"],
+    coreParts: [
+      {
+        role: "Bass",
+        choices: [
+          { instrument: "electric bass", recipe: "pop_bass", sourcePreference: "sample", when: "band/acoustic arrangement" },
+          { instrument: "synth bass", recipe: "pop_bass", sourcePreference: "synth", when: "synth/dance arrangement" },
+        ],
+      },
+    ],
+    optionalParts: [
+      { role: "Lead", choices: [{ instrument: "clean rounded synth lead", recipe: "lead_clean" }] },
+      { role: "Pluck", choices: [{ instrument: "bell-like synth pluck", recipe: "pluck_bell" }] },
+      { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
+      { role: "Keys", choices: [{ instrument: "FM keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation, not a general synth-keyboard preset" }] },
+    ],
+    subgenres: [
+      {
+        label: "Pop Rock",
+        aliases: ["pop rock", "pop-rock"],
+        overrides: [
+          { role: "Bass", choices: [{ instrument: "electric bass", recipe: "rock_bass" }] },
+          { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific electric-guitar tone" }] },
+        ],
+      },
+      {
+        label: "Dance Pop",
+        aliases: ["dance pop", "dance-pop"],
+        overrides: [{ role: "Bass", choices: [{ instrument: "synth bass", recipe: "electronic_bass" }] }],
+      },
+      {
+        label: "Synth Pop",
+        aliases: ["synth pop", "synth-pop"],
+        overrides: [
+          { role: "Bass", choices: [{ instrument: "synth bass", recipe: "electronic_bass" }] },
+          { role: "Keys", choices: [{ instrument: "FM keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation, not a general synth-keyboard preset" }] },
+        ],
+      },
+    ],
+  },
   rock: {
     label: "Rock",
     aliases: ["rock", "rock music"],
@@ -41,11 +83,22 @@ export const GENRE_INSTRUMENT_PROFILES = {
     optionalParts: [
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
     ],
-    subgenres: [],
+    subgenres: [
+      {
+        label: "Piano Rock",
+        aliases: ["piano rock", "rock ballad"],
+        overrides: [{ role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] }],
+      },
+      {
+        label: "Synth Rock",
+        aliases: ["synth rock"],
+        overrides: [{ role: "Keys", choices: [{ instrument: "FM keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation, not a general synth-keyboard preset" }] }],
+      },
+    ],
   },
   jazz: {
     label: "Jazz",
-    aliases: ["jazz", "straight-ahead jazz", "straight ahead jazz"],
+    aliases: ["jazz"],
     coreParts: [
       { role: "Bass", choices: [{ instrument: "upright bass", recipe: "jazz_bass" }] },
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
@@ -55,6 +108,11 @@ export const GENRE_INSTRUMENT_PROFILES = {
       { role: "Pluck", choices: [{ instrument: "warm synth pluck", recipe: "pluck_warm" }] },
     ],
     subgenres: [
+      {
+        label: "Straight-ahead Jazz",
+        aliases: ["straight-ahead jazz", "straight ahead jazz"],
+        overrides: [{ role: "Bass", choices: [{ instrument: "upright bass", recipe: "jazz_bass" }] }],
+      },
       {
         label: "Jazz Fusion",
         aliases: ["jazz fusion", "fusion"],
@@ -97,6 +155,46 @@ export const GENRE_INSTRUMENT_PROFILES = {
         label: "Disco Funk",
         aliases: ["disco funk", "funk disco"],
         overrides: [{ role: "Lead", choices: [{ instrument: "analog synth lead", recipe: "lead_analog" }] }],
+      },
+    ],
+  },
+  rnb: {
+    label: "R&B",
+    aliases: ["R&B", "R and B", "rhythm and blues"],
+    coreParts: [
+      {
+        role: "Bass",
+        choices: [
+          { instrument: "electric bass", recipe: "pop_bass", sourcePreference: "sample", when: "a live/band or Neo-Soul arrangement" },
+          { instrument: "808 or sub bass", recipe: "hiphop_808_bass", when: "a modern/trap production" },
+        ],
+      },
+    ],
+    optionalParts: [
+      { role: "Keys", choices: [{ instrument: "FM/electric keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation; not a guaranteed Rhodes or Clavinet" }] },
+      { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
+      { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific tone" }] },
+      { role: "Pad", choices: [{ instrument: "warm pad", recipe: "pad_warm" }] },
+      { role: "Lead", choices: [{ instrument: "clean rounded synth lead", recipe: "lead_clean" }] },
+    ],
+    subgenres: [
+      {
+        label: "Modern R&B",
+        aliases: ["modern r&b", "contemporary r&b", "modern r and b"],
+        overrides: [{ role: "Bass", choices: [{ instrument: "808 or sub bass", recipe: "hiphop_808_bass" }] }],
+      },
+      {
+        label: "Neo-Soul",
+        aliases: ["neo-soul", "neo soul", "neosoul"],
+        overrides: [
+          { role: "Bass", choices: [{ instrument: "electric bass", recipe: "pop_bass", sourcePreference: "sample", when: "a live/band arrangement" }] },
+          { role: "Keys", choices: [{ instrument: "FM/electric keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation; use only when this timbre fits, not as a guaranteed Rhodes preset" }] },
+        ],
+      },
+      {
+        label: "Trap-influenced R&B",
+        aliases: ["trap r&b", "r&b trap", "trap soul", "trap r and b"],
+        overrides: [{ role: "Bass", choices: [{ instrument: "808 or sub bass", recipe: "hiphop_808_bass" }] }],
       },
     ],
   },
