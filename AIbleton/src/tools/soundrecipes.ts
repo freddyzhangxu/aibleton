@@ -1,7 +1,7 @@
 import { basename } from "node:path";
 import { MidiTrack, Simpler, type Device } from "@ableton-extensions/sdk";
 import { searchSampleIndex } from "../samplemeta.js";
-import { soundRecipeSourceChangeAuthorized } from "../chat/deleteauth.js";
+import { soundRecipeIsAuthorized, soundRecipeSourceChangeAuthorized } from "../chat/deleteauth.js";
 import { SOUND_RECIPES, type SoundRecipeId, type SoundRecipe } from "../sound/recipes.js";
 import { matchRecipeTargets } from "../sound/parameter-targets.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
@@ -55,8 +55,8 @@ function trackIsInCurrentScope(context: Ctx, ref: TrackRef): boolean {
   return id !== undefined && toolState.activeCreatedTrackHandles.has(id);
 }
 
-function sourceChangeIsAuthorized(context: Ctx, ref: TrackRef): boolean {
-  if (!soundRecipeSourceChangeAuthorized(toolState.activeDeleteAuthorization, toolState.activeYolo)) return false;
+function sourceChangeIsAuthorized(context: Ctx, ref: TrackRef, recipeId: SoundRecipeId): boolean {
+  if (!soundRecipeSourceChangeAuthorized(toolState.activeDeleteAuthorization, toolState.activeYolo, recipeId)) return false;
   return trackIsInCurrentScope(context, ref);
 }
 
@@ -394,6 +394,15 @@ export async function applySoundRecipe(
     return trackResult(ref, { executed: false, error: "音色方案目前只能应用到 MIDI 轨道。" });
   }
   const recipe = recipeFor(input.recipe_id);
+  if (!soundRecipeIsAuthorized(toolState.activeDeleteAuthorization, recipe.id, toolState.activeYolo)) {
+    return trackResult(ref, {
+      executed: false,
+      requires_source_authorization: true,
+      requested_recipe: recipe.id,
+      allowed_recipes: [...(toolState.activeDeleteAuthorization?.allowedSoundRecipeIds ?? [])],
+      message: "当前请求只授权了指定的非采样 Keys 配方；没有执行其他音色方案。",
+    });
+  }
   if (recipe.role === "pluck" && recipe.source === "contextual") {
     throw new Error(`Pluck recipe ${recipe.id} must choose a specific synth or sample source`);
   }
@@ -432,7 +441,7 @@ export async function applySoundRecipe(
   const deviceChange = !!current && current.device.name.toLocaleLowerCase() !== requestedDevice.toLocaleLowerCase();
   const needsSourceChange = sampleChange || deviceChange ||
     (sourceKind === "sample" && !!recipe.samplePlayback && !!current);
-  const authorized = !needsSourceChange || sourceChangeIsAuthorized(context, ref);
+  const authorized = !needsSourceChange || sourceChangeIsAuthorized(context, ref, recipe.id);
   if (!authorized) {
     return trackResult(ref, {
       executed: false,
