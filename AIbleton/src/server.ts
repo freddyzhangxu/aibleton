@@ -57,11 +57,13 @@ import { errMessage, friendlyBoundaryError } from "./errors.js";
 import { commonText, resolveTurnLanguage } from "./i18n/index.js";
 import { monotonicNow } from "./chat/timing.js";
 
-/** A selection is the default editing boundary. These are intentionally
- * narrow, explicit whole-Set requests — a vague "make it bigger" must not
+/** A selection is the default editing boundary. Clear requests to create a
+ * song are whole-Set requests; vague edits such as "make it bigger" must not
  * escape the selection. */
 function hasGlobalIntent(text: string): boolean {
-  return /(?:整首歌|整曲|全曲|全局|整个项目|整个工程|whole\s+(?:song|set)|entire\s+(?:song|set)|full\s+(?:song|set)|globally|across\s+the\s+(?:song|set))/i.test(text);
+  const explicitWholeSet = /(?:整首歌|整曲|全曲|全局|整个项目|整个工程|whole\s+(?:song|set)|entire\s+(?:song|set)|full\s+(?:song|set)|globally|across\s+the\s+(?:song|set))/i;
+  const createSong = /(?:做|制作|创作|写|编曲|生成)\s*(?:(?:一首|一曲)\s*(?:[\p{L}\p{N}]+(?:[\s/-]+[\p{L}\p{N}]+){0,3}\s*)?(?:歌曲|歌|乐曲|曲子|音乐)?|(?:整首|完整的?)\s*(?:歌曲|歌|乐曲|曲子|音乐))|\b(?:make|create|compose|produce|write|generate)\s+(?!(?:the|my|this|that|current|existing)\b)(?:(?:me|a|an|some|new|whole|full|complete)\s+){0,4}(?:[\p{L}\p{N}'-]+\s+){0,3}(?:song|track|tune|composition|piece|music)\b/iu;
+  return explicitWholeSet.test(text) || createSong.test(text);
 }
 function hasMasterIntent(text: string): boolean {
   return /(?:调(?:整)?\s*master|母带|总线|master(?:ing|\s+bus)?)/i.test(text);

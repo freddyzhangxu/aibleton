@@ -35,7 +35,11 @@ export type SoundRecipeId =
   | "lead_analog_sample"
   | "lead_aggressive_sample"
   | "keys_piano_sample"
-  | "keys_dx7_synth";
+  | "keys_piano_grand_sample"
+  | "keys_piano_felt_sample"
+  | "keys_dx7_synth"
+  | "keys_rhodes_synth"
+  | "keys_clav_synth";
 
 export type NumericRecipeTarget = {
   id: string;
@@ -156,7 +160,39 @@ const operatorDx7KeysControls: readonly RecipeParameterTarget[] = [
   { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.7 },
 ];
 
+const operatorRhodesKeysControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.006 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.5 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.24 },
+  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.2 },
+  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.22 },
+  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.38 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.58 },
+];
+
+const operatorClavKeysControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.0001 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.24 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.06 },
+  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.045 },
+  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.34 },
+  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.48 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.4 },
+];
+
+const operatorPianoFallbackControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.004 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.48 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.34 },
+  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.2 },
+  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.1 },
+  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.16 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.55 },
+];
+
 const pianoKeysSampleControls = simplePluckEnvelope(0.001, 0.36, 0.45, 0.18);
+const grandPianoSampleControls = simplePluckEnvelope(0.001, 0.3, 0.58, 0.16);
+const feltPianoSampleControls = simplePluckEnvelope(0.012, 0.42, 0.38, 0.24);
 
 const driftWarmPadControls: readonly RecipeParameterTarget[] = [
   { id: "amp_attack", kind: "numeric", aliases: ["Env 1 Attack"], normalizedValue: 0.18 },
@@ -689,7 +725,33 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "one_shot",
     sampleEvidenceGroups: [["piano", "grand piano", "acoustic piano", "upright piano"]],
     fallbackInstrument: "Operator",
-    targets: { Simpler: pianoKeysSampleControls, Operator: operatorDx7KeysControls },
+    targets: { Simpler: pianoKeysSampleControls, Operator: operatorPianoFallbackControls },
+  },
+  keys_piano_grand_sample: {
+    id: "keys_piano_grand_sample",
+    role: "piano",
+    label: "Bright grand / acoustic Piano one-shot sample",
+    genreTerms: ["grand piano", "acoustic piano", "concert piano", "明亮钢琴", "三角钢琴"],
+    source: "sample",
+    sampleQueries: ["grand piano", "concert grand piano", "acoustic piano"],
+    samplePlayback: "one_shot",
+    sampleEvidenceGroups: [["grand piano", "grand", "concert piano", "acoustic piano"]],
+    sampleExcludeEvidence: ["felt", "upright", "toy", "electric", "rhodes"],
+    fallbackInstrument: "Operator",
+    targets: { Simpler: grandPianoSampleControls, Operator: operatorPianoFallbackControls },
+  },
+  keys_piano_felt_sample: {
+    id: "keys_piano_felt_sample",
+    role: "piano",
+    label: "Soft felt / upright Piano one-shot sample",
+    genreTerms: ["felt piano", "upright piano", "soft piano", "warm piano", "毡音钢琴", "立式钢琴", "柔和钢琴"],
+    source: "sample",
+    sampleQueries: ["felt piano", "upright piano", "soft piano"],
+    samplePlayback: "one_shot",
+    sampleEvidenceGroups: [["piano"], ["felt", "upright", "soft", "warm"]],
+    sampleExcludeEvidence: ["grand", "concert", "electric", "rhodes"],
+    fallbackInstrument: "Operator",
+    targets: { Simpler: feltPianoSampleControls, Operator: operatorPianoFallbackControls },
   },
   keys_dx7_synth: {
     id: "keys_dx7_synth",
@@ -701,6 +763,28 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     instrument: "Operator",
     fallbackInstrument: "Operator",
     targets: { Operator: operatorDx7KeysControls },
+  },
+  keys_rhodes_synth: {
+    id: "keys_rhodes_synth",
+    role: "keys",
+    label: "Rhodes-style tine electric Keys approximation",
+    genreTerms: ["Rhodes", "tine electric piano", "electric piano", "neo-soul", "电钢琴", "罗兹电钢"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Operator",
+    fallbackInstrument: "Operator",
+    targets: { Operator: operatorRhodesKeysControls },
+  },
+  keys_clav_synth: {
+    id: "keys_clav_synth",
+    role: "keys",
+    label: "Clavinet-style percussive Keys approximation",
+    genreTerms: ["Clavinet", "clav", "funk", "percussive keys", "击弦键盘", "克拉维键盘"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Operator",
+    fallbackInstrument: "Operator",
+    targets: { Operator: operatorClavKeysControls },
   },
 };
 

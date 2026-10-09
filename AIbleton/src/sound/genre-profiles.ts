@@ -44,7 +44,10 @@ export const GENRE_INSTRUMENT_PROFILES = {
       { role: "Lead", choices: [{ instrument: "clean rounded synth lead", recipe: "lead_clean" }] },
       { role: "Pluck", choices: [{ instrument: "bell-like synth pluck", recipe: "pluck_bell" }] },
       { role: "Guitar", choices: [{ instrument: "clean electric guitar", recipe: "guitar_clean" }] },
-      { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
+      { role: "Piano", choices: [
+        { instrument: "piano", recipe: "keys_piano_sample" },
+        { instrument: "soft felt/upright piano", recipe: "keys_piano_felt_sample", when: "a soft or intimate arrangement" },
+      ] },
       { role: "Keys", choices: [{ instrument: "FM keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation, not a general synth-keyboard preset" }] },
     ],
     subgenres: [
@@ -138,7 +141,7 @@ export const GENRE_INSTRUMENT_PROFILES = {
     parts: [
       { role: "Bass", choices: [{ instrument: "fingerstyle electric bass", recipe: "funk_bass" }] },
       { role: "Guitar", choices: [{ instrument: "muted funk guitar", recipe: "guitar_muted" }] },
-      { role: "Keys", choices: [{ instrument: "FM keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation, not a Clavinet preset" }] },
+      { role: "Keys", choices: [{ instrument: "Clavinet-style percussive keyboard", recipe: "keys_clav_synth", capabilityNote: "Operator approximation, not a Clavinet preset" }] },
       { role: "Lead", choices: [{ instrument: "analog synth lead", recipe: "lead_analog" }] },
       { role: "Melody", choices: [{ instrument: "analog synth lead", recipe: "lead_analog" }] },
     ],
@@ -171,7 +174,7 @@ export const GENRE_INSTRUMENT_PROFILES = {
           { instrument: "808 or sub bass", recipe: "hiphop_808_bass", when: "a modern/trap production" },
         ],
       },
-      { role: "Keys", choices: [{ instrument: "FM/electric keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation; not a guaranteed Rhodes or Clavinet" }] },
+      { role: "Keys", choices: [{ instrument: "Rhodes-style tine electric keyboard", recipe: "keys_rhodes_synth", capabilityNote: "Operator approximation, not a sampled Rhodes" }] },
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
       { role: "Guitar", choices: [{ instrument: "clean electric guitar", recipe: "guitar_clean" }] },
       { role: "Pad", choices: [{ instrument: "warm pad", recipe: "pad_warm" }] },
