@@ -81,7 +81,7 @@ test("selects a stable instrument by musical role when none is named", () => {
 
 test("chooses genre-aware timbres for new melodic parts without replacing named or existing sources", () => {
   const prompt = systemPromptFor("en");
-  assert.match(prompt, /for any new part, prefer the genre\/substyle in the current request, then one relevant artist-memory genre, then clearly identifiable current musical context/);
+  assert.match(prompt, /for any new part, prefer the genre\/subgenre in the current request, then inspect the current Set context[\s\S]*use relevant artist memory only as a preference/i);
   assert.match(prompt, /For genres in the profile catalog, follow its Lead\/Melody mapping/);
   assert.match(prompt, /Pop aliases:.*Lead → clean rounded synth lead \(lead_clean/);
   assert.match(prompt, /Funk aliases:.*Lead → analog synth lead \(lead_analog/);
