@@ -29,7 +29,9 @@ export type SoundRecipeId =
   | "pluck_bell_sample"
   | "lead_clean_sample"
   | "lead_analog_sample"
-  | "lead_aggressive_sample";
+  | "lead_aggressive_sample"
+  | "keys_piano_sample"
+  | "keys_dx7_synth";
 
 export type NumericRecipeTarget = {
   id: string;
@@ -49,7 +51,7 @@ export type RecipeParameterTarget = NumericRecipeTarget | EnumRecipeTarget;
 
 export type SoundRecipe = {
   id: SoundRecipeId;
-  role: "bass" | "pad" | "pluck" | "lead";
+  role: "bass" | "pad" | "pluck" | "lead" | "keys";
   label: string;
   genreTerms: readonly string[];
   source: "sample" | "synth" | "contextual";
@@ -137,6 +139,18 @@ const operatorBellPluckControls: readonly RecipeParameterTarget[] = [
   { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.42 },
   { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.55 },
 ];
+
+const operatorDx7KeysControls: readonly RecipeParameterTarget[] = [
+  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.0002 },
+  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.42 },
+  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.28 },
+  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.12 },
+  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.18 },
+  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.28 },
+  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.7 },
+];
+
+const pianoKeysSampleControls = simplePluckEnvelope(0.001, 0.36, 0.45, 0.18);
 
 const driftWarmPadControls: readonly RecipeParameterTarget[] = [
   { id: "amp_attack", kind: "numeric", aliases: ["Env 1 Attack"], normalizedValue: 0.18 },
@@ -596,6 +610,29 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleEvidenceGroups: [["lead", "synth lead", "mono lead"], ["aggressive", "distorted", "dirty", "hard", "gritty"]],
     fallbackInstrument: "Wavetable",
     targets: { Simpler: aggressiveLeadSampleControls, Wavetable: wavetableAggressiveLeadControls },
+  },
+  keys_piano_sample: {
+    id: "keys_piano_sample",
+    role: "keys",
+    label: "Piano Keys one-shot sample",
+    genreTerms: ["keys", "piano", "pop", "钢琴", "键盘"],
+    source: "sample",
+    sampleQueries: ["grand piano", "acoustic piano", "piano keys"],
+    samplePlayback: "one_shot",
+    sampleEvidenceGroups: [["piano", "grand piano", "acoustic piano", "upright piano"]],
+    fallbackInstrument: "Operator",
+    targets: { Simpler: pianoKeysSampleControls, Operator: operatorDx7KeysControls },
+  },
+  keys_dx7_synth: {
+    id: "keys_dx7_synth",
+    role: "keys",
+    label: "DX7-style FM / electric Keys approximation",
+    genreTerms: ["DX7", "FM", "electric piano", "电钢琴", "电钢"],
+    source: "synth",
+    sampleQueries: [],
+    instrument: "Operator",
+    fallbackInstrument: "Operator",
+    targets: { Operator: operatorDx7KeysControls },
   },
 };
 
