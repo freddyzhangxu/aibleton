@@ -655,7 +655,7 @@ export const TOOLS = [
   {
     name: "apply_sound_recipe",
     description:
-      "Apply one of AIbleton's reusable Bass, Pad, Pluck, or Lead sound recipes to a MIDI track. Current Bass recipes and the guitar/kalimba Pluck recipes may search local samples and use their declared built-in synth fallback; synth Pluck, Pad, and Lead recipes use their specified built-in device, and Pad/Lead never search samples. The tool inspects Live's current parameters, applies only exact supported controls, and reports the source and skipped controls. It changes only the target track's primary sound source; it does not edit clips, mixer settings, effects, or other tracks. Use only when the sound style and target track are clear.",
+      "Apply one of AIbleton's reusable Bass, Pad, Pluck, or Lead sound recipes to a MIDI track. Use sample recipes only when the user explicitly asks for samples; keep synth recipes as the default. Bass recipes and the existing guitar/kalimba Pluck recipes may search local samples and use their declared built-in synth fallback. New Pluck/Lead sample recipes use non-loop samples in Simpler; Pad sample recipes require an explicitly loop-marked file plus exact Simpler Mode=Classic and Loop=On controls. If all sample queries fail, use the declared synth fallback and report it. If Pad loop controls are unavailable, refuse the change without replacing the current source. New sample source changes stage and configure Simpler before removing the current primary instrument. The tool applies only exact supported controls, reports skipped controls, and changes no clips, mixer settings, effects, or other tracks. Use only when the sound style and target track are clear.",
     input_schema: {
       type: "object",
       properties: {
