@@ -51,7 +51,7 @@ export type RecipeParameterTarget = NumericRecipeTarget | EnumRecipeTarget;
 
 export type SoundRecipe = {
   id: SoundRecipeId;
-  role: "bass" | "pad" | "pluck" | "lead" | "keys";
+  role: "bass" | "pad" | "pluck" | "lead" | "keys" | "piano";
   label: string;
   genreTerms: readonly string[];
   source: "sample" | "synth" | "contextual";
@@ -613,7 +613,7 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
   },
   keys_piano_sample: {
     id: "keys_piano_sample",
-    role: "keys",
+    role: "piano",
     label: "Piano Keys one-shot sample",
     genreTerms: ["keys", "piano", "pop", "钢琴", "键盘"],
     source: "sample",

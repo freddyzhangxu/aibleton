@@ -58,6 +58,16 @@ test("documents actual creation result fields so later plan steps can reference 
   assert.match(createMidi.description, /step-id#\/created/);
 });
 
+test("describes Piano as a specific instrument within the broader Keys family", () => {
+  const recipeTool = TOOLS.find((tool) => tool.name === "apply_sound_recipe");
+  assert.ok(recipeTool);
+  assert.match(recipeTool.description, /Piano is a specific instrument within the Keys family/);
+  assert.match(recipeTool.description, /Generic Keys does not default to piano samples/);
+  assert.match(recipeTool.description, /explicit Piano request or a genre profile that names Piano/);
+  assert.doesNotMatch(recipeTool.description, /Generic Keys defaults to keys_piano_sample/);
+  assert.match(recipeTool.description, /Use the genre profile in system instructions to select only supported recipe ids/);
+});
+
 test("simple edits advertise their reads and writes without the full tool catalog", () => {
   assert.deepEqual(activeTools("tempo").map((tool) => tool.name).sort(), ["get_song_overview", "set_tempo"]);
   const mixer = activeTools("mixer").map((tool) => tool.name);

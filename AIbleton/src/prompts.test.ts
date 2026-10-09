@@ -78,3 +78,46 @@ test("selects a stable instrument by musical role when none is named", () => {
   }
   assert.match(prompt, /ask the user when the musical role is unclear/i);
 });
+
+test("chooses genre-aware timbres for new melodic parts without replacing named or existing sources", () => {
+  const prompt = systemPromptFor("en");
+  assert.match(prompt, /for any new part, prefer the genre\/substyle in the current request, then one relevant artist-memory genre, then clearly identifiable current musical context/);
+  assert.match(prompt, /For genres in the profile catalog, follow its Lead\/Melody mapping/);
+  assert.match(prompt, /Pop aliases:.*Lead → clean rounded synth lead \(lead_clean/);
+  assert.match(prompt, /Funk aliases:.*Lead → analog synth lead \(lead_analog/);
+  assert.match(prompt, /for unprofiled House\/Techno with no timbre detail, use aggressive/);
+  assert.match(prompt, /Ambient → airy/);
+  assert.match(prompt, /An explicitly named instrument or timbre takes precedence/);
+  assert.match(prompt, /never replace an existing instrument implicitly/);
+  assert.match(prompt, /For generic instrument insertion without sound-design intent, use the genre-aware rule first; when none resolves, use these role defaults/);
+});
+
+test("maps Rock, Jazz, and Funk parts to available recipes and handles gaps explicitly", () => {
+  const prompt = systemPromptFor("en");
+  assert.match(prompt, /Rock aliases:.*Core parts: Bass → electric bass \(rock_bass, sample; fallback Operator\).*Guitar → guitar \(pluck_guitar.*Optional parts: Piano → piano \(keys_piano_sample/);
+  assert.match(prompt, /Jazz aliases:.*Core parts: Bass → upright bass \(jazz_bass/);
+  assert.match(prompt, /Jazz Fusion overrides: Bass → electric bass \(jazz_fusion_bass/);
+  assert.match(prompt, /Jazz aliases:.*Optional parts: Guitar → guitar \(pluck_guitar.*Pluck → warm synth pluck \(pluck_warm/);
+  assert.match(prompt, /Funk aliases:.*Core parts: Bass → fingerstyle electric bass \(funk_bass/);
+  assert.match(prompt, /Funk aliases:.*Optional parts: Guitar → guitar \(pluck_guitar.*Keys → FM keyboard \(keys_dx7_synth.*Lead → analog synth lead \(lead_analog.*Melody → analog synth lead \(lead_analog/);
+  assert.match(prompt, /Funk Pick aliases: picked funk, funk pick, pick bass funk\. Funk Pick overrides: Bass → picked electric bass \(funk_pick_bass/);
+  assert.match(prompt, /DX7-style approximation, not a Clavinet preset/);
+  assert.match(prompt, /general guitar sample; not guaranteed to be a genre-specific/);
+  assert.match(prompt, /For a complete genre-led arrangement, choose a compact, conventional subset of core and optional parts/);
+  assert.match(prompt, /For the remaining role and genre pairs,[\s\S]*use the role default when defined/);
+  assert.match(prompt, /Use the profile catalog as the single source of genre-to-recipe mappings/i);
+  assert.match(prompt, /When a profile specifies source_preference, pass that value to apply_sound_recipe/);
+  assert.doesNotMatch(prompt, /For pop, an explicit pop-rock request uses rock_bass/);
+  assert.doesNotMatch(prompt, /For jazz, use jazz_bass by default/);
+  assert.doesNotMatch(prompt, /If genre only, House\/Techno → bright, Jazz\/Bossa → warm, Pop\/Cinematic → bell/);
+  assert.doesNotMatch(prompt, /With genre only, Pop → clean, Funk\/Disco → analog, House\/Techno → aggressive/);
+});
+
+test("separates Piano samples from the broader Keys family", () => {
+  const prompt = systemPromptFor("en");
+  assert.match(prompt, /Piano is a specific instrument within the Keys family/);
+  assert.match(prompt, /only an explicit Piano request or a genre profile that names Piano selects keys_piano_sample/);
+  assert.match(prompt, /Generic Keys does not default to piano samples/);
+  assert.match(prompt, /DX7, FM, electric piano, or Rhodes selects keys_dx7_synth/);
+  assert.doesNotMatch(prompt, /Generic Keys or Pop Keys defaults to keys_piano_sample/);
+});
