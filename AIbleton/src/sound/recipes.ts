@@ -20,7 +20,16 @@ export type SoundRecipeId =
   | "pad_dark"
   | "lead_clean"
   | "lead_analog"
-  | "lead_aggressive";
+  | "lead_aggressive"
+  | "pad_warm_sample"
+  | "pad_airy_sample"
+  | "pad_dark_sample"
+  | "pluck_bright_sample"
+  | "pluck_warm_sample"
+  | "pluck_bell_sample"
+  | "lead_clean_sample"
+  | "lead_analog_sample"
+  | "lead_aggressive_sample";
 
 export type NumericRecipeTarget = {
   id: string;
@@ -47,6 +56,10 @@ export type SoundRecipe = {
   sampleQueries: readonly string[];
   /** Filename evidence required before a local sample is accepted. */
   sampleEvidence?: readonly string[];
+  /** Sample playback intent for new role-specific sample recipes. */
+  samplePlayback?: "loop" | "one_shot";
+  /** Every group must have one matching term in the filename stem. */
+  sampleEvidenceGroups?: readonly (readonly string[])[];
   instrument?: string;
   fallbackInstrument: string;
   targets: Readonly<Record<string, readonly RecipeParameterTarget[]>>;
@@ -179,6 +192,33 @@ const wavetableAggressiveLeadControls: readonly RecipeParameterTarget[] = [
   { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.82 },
   { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.14 },
 ];
+
+const padLoopPlaybackControls: readonly RecipeParameterTarget[] = [
+  { id: "playback_mode", kind: "enum", aliases: ["Mode", "Playback Mode"], optionAliases: ["Classic"] },
+  { id: "loop", kind: "enum", aliases: ["Loop"], optionAliases: ["On"] },
+];
+
+const padWarmSampleControls: readonly RecipeParameterTarget[] = [
+  ...padLoopPlaybackControls,
+  ...simplePluckEnvelope(0.12, 0.68, 0.78, 0.62),
+];
+
+const padAirySampleControls: readonly RecipeParameterTarget[] = [
+  ...padLoopPlaybackControls,
+  ...simplePluckEnvelope(0.2, 0.62, 0.72, 0.78),
+];
+
+const padDarkSampleControls: readonly RecipeParameterTarget[] = [
+  ...padLoopPlaybackControls,
+  ...simplePluckEnvelope(0.16, 0.62, 0.64, 0.7),
+];
+
+const brightPluckSampleControls = simplePluckEnvelope(0.0005, 0.22, 0.08, 0.04);
+const warmPluckSampleControls = simplePluckEnvelope(0.002, 0.3, 0.16, 0.08);
+const bellPluckSampleControls = simplePluckEnvelope(0.0001, 0.18, 0.02, 0.04);
+const cleanLeadSampleControls = simplePluckEnvelope(0.006, 0.28, 0.58, 0.1);
+const analogLeadSampleControls = simplePluckEnvelope(0.012, 0.35, 0.64, 0.15);
+const aggressiveLeadSampleControls = simplePluckEnvelope(0.0005, 0.28, 0.48, 0.04);
 
 export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
   rock_bass: {
@@ -448,6 +488,114 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     instrument: "Wavetable",
     fallbackInstrument: "Wavetable",
     targets: { Wavetable: wavetableAggressiveLeadControls },
+  },
+  pad_warm_sample: {
+    id: "pad_warm_sample",
+    role: "pad",
+    label: "Warm soft looped Pad sample",
+    genreTerms: ["warm", "soft", "mellow", "house", "techno", "温暖", "柔和", "铺底"],
+    source: "sample",
+    sampleQueries: ["warm pad loop", "soft pad loop", "analog pad loop"],
+    samplePlayback: "loop",
+    sampleEvidenceGroups: [["pad", "atmosphere", "texture", "drone"], ["warm", "soft", "mellow", "analog"]],
+    fallbackInstrument: "Drift",
+    targets: { Simpler: padWarmSampleControls, Drift: driftWarmPadControls },
+  },
+  pad_airy_sample: {
+    id: "pad_airy_sample",
+    role: "pad",
+    label: "Airy shimmering looped Pad sample",
+    genreTerms: ["airy", "shimmering", "bright", "ambient", "空灵", "闪耀", "明亮", "氛围"],
+    source: "sample",
+    sampleQueries: ["airy pad loop", "shimmering pad loop", "ambient pad loop"],
+    samplePlayback: "loop",
+    sampleEvidenceGroups: [["pad", "atmosphere", "texture"], ["airy", "shimmer", "shimmering", "bright"]],
+    fallbackInstrument: "Wavetable",
+    targets: { Simpler: padAirySampleControls, Wavetable: wavetableAiryPadControls },
+  },
+  pad_dark_sample: {
+    id: "pad_dark_sample",
+    role: "pad",
+    label: "Dark cinematic looped Pad sample",
+    genreTerms: ["dark", "cinematic", "drone", "暗色", "电影感", "持续音"],
+    source: "sample",
+    sampleQueries: ["dark pad loop", "cinematic pad loop", "dark drone loop"],
+    samplePlayback: "loop",
+    sampleEvidenceGroups: [["pad", "drone", "texture"], ["dark", "cinematic", "moody"]],
+    fallbackInstrument: "Operator",
+    targets: { Simpler: padDarkSampleControls, Operator: operatorDarkPadControls },
+  },
+  pluck_bright_sample: {
+    id: "pluck_bright_sample",
+    role: "pluck",
+    label: "Bright Pluck or mallet one-shot sample",
+    genreTerms: ["bright", "short", "punchy", "house", "techno", "明亮", "短促", "拨弦"],
+    source: "sample",
+    sampleQueries: ["bright pluck", "bright mallet", "bright marimba"],
+    samplePlayback: "one_shot",
+    sampleEvidenceGroups: [["pluck", "mallet", "marimba", "glockenspiel", "kalimba"], ["bright", "crisp", "punchy", "bell"]],
+    fallbackInstrument: "Wavetable",
+    targets: { Simpler: brightPluckSampleControls, Wavetable: wavetableBrightPluckControls },
+  },
+  pluck_warm_sample: {
+    id: "pluck_warm_sample",
+    role: "pluck",
+    label: "Warm Pluck or soft guitar one-shot sample",
+    genreTerms: ["warm", "soft", "mellow", "jazz", "bossa", "温暖", "柔和", "吉他"],
+    source: "sample",
+    sampleQueries: ["warm pluck", "soft guitar pluck", "warm kalimba"],
+    samplePlayback: "one_shot",
+    sampleEvidenceGroups: [["pluck", "guitar", "nylon", "kalimba", "mbira"], ["warm", "soft", "mellow", "nylon"]],
+    fallbackInstrument: "Drift",
+    targets: { Simpler: warmPluckSampleControls, Drift: driftWarmPluckControls },
+  },
+  pluck_bell_sample: {
+    id: "pluck_bell_sample",
+    role: "pluck",
+    label: "Bell-like Pluck or metallic mallet one-shot sample",
+    genreTerms: ["bell", "metallic", "fm", "pop", "cinematic", "铃声感", "金属感"],
+    source: "sample",
+    sampleQueries: ["bell pluck", "metallic mallet", "bell kalimba"],
+    samplePlayback: "one_shot",
+    sampleEvidenceGroups: [["pluck", "kalimba", "mallet", "bell", "glockenspiel"], ["bell", "metallic", "tine", "bright"]],
+    fallbackInstrument: "Operator",
+    targets: { Simpler: bellPluckSampleControls, Operator: operatorBellPluckControls },
+  },
+  lead_clean_sample: {
+    id: "lead_clean_sample",
+    role: "lead",
+    label: "Clean synth or keyboard Lead one-shot sample",
+    genreTerms: ["clean", "clear", "rounded", "pop", "干净", "清晰", "圆润"],
+    source: "sample",
+    sampleQueries: ["clean synth lead", "clear synth lead", "clean keyboard lead"],
+    samplePlayback: "one_shot",
+    sampleEvidenceGroups: [["lead", "synth lead", "mono lead", "keyboard lead"], ["clean", "clear", "rounded", "pristine"]],
+    fallbackInstrument: "Drift",
+    targets: { Simpler: cleanLeadSampleControls, Drift: driftCleanLeadControls },
+  },
+  lead_analog_sample: {
+    id: "lead_analog_sample",
+    role: "lead",
+    label: "Warm analog Lead one-shot sample",
+    genreTerms: ["analog", "warm", "vintage", "funk", "disco", "模拟", "温暖", "复古"],
+    source: "sample",
+    sampleQueries: ["analog synth lead", "warm analog lead", "vintage synth lead"],
+    samplePlayback: "one_shot",
+    sampleEvidenceGroups: [["lead", "synth lead", "mono lead"], ["analog", "vintage", "warm", "retro"]],
+    fallbackInstrument: "Drift",
+    targets: { Simpler: analogLeadSampleControls, Drift: driftAnalogLeadControls },
+  },
+  lead_aggressive_sample: {
+    id: "lead_aggressive_sample",
+    role: "lead",
+    label: "Aggressive distorted Lead one-shot sample",
+    genreTerms: ["aggressive", "bright", "punchy", "house", "techno", "强劲", "明亮"],
+    source: "sample",
+    sampleQueries: ["aggressive synth lead", "distorted synth lead", "bright mono lead"],
+    samplePlayback: "one_shot",
+    sampleEvidenceGroups: [["lead", "synth lead", "mono lead"], ["aggressive", "distorted", "dirty", "hard", "gritty"]],
+    fallbackInstrument: "Wavetable",
+    targets: { Simpler: aggressiveLeadSampleControls, Wavetable: wavetableAggressiveLeadControls },
   },
 };
 
