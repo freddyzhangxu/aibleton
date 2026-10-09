@@ -79,7 +79,7 @@ export function listenHintFor(
   switch (name) {
     case "apply_sound_recipe": {
       const failed = Array.isArray(result.failed) && result.failed.length > 0;
-      if (result.executed === false || result.replacement_not_applied === true || failed) return undefined;
+      if (result.executed === false || result.replacement_not_applied === true || result.sample_setup_failed === true || result.partial_change === true || failed) return undefined;
       return finish(one(result), {});
     }
     case "write_midi_clip":
