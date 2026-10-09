@@ -77,10 +77,19 @@ function contextualSource(
   return current?.device instanceof Simpler ? "sample" : "synth";
 }
 
+const LEGACY_UNSUITABLE_SAMPLE = /(?:^|[^a-z0-9])(?:kick|snare|clap|hi[ -]?hat|hihat|cymbal|tom|rim|drum|percussion|perc|loop|fill)(?:$|[^a-z0-9])/i;
+const DRUM_OR_FILL_SAMPLE = /(?:^|[^a-z0-9])(?:kick|snare|clap|hi[ -]?hat|hihat|cymbal|tom|rim|drum|percussion|perc|fill)(?:$|[^a-z0-9])/i;
+const LOOP_SAMPLE_MARKER = /(?:^|[^a-z0-9])(?:loop|looped|looping)(?:$|[^a-z0-9])/i;
+const ONE_SHOT_UNSUITABLE_MARKER = /(?:^|[^a-z0-9])(?:loop|looped|looping|phrase)(?:$|[^a-z0-9])/i;
+
 function isSuitableSample(recipe: SoundRecipe, filePath: string): boolean {
   const fileName = basename(filePath).replace(/\.[^.]+$/, "").normalize("NFKC").toLocaleLowerCase();
-  if (/(?:^|[^a-z0-9])(?:kick|snare|clap|hi[ -]?hat|hihat|cymbal|tom|rim|drum|percussion|perc|loop|fill)(?:$|[^a-z0-9])/i.test(fileName)) {
-    return false;
+  if (recipe.samplePlayback === undefined) {
+    if (LEGACY_UNSUITABLE_SAMPLE.test(fileName)) return false;
+  } else {
+    if (DRUM_OR_FILL_SAMPLE.test(fileName)) return false;
+    if (recipe.samplePlayback === "loop" && !LOOP_SAMPLE_MARKER.test(fileName)) return false;
+    if (recipe.samplePlayback === "one_shot" && ONE_SHOT_UNSUITABLE_MARKER.test(fileName)) return false;
   }
   const compact = fileName.replace(/[^a-z0-9]/g, "");
   if (recipe.role === "bass") {
@@ -89,8 +98,13 @@ function isSuitableSample(recipe: SoundRecipe, filePath: string): boolean {
     if (recipe.id === "hiphop_808_bass") return compact.includes("808") || compact.includes("sub");
     return compact.includes("bass");
   }
+  const hasEvidence = (term: string): boolean =>
+    compact.includes(term.normalize("NFKC").replace(/[^a-z0-9]/gi, "").toLocaleLowerCase());
+  if (recipe.sampleEvidenceGroups?.length) {
+    return recipe.sampleEvidenceGroups.every((group) => group.some(hasEvidence));
+  }
   const evidence = recipe.sampleEvidence ?? [];
-  return evidence.some((term) => compact.includes(term.replace(/[^a-z0-9]/gi, "").toLocaleLowerCase()));
+  return evidence.some(hasEvidence);
 }
 
 function findSample(recipe: SoundRecipe): string | undefined {
