@@ -4,7 +4,7 @@
 
 **Goal:** Add nine reusable sample recipes across Pad, Pluck, and Lead, with looped Pad playback, pitched one-shot Pluck/Lead playback, explicit source routing, and failure-safe replacement.
 
-**Architecture:** Extend the shared recipe catalog with playback intent and grouped filename evidence. Keep the existing sample search and exact parameter matching; stage a new Simpler and complete required setup before replacing the current primary source. Route to sample recipes only on explicit sample intent, preserving the current synth defaults and named guitar/kalimba Pluck routes.
+**Architecture:** Extend the shared recipe catalog with playback intent and grouped filename evidence. Keep the existing sample search and exact parameter matching; after sample search/import and explicit authorization, remove the current primary source, insert Simpler at its former position, configure playback, then load the sample. Report source deletion and Live Undo guidance if a post-deletion step fails. Route to sample recipes only on explicit sample intent, preserving current synth defaults and named guitar/kalimba Pluck routes.
 
 **Tech Stack:** TypeScript, Ableton Extensions SDK, shared sound recipe catalog, sample metadata search, Simpler device parameters, prompt generation, source authorization, and postcondition verification.
 
@@ -18,7 +18,7 @@
 - Pad sample recipes use loop-marked files and require exact Simpler `Mode = Classic` and `Loop = On` controls.
 - Pluck/Lead sample recipes reject loop-marked files and use a newly staged Simpler in its default non-loop playback state.
 - New recipes use exact aliases, fixed built-in synth fallbacks, and grouped filename evidence; sample suitability checks the filename stem rather than parent folders.
-- Pad loop-control failure refuses the change without falling back to a synth. A missing suitable file may use the declared synth fallback with a clear note.
+- Pad loop-control failure after source deletion reports the removed source and Undo guidance without falling back to a synth. A missing suitable file may use the declared synth fallback with a clear note.
 - Preserve current MIDI-only and primary-source preflight, target scope, `sound_source` authorization, YOLO behavior, effects, clips, mixer state, and Undo recovery.
 - Do not add or run automated tests unless the user explicitly asks for tests or implementation verification. Use production build, diff checks, and source review.
 
@@ -26,9 +26,9 @@
 
 - A file with `loop` in a parent folder but not its filename stem must not be accepted as a Pad loop; inspect evidence matching in Task 2.
 - New one-shot Pluck/Lead recipes must reject loop/phrase files while legacy sample Pluck recipes retain their existing matching behavior; inspect Task 2 routing.
-- Pad mode/Loop aliases must be found uniquely before importing the sample; inspect Task 3 preflight and cleanup.
-- A matched sample on a MIDI track with an existing primary instrument must be refused without changing that source; inspect the guard in Task 3.
-- Sample load/envelope failure on a track without a primary instrument must clean up the inserted Simpler; inspect Task 3 cleanup reporting.
+- Pad mode/Loop aliases must be found uniquely after source deletion; inspect Task 3 error reporting and Undo guidance.
+- A matched sample on a MIDI track with an existing primary instrument may delete only that source after `sound_source` authorization; inspect Task 3 target resolution and force replacement.
+- Sample load/envelope failure after source deletion must report `source_deleted` and not claim the old source remains; inspect Task 3 result fields.
 - No sample intent must continue to choose synth profiles; an explicit sample request with no matching file must use only the declared fallback and report it; inspect Task 4 prompt and result text.
 
 ---
@@ -36,7 +36,7 @@
 ## File Map
 
 - Modify `AIbleton/src/sound/recipes.ts` — add the playback mode/evidence group metadata, nine sample IDs, Simpler targets, sample queries, and declared fallbacks.
-- Modify `AIbleton/src/tools/soundrecipes.ts` — apply grouped filename evidence/playback checks and safely load new sample recipes only when the target has no primary instrument; keep the legacy sample path for existing recipes.
+- Modify `AIbleton/src/tools/soundrecipes.ts` — apply grouped filename evidence/playback checks and delete-first application for new sample recipes; keep the legacy sample path for existing recipes.
 - Modify `AIbleton/src/prompts.ts` — derive sample recipe groups from the catalog and route explicit sample requests without changing synth defaults or named guitar/kalimba routing.
 - Modify `AIbleton/src/chat/deleteauth.ts` — recognize sample intent with Pad/Pluck/Lead role/timbre while granting only existing `sound_source` authorization.
 - Modify `AIbleton/src/tools/definitions.ts` — document sample playback modes, search fallback, and required Pad loop support.
@@ -107,7 +107,7 @@ git add AIbleton/src/tools/soundrecipes.ts
 git commit -m "feat: filter samples by role and playback"
 ```
 
-### Task 3: Apply sample recipes only when no primary instrument exists
+### Task 3: Replace the primary source before loading a matched sample
 
 **Files:**
 
@@ -119,21 +119,20 @@ git commit -m "feat: filter samples by role and playback"
 - `applySoundRecipe(context, input)` keeps its existing input shape: `track_index`, `track_name`, `recipe_id: SoundRecipeId`, and optional `source_preference` for `pop_bass` only.
 - Successful new sample results include `role`, `recipe`, `track`, `source.kind`, `source.device`, the sample `source.file` and `source.playback_mode` when a sample loaded, `applied`, `skipped`, and existing `listen_hint`. Synth fallback results retain `source.kind: "synth"` and the fallback note.
 
-- [ ] **Step 1: Keep legacy sample recipes on their existing path.** Branch into the new helper only for recipes that declare `samplePlayback`; leave Bass, `pluck_guitar`, and `pluck_kalimba` source replacement and fallback unchanged.
-- [ ] **Step 2: Refuse occupied primary-source tracks before mutation.** When a suitable sample is found for a new playback-mode recipe, if `current` is any primary instrument (including Simpler), return `sample_source_replacement_unsupported: true`, include the current device name, and say to choose a MIDI track with no primary instrument. Do not insert Simpler, import the sample, delete a source, or add a fallback in this case.
-- [ ] **Step 3: Insert Simpler only on a track without a primary instrument.** Use device index 0 so any existing audio effects remain downstream and in order. Record the inserted device handle for cleanup.
-- [ ] **Step 4: Preflight required Pad playback targets before importing the sample.** Match recipe targets against the inserted Simpler parameters. For `samplePlayback: "loop"`, require unique `Mode`/`Playback Mode` with option `Classic` and unique `Loop` with option `On`. If a required target is missing, duplicated, unquantized, or has no matching option, delete the inserted Simpler and return an error.
-- [ ] **Step 5: Apply loop settings before replacing the sample.** Set Mode to Classic before Loop to On. If a setting fails, clean up the inserted device. One-shot recipes use the new Simpler's default non-loop state.
-- [ ] **Step 6: Import and load the selected sample, then set its envelope.** Import into the project only after required Pad playback controls pass preflight. On sample-load failure or a matched-target write failure, remove the inserted Simpler. Missing/ambiguous optional envelope aliases remain reported as skipped.
-- [ ] **Step 7: Handle cleanup failure explicitly.** On cleanup, remove the created-device registry entry when deletion succeeds. If deleting the inserted Simpler after a failed setup also fails, return a partial-state result with device names and Live Undo guidance. Do not retry automatically.
-- [ ] **Step 8: Keep no-match fallback and loop-control failure distinct.** If all sample queries fail or throw, follow the existing declared-synth fallback and note. If Pad loop controls cannot be matched or set, fail closed without synth fallback.
-- [ ] **Step 9: Preserve verification and listen feedback.** Confirm `verify/rules.ts` checks the inserted Simpler source/sample path and applied playback parameters; confirm listen hints are omitted for `sample_setup_failed` or `partial_change`. Keep selection guard behavior unchanged.
-- [ ] **Step 10: Run the production build and diff check.** Run `cd AIbleton/AIbleton && npm run build` and `git diff --check`. Inspect the occupied-source guard and confirm no instrument is inserted beside another primary source.
-- [ ] **Step 11: Commit sample application.**
+- [ ] **Step 1: Keep legacy sample recipes on their existing path.** Branch into delete-first application only for the nine new recipes that declare `samplePlayback`; leave Bass, `pluck_guitar`, and `pluck_kalimba` source replacement and fallback unchanged.
+- [ ] **Step 2: Require source authorization for any existing primary device.** For a new sample recipe, treat an existing Simple with no sample as a source change too. Preserve named-track, selection-scope, Rack, unknown-device, and multi-instrument preflights.
+- [ ] **Step 3: Search and import before deleting.** Keep suitability filtering. If no matching file is found or search fails, use the declared synth fallback through the current source authorization and Undo behavior. For a matching file, call `importIntoProject` before deleting any device; if import fails, leave the track unchanged.
+- [ ] **Step 4: Force primary source replacement for new sample recipes.** Extend `ensurePrimaryDevice` with an optional `forceReplace` parameter defaulting to `false`. When a new `samplePlayback` recipe has a current primary source, call it with `forceReplace: true` so even an existing Simpler is deleted first. Insert the new Simpler at the old source's exact device index. If insertion fails after deletion, return `source_deleted: true`, the removed device name, the insertion error, and Live Undo guidance.
+- [ ] **Step 5: Preflight required Pad playback targets on the inserted Simpler.** For `samplePlayback: "loop"`, require unique `Mode`/`Playback Mode` with option `Classic` and unique `Loop` with option `On`. If a required target is missing, duplicated, unquantized, or has no matching option, set `replacement_not_applied: true`; if an old source was deleted, include `source_deleted: true`, its name, and Live Undo guidance. Do not fall back to synth.
+- [ ] **Step 6: Apply loop settings before loading the sample.** Set Mode to Classic before Loop to On. If a setting fails after source deletion, report the deleted source and Undo guidance. On an originally empty track, remove the newly inserted Simpler if setup fails.
+- [ ] **Step 7: Load the sample and apply the envelope.** Replace the inserted Simpler's sample, then apply the recipe's matched envelope targets. Missing/ambiguous optional aliases remain skipped. On sample-load failure after source deletion, report `source_deleted`, the old source name, failure details, and Undo guidance. If a matched parameter write fails, include it in `failed`, report the source state accurately, and suppress the audition hint.
+- [ ] **Step 8: Preserve verification and listen feedback.** Confirm `verify/rules.ts` checks the inserted Simpler source/sample path and applied playback parameters, including Simpler-to-Simpler replacement by final device count. Confirm listen hints are omitted for `sample_setup_failed`, `source_deleted`, `replacement_not_applied`, `partial_change`, or failed writes. Keep selection guard behavior unchanged.
+- [ ] **Step 9: Run the production build and diff check.** Run `cd AIbleton/AIbleton && npm run build` and `git diff --check`. Inspect operation order: sample search/import, authorized primary deletion, Simple insertion, required playback setup, sample load, envelope application.
+- [ ] **Step 10: Commit sample application.**
 
 ```bash
 git add AIbleton/src/tools/soundrecipes.ts AIbleton/src/verify/rules.ts AIbleton/src/tools/listenhint.ts AIbleton/src/selectionguard.ts
-git commit -m "feat: apply samples on empty instrument tracks"
+git commit -m "feat: apply sample recipes with undo recovery"
 ```
 
 If review confirms `verify/rules.ts`, `tools/listenhint.ts`, or `selectionguard.ts` need no edits, omit those unchanged paths from `git add`.
@@ -156,7 +155,7 @@ If review confirms `verify/rules.ts`, `tools/listenhint.ts`, or `selectionguard.
 - [ ] **Step 2: Add explicit-sample routing.** Explicit sample intent selects a sample counterpart after explicit timbre; explicit guitar/nylon/electric/muted guitar and kalimba/mbira/thumb piano retain `pluck_guitar` and `pluck_kalimba`. Use the approved genre fallbacks for each role. Without explicit sample intent, keep current synth routing.
 - [ ] **Step 3: Add sample-specific source authorization words.** Extend the sample style/mode terms to recognize `sample`, `sampled`, `loop`, `one-shot`, `采样`, and `采样音色`; preserve the action requirement and negated destructive-action guard. Confirm this adds only `sound_source`, never generic `device` deletion.
 - [ ] **Step 4: Generalize `apply_sound_recipe` documentation.** Explain the nine sample profiles, explicit-sample selection, Pad loop requirements, Pluck/Lead non-loop playback, declared synth fallback for missing samples, and refusal when required Pad Loop controls are unsupported.
-- [ ] **Step 5: Verify result wording.** Ensure successful results include `source.playback_mode`; no-match fallback states the selected synth and reason; Pad loop-control failure says no source was replaced. Keep the existing “audition in Live” guidance.
+- [ ] **Step 5: Verify result wording.** Ensure successful results include `source.playback_mode`; no-match fallback states the selected synth and reason; Pad loop-control failure reports `source_deleted` and Undo guidance when deletion occurred. Keep the existing “audition in Live” guidance.
 - [ ] **Step 6: Preserve current Bass, synth Pad/Pluck/Lead, and named guitar/kalimba routing.** Review prompt precedence against the spec and ensure sample recipes never become implicit defaults.
 - [ ] **Step 7: Run the production build, diff check, and final static review.** Run `cd AIbleton/AIbleton && npm run build` and `git diff --check`; review all four tasks against the Review Focus and Completion Criteria. Automated tests remain out of scope unless the user asks for them.
 - [ ] **Step 8: Commit prompt, authorization, and documentation changes.**
@@ -171,8 +170,9 @@ git commit -m "feat: route sampled pad pluck lead recipes"
 - All nine new sample recipes are available via the shared tool schema.
 - The eleven Bass recipes, nine existing synth recipes, and two named-source sample Pluck recipes retain current behavior.
 - Sample queries enforce all required filename evidence groups and playback markers using the filename stem.
-- Pad samples use Simpler Classic + Loop On or fail before replacing the current source.
+- Pad samples use Simpler Classic + Loop On or report source deletion and Undo guidance if the required controls fail after deletion.
 - Pluck/Lead sample recipes reject loop/phrase candidates and use a new Simpler with its default non-loop playback state.
-- When a matching new sample recipe is selected, the target track must have no primary instrument; occupied tracks are refused before mutation.
+- A matching new sample recipe on an occupied track requires explicit `sound_source` authorization and removes only the primary instrument before inserting Simpler.
+- Any failure after source deletion reports the deleted source and Live Undo recovery guidance.
 - Explicit sample intent is required for the new sample profiles; missing samples use the declared synth fallback with a clear note.
 - `npm run build` succeeds and `git diff --check` reports no whitespace errors.

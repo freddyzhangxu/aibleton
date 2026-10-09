@@ -19,16 +19,16 @@ pitched one-shots in Simpler.
   and playback type. Pad accepts explicitly loop-marked files; Pluck and Lead
   sample profiles reject files marked as loops.
 - A Pad recipe sets Simpler to Classic playback with Loop enabled. If the
-  required controls are missing, ambiguous, or unsupported, the action refuses
-  before replacing the current source.
+  required controls are missing, ambiguous, or unsupported after source
+  replacement, report that the old source was removed and give Live Undo
+  recovery guidance.
 - When a compatible sample cannot be found, the recipe may fall back to its
   declared built-in synth and must tell the user. Unsupported loop controls do
   not fall back to a synth.
-- Applying a sample to a named/selected MIDI track with no primary instrument
-  leaves its effects, clips, mixer state, and other tracks unchanged. When a
-  suitable sample exists and the target has a primary instrument, refuse the
-  sample recipe without changing that source. Existing Bass and legacy Pluck
-  source replacement behavior remains unchanged.
+- Applying a sample recipe changes only the primary instrument on the
+  named/selected MIDI track. Effects, clips, mixer state, other tracks, and
+  Rack contents stay unchanged. Existing Bass and legacy Pluck source
+  replacement behavior remains unchanged.
 - Results report the selected source, playback mode, applied/skipped controls,
   and the existing listen hint. AIbleton does not claim to have listened
   through the instrument device chain.
@@ -42,8 +42,9 @@ pitched one-shots in Simpler.
   synth fallbacks.
 - Preserve current sample search ranking, resource import, track resolution,
   target scope, `sound_source` authorization, YOLO behavior, verification, and
-  Undo messaging. New sample recipes never replace an existing primary
-  instrument when a matching sample is available.
+  Undo messaging. New sample recipes use the existing delete-first primary
+  source replacement behavior; failures after deletion report the removed
+  source and Live Undo recovery guidance.
 
 ## Scope
 
@@ -57,8 +58,8 @@ pitched one-shots in Simpler.
 - Add recipe metadata that declares sample playback intent (`loop` or
   `one_shot`) and grouped filename evidence. Existing sample recipes may omit
   this new metadata to preserve their matching behavior.
-- Extend prompt routing, sample suitability, and Simpler playback setup for
-  sample recipes on MIDI tracks without a primary instrument.
+- Extend prompt routing, sample suitability, Simpler playback setup, and
+  delete-first source replacement for the nine new sample recipes.
 
 ### Excluded
 
@@ -171,20 +172,22 @@ the named or selected MIDI track and keep effects and all other Set content.
 - Preflight the identified primary source and reject non-MIDI tracks, Racks,
   unknown devices, multiple primary instruments, and out-of-scope targets
   before mutation.
-- If a suitable sample was found for a new sample recipe and the target has a
-  primary instrument (including Simpler), refuse before inserting another
-  instrument. Ask the user to select a MIDI track without a primary instrument.
-- If the target has no primary instrument, insert one Simpler at device index
-  0, before any existing audio effects. Configure required playback controls,
-  import/load the sample, and apply its envelope. If setup fails, remove the
-  inserted Simpler. If cleanup also fails, report the partial state and Live
-  Undo guidance.
-- Do not stage a second instrument in series on a populated MIDI track. Live's
-  serial device chain changes from MIDI to audio at the instrument, and the
-  SDK exposes no device-transfer operation that would allow safe staging
-  without changing the existing topology.
-- If no suitable sample is found, retain the declared synth fallback and the
-  existing source-change authorization and Undo behavior for that fallback.
+- Search for and import a suitable sample before changing the Live Set. If no
+  sample matches, retain the declared synth fallback and existing
+  source-change authorization and Undo behavior for that fallback.
+- For a matching sample recipe on a MIDI track with an existing primary
+  instrument (including Simpler), require the existing `sound_source`
+  authorization. Delete only that primary instrument, then insert Simpler at
+  its former index before loading the sample. This follows Live's serial
+  device-chain topology: MIDI reaches the instrument, and only audio effects
+  may follow it. Do not insert a second instrument beside the old one.
+- On an empty MIDI track, insert Simpler at device index 0. Existing audio
+  effects remain downstream and in order.
+- Configure required Pad playback controls, load the sample, and apply its
+  envelope after the old source is deleted. If insertion, required controls,
+  sample loading, or an applied target fails after deletion, report the source
+  as deleted and include Live Undo recovery guidance. Do not retry or claim
+  the old source remains.
 - Preserve all effects and their order. A successful sample recipe on a track
   without a primary instrument places Simpler at index 0.
 
@@ -195,14 +198,12 @@ the named or selected MIDI track and keep effects and all other Set content.
   fallback and include the current clear fallback note.
 - Missing/duplicate role/timbre filename evidence: skip the file and continue
   through that recipe's queries.
-- Missing/ambiguous required Pad loop controls: return a precise error before
-  loading the sample; clean up the inserted Simpler and do not fall back to
-  synth.
-- Matching sample on a track with an existing primary instrument: refuse
-  without changing the Set and identify the source that blocks application.
-- Simpler insertion, sample loading, or envelope failure: clean up the
-  inserted Simpler, or report partial state and Undo guidance if cleanup
-  fails. Existing sources are not removed by this path.
+- Missing/ambiguous required Pad loop controls after source deletion: report
+  the old source as deleted, do not fall back to synth, and include Live Undo
+  guidance.
+- Simpler insertion, sample loading, or target failure after source deletion:
+  report the actual partial state and Live Undo guidance. Do not claim the old
+  source remains and do not retry automatically.
 - Successful results include recipe ID, role, sample/synth source, sample
   path when used, playback mode, applied/skipped controls, and listen hint.
 
