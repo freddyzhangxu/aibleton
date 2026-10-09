@@ -361,7 +361,7 @@ Run: `npx tsx --test src/sound/recipes.test.ts src/sound/genre-profiles.test.ts 
 
 Expected: all focused tests PASS.
 
-- [ ] **Step 5: Run full verification and commit**
+- [x] **Step 5: Run full verification and commit**
 
 Run: `npm test`
 
@@ -379,3 +379,5 @@ Expected: no whitespace errors.
 git add src/sound/recipes.ts src/tools/soundrecipes.ts src/sound/genre-profiles.ts src/prompts.ts src/tools/definitions.ts src/sound/recipes.test.ts src/sound/genre-profiles.test.ts src/prompts.test.ts src/tools/definitions.test.ts docs/superpowers/plans/2026-10-09-genre-instrument-selection.md docs/superpowers/specs/2026-10-09-genre-instrument-selection-design.md
 git commit -m "feat: add guitar timbre recipes"
 ```
+
+Result: `npm test` passed 676/676; `npm run build` passed; `git diff --check` was clean. Implementation commit: `87aeedb`.
