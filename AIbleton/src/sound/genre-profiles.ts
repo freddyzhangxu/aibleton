@@ -43,6 +43,7 @@ export const GENRE_INSTRUMENT_PROFILES = {
       },
       { role: "Lead", choices: [{ instrument: "clean rounded synth lead", recipe: "lead_clean" }] },
       { role: "Pluck", choices: [{ instrument: "bell-like synth pluck", recipe: "pluck_bell" }] },
+      { role: "Guitar", choices: [{ instrument: "clean electric guitar", recipe: "guitar_clean" }] },
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
       { role: "Keys", choices: [{ instrument: "FM keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation, not a general synth-keyboard preset" }] },
     ],
@@ -52,13 +53,16 @@ export const GENRE_INSTRUMENT_PROFILES = {
         aliases: ["pop rock", "pop-rock"],
         overrides: [
           { role: "Bass", choices: [{ instrument: "electric bass", recipe: "rock_bass" }] },
-          { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific electric-guitar tone" }] },
+          { role: "Guitar", choices: [{ instrument: "overdriven electric guitar", recipe: "guitar_overdrive" }] },
         ],
       },
       {
         label: "Dance Pop",
         aliases: ["dance pop", "dance-pop"],
-        overrides: [{ role: "Bass", choices: [{ instrument: "synth bass", recipe: "electronic_bass" }] }],
+        overrides: [
+          { role: "Bass", choices: [{ instrument: "synth bass", recipe: "electronic_bass" }] },
+          { role: "Guitar", choices: [{ instrument: "clean electric guitar", recipe: "guitar_clean" }] },
+        ],
       },
       {
         label: "Synth Pop",
@@ -66,6 +70,7 @@ export const GENRE_INSTRUMENT_PROFILES = {
         overrides: [
           { role: "Bass", choices: [{ instrument: "synth bass", recipe: "electronic_bass" }] },
           { role: "Keys", choices: [{ instrument: "FM keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation, not a general synth-keyboard preset" }] },
+          { role: "Guitar", choices: [{ instrument: "clean electric guitar", recipe: "guitar_clean" }] },
         ],
       },
     ],
@@ -75,7 +80,10 @@ export const GENRE_INSTRUMENT_PROFILES = {
     aliases: ["rock", "rock music"],
     parts: [
       { role: "Bass", choices: [{ instrument: "electric bass", recipe: "rock_bass" }] },
-      { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific electric-guitar tone" }] },
+      { role: "Guitar", choices: [
+        { instrument: "overdriven electric guitar", recipe: "guitar_overdrive", when: "a distorted/heavy guitar part" },
+        { instrument: "clean electric guitar", recipe: "guitar_clean", when: "a clean intro, verse, or ballad part" },
+      ] },
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
     ],
     subgenres: [
@@ -97,7 +105,7 @@ export const GENRE_INSTRUMENT_PROFILES = {
     parts: [
       { role: "Bass", choices: [{ instrument: "upright bass", recipe: "jazz_bass" }] },
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
-      { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific guitar tone" }] },
+      { role: "Guitar", choices: [{ instrument: "clean electric/hollowbody guitar", recipe: "guitar_clean" }] },
       { role: "Pluck", choices: [{ instrument: "warm synth pluck", recipe: "pluck_warm" }] },
     ],
     subgenres: [
@@ -117,7 +125,10 @@ export const GENRE_INSTRUMENT_PROFILES = {
       {
         label: "Bossa Nova",
         aliases: ["bossa nova", "bossa", "bossanova"],
-        overrides: [{ role: "Bass", choices: [{ instrument: "upright bass", recipe: "bossa_bass" }] }],
+        overrides: [
+          { role: "Bass", choices: [{ instrument: "upright bass", recipe: "bossa_bass" }] },
+          { role: "Guitar", choices: [{ instrument: "acoustic/nylon guitar", recipe: "guitar_acoustic" }] },
+        ],
       },
     ],
   },
@@ -126,7 +137,7 @@ export const GENRE_INSTRUMENT_PROFILES = {
     aliases: ["funk", "funk music"],
     parts: [
       { role: "Bass", choices: [{ instrument: "fingerstyle electric bass", recipe: "funk_bass" }] },
-      { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific electric-guitar tone" }] },
+      { role: "Guitar", choices: [{ instrument: "muted funk guitar", recipe: "guitar_muted" }] },
       { role: "Keys", choices: [{ instrument: "FM keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation, not a Clavinet preset" }] },
       { role: "Lead", choices: [{ instrument: "analog synth lead", recipe: "lead_analog" }] },
       { role: "Melody", choices: [{ instrument: "analog synth lead", recipe: "lead_analog" }] },
@@ -162,7 +173,7 @@ export const GENRE_INSTRUMENT_PROFILES = {
       },
       { role: "Keys", choices: [{ instrument: "FM/electric keyboard", recipe: "keys_dx7_synth", capabilityNote: "DX7-style approximation; not a guaranteed Rhodes or Clavinet" }] },
       { role: "Piano", choices: [{ instrument: "piano", recipe: "keys_piano_sample" }] },
-      { role: "Guitar", choices: [{ instrument: "guitar", recipe: "pluck_guitar", capabilityNote: "general guitar sample; not guaranteed to be a genre-specific tone" }] },
+      { role: "Guitar", choices: [{ instrument: "clean electric guitar", recipe: "guitar_clean" }] },
       { role: "Pad", choices: [{ instrument: "warm pad", recipe: "pad_warm" }] },
       { role: "Lead", choices: [{ instrument: "clean rounded synth lead", recipe: "lead_clean" }] },
     ],

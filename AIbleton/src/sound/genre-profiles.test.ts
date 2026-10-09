@@ -50,3 +50,12 @@ test("genre profiles guide timbre for selected roles without constraining the ro
   assert.match(guide, /Never add, omit, require, or forbid parts because of a genre profile/);
   assert.doesNotMatch(guide, /Core parts:|Optional parts:/);
 });
+
+test("maps Guitar roles to distinct sample timbres by subgenre and sound character", () => {
+  const guide = genreInstrumentProfilePrompt();
+  assert.match(guide, /Pop aliases:.*Guitar → clean electric guitar \(guitar_clean/);
+  assert.match(guide, /Pop Rock overrides:.*Guitar → overdriven electric guitar \(guitar_overdrive/);
+  assert.match(guide, /Jazz aliases:.*Guitar → clean electric guitar \(guitar_clean/);
+  assert.match(guide, /Bossa Nova overrides:.*Guitar → acoustic\/nylon guitar \(guitar_acoustic/);
+  assert.match(guide, /Funk aliases:.*Guitar → muted funk guitar \(guitar_muted/);
+});

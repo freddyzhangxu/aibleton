@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- No new sound recipes, Live devices, third-party plug-ins, UI, or selection tool in this phase.
+- No new sound recipes beyond the four Guitar variants approved in the Task 6 amendment; no new Live devices, third-party plug-ins, UI, or selection tool.
 - No automatic replacement of existing sources.
 - Profiles only guide timbre for already selected roles; they do not determine the role lineup.
 - Profile data references existing recipes; source kind and fallback are derived from `SOUND_RECIPES`.
@@ -319,4 +319,63 @@ Expected: all focused tests PASS; the profile guide contains no role-lineup rest
 ```bash
 git add src/sound/genre-profiles.ts src/sound/genre-profiles.test.ts src/prompts.ts src/prompts.test.ts src/tools/definitions.ts src/tools/definitions.test.ts docs/superpowers/specs/2026-10-09-genre-instrument-selection-design.md docs/superpowers/plans/2026-10-09-genre-instrument-selection.md
 git commit -m "fix: keep genre profiles from limiting roles"
+```
+
+## Approved follow-up amendment: expand Guitar timbres
+
+The user approved adding more Guitar timbres based on matching local samples. This is the only recipe-family expansion in this follow-up; preserve role/timbre separation and never let the new Guitar map choose whether a Guitar part exists.
+
+### Task 6: Add Guitar sample variants and profile mappings
+
+**Files:**
+- Modify: `src/sound/recipes.ts`
+- Modify: `src/tools/soundrecipes.ts`
+- Modify: `src/sound/genre-profiles.ts`
+- Modify: `src/prompts.ts`
+- Modify: `src/tools/definitions.ts`
+- Test: `src/sound/recipes.test.ts`
+- Test: `src/sound/genre-profiles.test.ts`
+- Test: `src/prompts.test.ts`
+- Test: `src/tools/definitions.test.ts`
+
+**Interfaces:**
+- Adds `guitar_acoustic`, `guitar_clean`, `guitar_muted`, and `guitar_overdrive` as `role: "guitar"` one-shot sample recipes.
+- Each Guitar recipe has flavor-specific `sampleQueries`, `sampleEvidenceGroups`, and a declared Drift or Wavetable fallback.
+- Profile mappings choose Guitar tone by genre/subgenre only after a Guitar role is selected.
+
+- [x] **Step 1: Write recipe/profile/tool tests and verify they fail**
+
+Tests in `src/sound/recipes.test.ts`, `src/sound/genre-profiles.test.ts`, and `src/prompts.test.ts` assert distinct sample evidence and Rock/Jazz/Funk/Pop mappings. The tool-description test asserts all Guitar variants and fallbacks are described. The initial run was RED because the four recipes and mappings did not exist.
+
+- [x] **Step 2: Add typed one-shot Guitar recipes**
+
+Add the four recipe IDs, add `guitar` to `SoundRecipe.role`, define local sample queries/evidence groups, use one-shot filtering, and declare Drift fallbacks for acoustic/clean/muted plus Wavetable for overdrive. Require evidence on sample Guitar recipes in `applySoundRecipe`.
+
+- [x] **Step 3: Map selected Guitar roles to sound variants**
+
+Use clean Guitar for Pop/Jazz/R&B, overdrive and clean candidates for Rock, acoustic/nylon Guitar for Bossa Nova, and muted Guitar for Funk. Add explicit tone-word guidance for acoustic/nylon, clean/hollowbody, muted/Funk, and overdrive/distortion/crunch requests. Keep generic `pluck_guitar` only as a clearly labeled broad fallback when no specific profile matches.
+
+- [x] **Step 4: Document the Guitar profiles and run focused tests**
+
+Run: `npx tsx --test src/sound/recipes.test.ts src/sound/genre-profiles.test.ts src/prompts.test.ts src/tools/definitions.test.ts`
+
+Expected: all focused tests PASS.
+
+- [ ] **Step 5: Run full verification and commit**
+
+Run: `npm test`
+
+Expected: all project tests PASS with 0 failures.
+
+Run: `npm run build`
+
+Expected: TypeScript check and production bundle succeed.
+
+Run: `git diff --check`
+
+Expected: no whitespace errors.
+
+```bash
+git add src/sound/recipes.ts src/tools/soundrecipes.ts src/sound/genre-profiles.ts src/prompts.ts src/tools/definitions.ts src/sound/recipes.test.ts src/sound/genre-profiles.test.ts src/prompts.test.ts src/tools/definitions.test.ts docs/superpowers/plans/2026-10-09-genre-instrument-selection.md docs/superpowers/specs/2026-10-09-genre-instrument-selection-design.md
+git commit -m "feat: add guitar timbre recipes"
 ```

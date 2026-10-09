@@ -14,7 +14,7 @@ Genre guidance is split between prose in `prompts.ts` and a typed table in `soun
 
 - Generic Keys was previously treated as Piano, even though Piano is one instrument within the Keys family.
 - Rock, Jazz, and Funk have only a few role mappings; R&B has an 808/Sub Bass recipe but no full part profile.
-- Some recipes are only approximations: `pluck_guitar` uses general guitar samples, and `keys_dx7_synth` is a DX7-style keyboard, not a Clavinet.
+- The legacy `pluck_guitar` recipe uses general guitar samples, and `keys_dx7_synth` is a DX7-style keyboard, not a Clavinet.
 - A genre label can describe an instrument palette, but should not automatically create every possible track.
 
 ## Approaches considered
@@ -47,7 +47,7 @@ The initial profile set covers Pop, Rock, Jazz, Funk, and R&B. Where useful it d
 - fingerstyle Funk, slap/pick Funk, and Disco/Funk;
 - Modern R&B, Neo-Soul, and trap-influenced R&B.
 
-Profiles should choose only mappings supported by the existing recipe catalog. Examples include Rock electric Bass and Guitar, Jazz upright Bass/Piano/warm Pluck, Funk Bass/analog Lead, and R&B 808/Sub Bass. A profile may list a role without a dedicated recipe only when it can use an existing role default safely; otherwise that role remains unresolved and prompts a concise question.
+Profiles should choose only mappings supported by the recipe catalog. Examples include Rock electric Bass and overdrive Guitar, Jazz upright Bass/Piano/clean Guitar/warm Pluck, Funk finger/slap Bass and muted Guitar, and R&B 808/Sub Bass. Guitar is the one approved expansion beyond existing recipes: add acoustic/nylon, clean electric/hollowbody, muted/Funk, and overdrive/distortion one-shot sample recipes. Each requires flavor-specific filename evidence and a declared synth fallback; no matching sample must be reported as an approximation. Other roles without a dedicated recipe use an existing role default or remain unresolved.
 
 Subgenre changes the candidate instrument or recipe only when a corresponding recipe or a clear role default exists. Slap or pick Bass is chosen only for explicit technique or an explicitly named subgenre profile; otherwise use the existing fingerstyle Funk Bass recipe.
 
@@ -66,10 +66,10 @@ Apply these rules in order:
 
 ## Scope boundaries
 
-- No new sound recipes, Live devices, third-party plug-ins, UI, or selection tool in this phase.
+- No new sound recipes beyond the four approved Guitar variants above; no new Live devices, third-party plug-ins, UI, or selection tool.
 - No automatic replacement of existing sources.
 - Genre profiles do not restrict which roles may appear.
-- New recipe work for Clavinet, genre-specific electric guitar, or broader synth-keyboard sounds can follow after the profile table reveals the actual coverage gaps.
+- Clavinet, genre-specific synth guitar, and broader synth-keyboard recipes remain out of scope; do not present a fallback approximation as the real instrument.
 
 ## Data flow
 
@@ -88,6 +88,7 @@ Typed profile data references existing recipes. A formatter resolves recipe labe
 - Piano and generic Keys resolve differently.
 - R&B distinguishes at least Modern R&B, Neo-Soul, and trap-influenced R&B where existing recipes permit; unresolved choices are explicit.
 - Rock/Jazz/Funk mappings cover instrument choices beyond Bass where available, with capability notes for approximate recipes.
+- Acoustic/clean/muted/overdrive Guitar mappings use distinct recipe IDs, sample query/evidence, one-shot behavior, and declared fallbacks.
 - Profiles only guide sounds for selected roles and do not restrict a complete arrangement's role lineup.
 - Explicit user choices and existing instruments retain precedence and protection.
 

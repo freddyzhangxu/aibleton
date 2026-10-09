@@ -406,8 +406,8 @@ export async function applySoundRecipe(
   if (recipe.role === "pluck" && recipe.source === "contextual") {
     throw new Error(`Pluck recipe ${recipe.id} must choose a specific synth or sample source`);
   }
-  if (recipe.role === "pluck" && recipe.source === "sample" && !recipe.sampleEvidence?.length && !recipe.sampleEvidenceGroups?.length) {
-    throw new Error(`Pluck sample recipe ${recipe.id} needs filename evidence terms`);
+  if ((recipe.role === "pluck" || recipe.role === "guitar") && recipe.source === "sample" && !recipe.sampleEvidence?.length && !recipe.sampleEvidenceGroups?.length) {
+    throw new Error(`Pluck/Guitar sample recipe ${recipe.id} needs filename evidence terms`);
   }
   const current = findPrimarySource(ref.track);
   if (current === "ambiguous") {

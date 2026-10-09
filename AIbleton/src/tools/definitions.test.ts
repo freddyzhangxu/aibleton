@@ -75,6 +75,13 @@ test("keeps genre profiles from constraining which roles are created", () => {
   assert.doesNotMatch(recipeTool.description, /core\/optional parts/i);
 });
 
+test("documents the Guitar sample profiles and their declared synth fallbacks", () => {
+  const recipeTool = TOOLS.find((tool) => tool.name === "apply_sound_recipe");
+  assert.ok(recipeTool);
+  assert.match(recipeTool.description, /Guitar recipes cover acoustic\/nylon, clean\/hollowbody, muted\/Funk, and overdrive\/distortion samples/);
+  assert.match(recipeTool.description, /use their declared Drift or Wavetable synth fallback/);
+});
+
 test("simple edits advertise their reads and writes without the full tool catalog", () => {
   assert.deepEqual(activeTools("tempo").map((tool) => tool.name).sort(), ["get_song_overview", "set_tempo"]);
   const mixer = activeTools("mixer").map((tool) => tool.name);

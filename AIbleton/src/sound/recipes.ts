@@ -15,6 +15,10 @@ export type SoundRecipeId =
   | "pluck_bell"
   | "pluck_guitar"
   | "pluck_kalimba"
+  | "guitar_acoustic"
+  | "guitar_clean"
+  | "guitar_muted"
+  | "guitar_overdrive"
   | "pad_warm"
   | "pad_airy"
   | "pad_dark"
@@ -51,7 +55,7 @@ export type RecipeParameterTarget = NumericRecipeTarget | EnumRecipeTarget;
 
 export type SoundRecipe = {
   id: SoundRecipeId;
-  role: "bass" | "pad" | "pluck" | "lead" | "keys" | "piano";
+  role: "bass" | "pad" | "pluck" | "guitar" | "lead" | "keys" | "piano";
   label: string;
   genreTerms: readonly string[];
   source: "sample" | "synth" | "contextual";
@@ -435,6 +439,67 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     targets: {
       Simpler: simplePluckEnvelope(0.0001, 0.14, 0.03, 0.035),
       Operator: operatorBellPluckControls,
+    },
+  },
+  guitar_acoustic: {
+    id: "guitar_acoustic",
+    role: "guitar",
+    label: "Acoustic / nylon Guitar sample",
+    genreTerms: ["acoustic guitar", "nylon guitar", "bossa", "folk", "原声吉他", "尼龙弦吉他"],
+    source: "sample",
+    sampleQueries: ["nylon guitar", "acoustic guitar", "steel string guitar"],
+    sampleEvidenceGroups: [["guitar", "gtr"], ["nylon", "acoustic", "steelstring"]],
+    samplePlayback: "one_shot",
+    fallbackInstrument: "Drift",
+    targets: {
+      Simpler: simplePluckEnvelope(0.0008, 0.28, 0.28, 0.12),
+      Drift: driftWarmPluckControls,
+    },
+  },
+  guitar_clean: {
+    id: "guitar_clean",
+    role: "guitar",
+    label: "Clean electric / hollowbody Guitar sample",
+    genreTerms: ["clean electric guitar", "hollowbody guitar", "jazz guitar", "clean guitar", "清音电吉他"],
+    source: "sample",
+    sampleQueries: ["clean electric guitar", "hollowbody guitar", "jazz guitar", "clean guitar"],
+    sampleEvidenceGroups: [["guitar", "gtr"], ["clean", "hollowbody", "jazz", "electric"]],
+    samplePlayback: "one_shot",
+    fallbackInstrument: "Drift",
+    targets: {
+      Simpler: simplePluckEnvelope(0.0004, 0.24, 0.24, 0.08),
+      Drift: driftCleanLeadControls,
+    },
+  },
+  guitar_muted: {
+    id: "guitar_muted",
+    role: "guitar",
+    label: "Muted / Funk Guitar sample",
+    genreTerms: ["muted guitar", "funk guitar", "chank guitar", "闷音吉他", "放克吉他"],
+    source: "sample",
+    sampleQueries: ["muted guitar", "funk guitar", "muted electric guitar", "chank guitar"],
+    sampleEvidenceGroups: [["guitar", "gtr"], ["muted", "mute", "funk", "chank"]],
+    samplePlayback: "one_shot",
+    fallbackInstrument: "Drift",
+    targets: {
+      Simpler: simplePluckEnvelope(0.0001, 0.12, 0.04, 0.025),
+      Drift: driftWarmPluckControls,
+    },
+  },
+  guitar_overdrive: {
+    id: "guitar_overdrive",
+    role: "guitar",
+    label: "Overdriven / distorted Guitar sample",
+    genreTerms: ["overdrive guitar", "distorted guitar", "rock guitar", "crunch guitar", "失真吉他", "过载吉他"],
+    source: "sample",
+    sampleQueries: ["overdrive guitar", "distorted electric guitar", "rock guitar", "crunch guitar"],
+    sampleEvidenceGroups: [["guitar", "gtr"], ["overdrive", "overdriven", "distorted", "distortion", "rock", "crunch"]],
+    samplePlayback: "one_shot",
+    instrument: "Wavetable",
+    fallbackInstrument: "Wavetable",
+    targets: {
+      Simpler: simplePluckEnvelope(0.0002, 0.42, 0.62, 0.07),
+      Wavetable: wavetableAggressiveLeadControls,
     },
   },
   pad_warm: {

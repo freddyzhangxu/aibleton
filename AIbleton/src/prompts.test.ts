@@ -94,15 +94,14 @@ test("chooses genre-aware timbres for new melodic parts without replacing named 
 
 test("maps Rock, Jazz, and Funk parts to available recipes and handles gaps explicitly", () => {
   const prompt = systemPromptFor("en");
-  assert.match(prompt, /Rock aliases:.*Role-to-sound mappings: Bass → electric bass \(rock_bass, sample; fallback Operator\).*Guitar → guitar \(pluck_guitar.*Piano → piano \(keys_piano_sample/);
+  assert.match(prompt, /Rock aliases:.*Role-to-sound mappings: Bass → electric bass \(rock_bass, sample; fallback Operator\).*Guitar → overdriven electric guitar.*guitar_overdrive.*clean electric guitar.*guitar_clean.*Piano → piano \(keys_piano_sample/);
   assert.match(prompt, /Jazz aliases:.*Role-to-sound mappings: Bass → upright bass \(jazz_bass/);
   assert.match(prompt, /Jazz Fusion overrides: Bass → electric bass \(jazz_fusion_bass/);
-  assert.match(prompt, /Jazz aliases:.*Guitar → guitar \(pluck_guitar.*Pluck → warm synth pluck \(pluck_warm/);
+  assert.match(prompt, /Jazz aliases:.*Guitar → clean electric\/hollowbody guitar \(guitar_clean.*Pluck → warm synth pluck \(pluck_warm/);
   assert.match(prompt, /Funk aliases:.*Role-to-sound mappings: Bass → fingerstyle electric bass \(funk_bass/);
-  assert.match(prompt, /Funk aliases:.*Guitar → guitar \(pluck_guitar.*Keys → FM keyboard \(keys_dx7_synth.*Lead → analog synth lead \(lead_analog.*Melody → analog synth lead \(lead_analog/);
+  assert.match(prompt, /Funk aliases:.*Guitar → muted funk guitar \(guitar_muted.*Keys → FM keyboard \(keys_dx7_synth.*Lead → analog synth lead \(lead_analog.*Melody → analog synth lead \(lead_analog/);
   assert.match(prompt, /Funk Pick aliases: picked funk, funk pick, pick bass funk\. Funk Pick overrides: Bass → picked electric bass \(funk_pick_bass/);
   assert.match(prompt, /DX7-style approximation, not a Clavinet preset/);
-  assert.match(prompt, /general guitar sample; not guaranteed to be a genre-specific/);
   assert.match(prompt, /Use profiles only to choose an instrument or timbre for a role already selected by the user or arrangement/);
   assert.match(prompt, /For an unlisted role, keep the selected role and use normal role-specific defaults or current Set context/);
   assert.doesNotMatch(prompt, /Core parts:|Optional parts:/);
@@ -112,6 +111,13 @@ test("maps Rock, Jazz, and Funk parts to available recipes and handles gaps expl
   assert.doesNotMatch(prompt, /For jazz, use jazz_bass by default/);
   assert.doesNotMatch(prompt, /If genre only, House\/Techno → bright, Jazz\/Bossa → warm, Pop\/Cinematic → bell/);
   assert.doesNotMatch(prompt, /With genre only, Pop → clean, Funk\/Disco → analog, House\/Techno → aggressive/);
+});
+
+test("selects Guitar recipes by acoustic, clean, muted, or overdriven character", () => {
+  const prompt = systemPromptFor("en");
+  assert.match(prompt, /acoustic\/nylon.*guitar_acoustic.*clean.*guitar_clean.*muted\/funk.*guitar_muted.*overdrive\/distortion.*guitar_overdrive/i);
+  assert.match(prompt, /generic Guitar with no matching profile may use the broad pluck_guitar sample/);
+  assert.match(prompt, /broad pluck_guitar sample and state that it is not genre-specific/);
 });
 
 test("separates Piano samples from the broader Keys family", () => {
