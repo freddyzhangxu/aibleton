@@ -66,6 +66,8 @@ export type SoundRecipe = {
   samplePlayback?: "loop" | "one_shot";
   /** Every group must have one matching term in the filename stem. */
   sampleEvidenceGroups?: readonly (readonly string[])[];
+  /** Matching any of these filename-stem terms rejects the sample. */
+  sampleExcludeEvidence?: readonly string[];
   instrument?: string;
   fallbackInstrument: string;
   targets: Readonly<Record<string, readonly RecipeParameterTarget[]>>;
@@ -463,7 +465,8 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     genreTerms: ["clean electric guitar", "hollowbody guitar", "jazz guitar", "clean guitar", "清音电吉他"],
     source: "sample",
     sampleQueries: ["clean electric guitar", "hollowbody guitar", "jazz guitar", "clean guitar"],
-    sampleEvidenceGroups: [["guitar", "gtr"], ["clean", "hollowbody", "jazz", "electric"]],
+    sampleEvidenceGroups: [["guitar", "gtr"], ["clean", "hollowbody", "hollow", "electric"]],
+    sampleExcludeEvidence: ["distort", "overdrive", "fuzz"],
     samplePlayback: "one_shot",
     fallbackInstrument: "Drift",
     targets: {
@@ -477,8 +480,8 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     label: "Muted / Funk Guitar sample",
     genreTerms: ["muted guitar", "funk guitar", "chank guitar", "闷音吉他", "放克吉他"],
     source: "sample",
-    sampleQueries: ["muted guitar", "funk guitar", "muted electric guitar", "chank guitar"],
-    sampleEvidenceGroups: [["guitar", "gtr"], ["muted", "mute", "funk", "chank"]],
+    sampleQueries: ["muted guitar", "mute guitar", "guitar mute", "funk guitar", "muted electric guitar", "chank guitar"],
+    sampleEvidenceGroups: [["guitar", "gtr"], ["muted", "mute", "chank"]],
     samplePlayback: "one_shot",
     fallbackInstrument: "Drift",
     targets: {
@@ -492,8 +495,8 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     label: "Overdriven / distorted Guitar sample",
     genreTerms: ["overdrive guitar", "distorted guitar", "rock guitar", "crunch guitar", "失真吉他", "过载吉他"],
     source: "sample",
-    sampleQueries: ["overdrive guitar", "distorted electric guitar", "rock guitar", "crunch guitar"],
-    sampleEvidenceGroups: [["guitar", "gtr"], ["overdrive", "overdriven", "distorted", "distortion", "rock", "crunch"]],
+    sampleQueries: ["overdrive guitar", "distorted guitar", "guitar distorted", "distortion guitar", "guitar distortion", "distorted electric guitar", "rock guitar", "crunch guitar"],
+    sampleEvidenceGroups: [["guitar", "gtr"], ["overdrive", "overdriven", "distorted", "distortion", "crunch"]],
     samplePlayback: "one_shot",
     instrument: "Wavetable",
     fallbackInstrument: "Wavetable",

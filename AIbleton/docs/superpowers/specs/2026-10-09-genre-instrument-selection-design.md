@@ -47,7 +47,7 @@ The initial profile set covers Pop, Rock, Jazz, Funk, and R&B. Where useful it d
 - fingerstyle Funk, slap/pick Funk, and Disco/Funk;
 - Modern R&B, Neo-Soul, and trap-influenced R&B.
 
-Profiles should choose only mappings supported by the recipe catalog. Examples include Rock electric Bass and overdrive Guitar, Jazz upright Bass/Piano/clean Guitar/warm Pluck, Funk finger/slap Bass and muted Guitar, and R&B 808/Sub Bass. Guitar is the one approved expansion beyond existing recipes: add acoustic/nylon, clean electric/hollowbody, muted/Funk, and overdrive/distortion one-shot sample recipes. Each requires flavor-specific filename evidence and a declared synth fallback; no matching sample must be reported as an approximation. Other roles without a dedicated recipe use an existing role default or remain unresolved.
+Profiles should choose only mappings supported by the recipe catalog. Examples include Rock electric Bass and overdrive Guitar, Jazz upright Bass/Piano/clean Guitar/warm Pluck, Funk finger/slap Bass and muted Guitar, and R&B 808/Sub Bass. Guitar is the one approved expansion beyond existing recipes: add acoustic/nylon, clean electric/hollowbody, muted/Funk, and overdrive/distortion one-shot sample recipes. Each requires flavor-specific filename queries/evidence, reject contradictory clean/dirty labels, and declare a synth fallback; no matching sample must be reported as an approximation. Other roles without a dedicated recipe use an existing role default or remain unresolved.
 
 Subgenre changes the candidate instrument or recipe only when a corresponding recipe or a clear role default exists. Slap or pick Bass is chosen only for explicit technique or an explicitly named subgenre profile; otherwise use the existing fingerstyle Funk Bass recipe.
 
@@ -89,6 +89,7 @@ Typed profile data references existing recipes. A formatter resolves recipe labe
 - R&B distinguishes at least Modern R&B, Neo-Soul, and trap-influenced R&B where existing recipes permit; unresolved choices are explicit.
 - Rock/Jazz/Funk mappings cover instrument choices beyond Bass where available, with capability notes for approximate recipes.
 - Acoustic/clean/muted/overdrive Guitar mappings use distinct recipe IDs, sample query/evidence, one-shot behavior, and declared fallbacks.
+- Guitar sample matching rejects contradictory flavor labels instead of accepting a sample from a folder name or a broad Rock/Funk label alone.
 - Profiles only guide sounds for selected roles and do not restrict a complete arrangement's role lineup.
 - Explicit user choices and existing instruments retain precedence and protection.
 

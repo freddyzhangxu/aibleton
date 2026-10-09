@@ -345,11 +345,11 @@ The user approved adding more Guitar timbres based on matching local samples. Th
 
 - [x] **Step 1: Write recipe/profile/tool tests and verify they fail**
 
-Tests in `src/sound/recipes.test.ts`, `src/sound/genre-profiles.test.ts`, and `src/prompts.test.ts` assert distinct sample evidence and Rock/Jazz/Funk/Pop mappings. The tool-description test asserts all Guitar variants and fallbacks are described. The initial run was RED because the four recipes and mappings did not exist.
+Tests in `src/sound/recipes.test.ts`, `src/sound/genre-profiles.test.ts`, and `src/prompts.test.ts` assert distinct sample evidence, common filename query matches, rejection of contradictory clean/dirty labels, and Rock/Jazz/Funk/Pop mappings. The tool-description test asserts all Guitar variants and fallbacks are described. The initial run was RED because the four recipes and mappings did not exist.
 
 - [x] **Step 2: Add typed one-shot Guitar recipes**
 
-Add the four recipe IDs, add `guitar` to `SoundRecipe.role`, define local sample queries/evidence groups, use one-shot filtering, and declare Drift fallbacks for acoustic/clean/muted plus Wavetable for overdrive. Require evidence on sample Guitar recipes in `applySoundRecipe`.
+Add the four recipe IDs, add `guitar` to `SoundRecipe.role`, define local sample queries/evidence groups, use one-shot filtering, and declare Drift fallbacks for acoustic/clean/muted plus Wavetable for overdrive. Clean recipes reject distortion/overdrive/fuzz evidence; overdrive and muted recipes require their flavor evidence rather than accepting generic Rock/Funk filenames. Require evidence on sample Guitar recipes in `applySoundRecipe`.
 
 - [x] **Step 3: Map selected Guitar roles to sound variants**
 
@@ -380,4 +380,4 @@ git add src/sound/recipes.ts src/tools/soundrecipes.ts src/sound/genre-profiles.
 git commit -m "feat: add guitar timbre recipes"
 ```
 
-Result: `npm test` passed 676/676; `npm run build` passed; `git diff --check` was clean. Implementation commit: `87aeedb`.
+Result: `npm test` passed 676/676 before the final contradictory-label guard and then 679/679 after it; `npm run build` passed; `git diff --check` was clean. Implementation commit: `87aeedb`.

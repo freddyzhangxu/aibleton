@@ -82,7 +82,7 @@ const DRUM_OR_FILL_SAMPLE = /(?:^|[^a-z0-9])(?:kick|snare|clap|hi[ -]?hat|hihat|
 const LOOP_SAMPLE_MARKER = /(?:^|[^a-z0-9])(?:loop|looped|looping)(?:$|[^a-z0-9])/i;
 const ONE_SHOT_UNSUITABLE_MARKER = /(?:^|[^a-z0-9])(?:loop|looped|looping|phrase)(?:$|[^a-z0-9])/i;
 
-function isSuitableSample(recipe: SoundRecipe, filePath: string): boolean {
+export function isSuitableSample(recipe: SoundRecipe, filePath: string): boolean {
   const fileName = basename(filePath).replace(/\.[^.]+$/, "").normalize("NFKC").toLocaleLowerCase();
   if (recipe.samplePlayback === undefined) {
     if (LEGACY_UNSUITABLE_SAMPLE.test(fileName)) return false;
@@ -100,6 +100,7 @@ function isSuitableSample(recipe: SoundRecipe, filePath: string): boolean {
   }
   const hasEvidence = (term: string): boolean =>
     compact.includes(term.normalize("NFKC").replace(/[^a-z0-9]/gi, "").toLocaleLowerCase());
+  if (recipe.sampleExcludeEvidence?.some(hasEvidence)) return false;
   if (recipe.sampleEvidenceGroups?.length) {
     return recipe.sampleEvidenceGroups.every((group) => group.some(hasEvidence));
   }
