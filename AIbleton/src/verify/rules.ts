@@ -208,8 +208,14 @@ const applySoundRecipe: PostconditionRule = (_input, result) => {
       if (!track) return noTrack(ti);
       const devices = track.devices.map((device) => device.name);
       const replaced = typeof source.replaced === "string" ? source.replaced : undefined;
-      const present = devices.includes(deviceName);
-      const oldRemoved = !replaced || !devices.includes(replaced);
+      const sourceCount = devices.filter((name) => name === deviceName).length;
+      const present = sourceCount > 0;
+      // A staged sample recipe can replace a Simpler with another Simpler.
+      // The old and new devices share a name, so verify the final count rather
+      // than treating the remaining new Simpler as the old source.
+      const oldRemoved = replaced === deviceName
+        ? sourceCount === 1
+        : !replaced || !devices.includes(replaced);
       return {
         passed: present && oldRemoved,
         actual: `${devices.join(", ") || "(无设备)"}${replaced ? `; 原音源「${replaced}」${oldRemoved ? "已移除" : "仍存在"}` : ""}`,

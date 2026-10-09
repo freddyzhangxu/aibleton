@@ -169,6 +169,217 @@ function formattedValue(device: Device<"1.0.0">, targetId: string, value: number
   return value;
 }
 
+async function cleanupStagedSampleDevice(
+  context: Ctx,
+  ref: TrackRef,
+  device: Device<"1.0.0">,
+): Promise<string | undefined> {
+  try {
+    await context.withinTransaction(() => ref.track.deleteDevice(device));
+    forgetCreatedDevice(device);
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+function stagedSampleFailure(
+  ref: TrackRef,
+  recipe: SoundRecipe,
+  staged: Device<"1.0.0">,
+  reason: string,
+  cleanupError?: string,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return trackResult(ref, {
+    recipe: recipe.id,
+    role: recipe.role,
+    executed: !!cleanupError,
+    sample_setup_failed: true,
+    ...(cleanupError ? { partial_change: true, cleanup_error: cleanupError } : {}),
+    current_source: extra.current_source ?? "none",
+    staged_device: staged.name,
+    reason,
+    current_devices: ref.track.devices.map((device) => device.name),
+    ...extra,
+    ...(cleanupError ? { undo: "暂存音源未能清理；请在 Live 中使用 Undo（⌘Z / Ctrl+Z）恢复。" } : {}),
+  });
+}
+
+async function applyStagedSampleRecipe(
+  context: Ctx,
+  ref: TrackRef,
+  current: PrimarySource,
+  recipe: SoundRecipe,
+  selectedSample: string,
+): Promise<Record<string, unknown>> {
+  const insertAt = current?.index ?? 0;
+  let staged: Simpler<"1.0.0">;
+  try {
+    staged = await context.withinTransaction(() => ref.track.insertDevice("Simpler", insertAt)) as Simpler<"1.0.0">;
+    recordCreatedDevice(staged);
+  } catch (error) {
+    return trackResult(ref, {
+      recipe: recipe.id,
+      role: recipe.role,
+      executed: false,
+      sample_setup_failed: true,
+      current_source: current?.device.name ?? "none",
+      requested_source: "Simpler",
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const targets = recipe.targets.Simpler ?? [];
+  const match = matchRecipeTargets(staged.parameters, targets);
+  const requiredPlaybackIds = recipe.samplePlayback === "loop" ? ["playback_mode", "loop"] : [];
+  const skippedIds = new Set(match.skipped.map(({ target }) => target.id));
+  const missingRequired = requiredPlaybackIds.filter((id) => skippedIds.has(id));
+  if (missingRequired.length) {
+    const cleanupError = await cleanupStagedSampleDevice(context, ref, staged);
+    return stagedSampleFailure(
+      ref,
+      recipe,
+      staged,
+      "Simpler 缺少唯一可用的循环控制：" + missingRequired.join(", "),
+      cleanupError,
+      {
+        executed: !!cleanupError,
+        replacement_not_applied: true,
+        source_deleted: false,
+        current_source: current?.device.name ?? "none",
+        requested_source: "Simpler",
+        skipped: match.skipped.map(({ target, reason }) => ({ target: target.id, reason })),
+      },
+    );
+  }
+
+  const applied: { target: string; parameter: string; value: string | number }[] = [];
+  const playbackTargets = match.matched
+    .filter(({ target }) => requiredPlaybackIds.includes(target.id))
+    .sort((a, b) => requiredPlaybackIds.indexOf(a.target.id) - requiredPlaybackIds.indexOf(b.target.id));
+  for (const item of playbackTargets) {
+    try {
+      const value = await setParamValue(item.parameter, item.value);
+      applied.push({
+        target: item.target.id,
+        parameter: item.parameter.name,
+        value: formattedValue(staged, item.parameter.name, value),
+      });
+    } catch (error) {
+      const cleanupError = await cleanupStagedSampleDevice(context, ref, staged);
+      return stagedSampleFailure(
+        ref,
+        recipe,
+        staged,
+        error instanceof Error ? error.message : String(error),
+        cleanupError,
+        { current_source: current?.device.name ?? "none", target: item.target.id, parameter: item.parameter.name },
+      );
+    }
+  }
+
+  let importedSample: string;
+  try {
+    importedSample = await context.resources.importIntoProject(selectedSample);
+  } catch (error) {
+    const cleanupError = await cleanupStagedSampleDevice(context, ref, staged);
+    return stagedSampleFailure(
+      ref,
+      recipe,
+      staged,
+      error instanceof Error ? error.message : String(error),
+      cleanupError,
+      { current_source: current?.device.name ?? "none", file: selectedSample },
+    );
+  }
+
+  try {
+    await context.withinTransaction(() => staged.replaceSample(importedSample));
+  } catch (error) {
+    const cleanupError = await cleanupStagedSampleDevice(context, ref, staged);
+    return stagedSampleFailure(
+      ref,
+      recipe,
+      staged,
+      error instanceof Error ? error.message : String(error),
+      cleanupError,
+      { current_source: current?.device.name ?? "none", file: importedSample },
+    );
+  }
+
+  const failed: { target: string; parameter: string; error: string }[] = [];
+  for (const item of match.matched) {
+    if (requiredPlaybackIds.includes(item.target.id)) continue;
+    try {
+      const value = await setParamValue(item.parameter, item.value);
+      applied.push({
+        target: item.target.id,
+        parameter: item.parameter.name,
+        value: formattedValue(staged, item.parameter.name, value),
+      });
+    } catch (error) {
+      failed.push({
+        target: item.target.id,
+        parameter: item.parameter.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (failed.length) {
+    const cleanupError = await cleanupStagedSampleDevice(context, ref, staged);
+    return stagedSampleFailure(
+      ref,
+      recipe,
+      staged,
+      "无法应用一个或多个匹配的 Simpler 包络参数；保留原音源。",
+      cleanupError,
+      { current_source: current?.device.name ?? "none", file: importedSample, failed },
+    );
+  }
+
+  let replaced: string | undefined;
+  if (current) {
+    try {
+      await context.withinTransaction(() => ref.track.deleteDevice(current.device));
+      replaced = current.device.name;
+    } catch (error) {
+      const oldId = handleIdOf(current.device);
+      const oldStillPresent = ref.track.devices.some((device) =>
+        oldId !== undefined ? handleIdOf(device) === oldId : device === current.device,
+      );
+      if (oldStillPresent) {
+        const cleanupError = await cleanupStagedSampleDevice(context, ref, staged);
+        return stagedSampleFailure(
+          ref,
+          recipe,
+          staged,
+          error instanceof Error ? error.message : String(error),
+          cleanupError,
+          { current_source: current.device.name, file: importedSample, replacement_not_applied: true },
+        );
+      }
+      replaced = current.device.name;
+    }
+    forgetCreatedDevice(current.device);
+  }
+
+  return trackResult(ref, {
+    recipe: recipe.id,
+    role: recipe.role,
+    track: ref.track.name,
+    source: {
+      kind: "sample",
+      device: staged.name,
+      file: importedSample,
+      playback_mode: recipe.samplePlayback,
+      ...(replaced ? { replaced } : {}),
+    },
+    applied,
+    skipped: match.skipped.map(({ target, reason }) => ({ target: target.id, reason })),
+  });
+}
+
 export async function applySoundRecipe(
   context: Ctx,
   input: {
@@ -193,7 +404,7 @@ export async function applySoundRecipe(
   if (recipe.role === "pluck" && recipe.source === "contextual") {
     throw new Error(`Pluck recipe ${recipe.id} must choose a specific synth or sample source`);
   }
-  if (recipe.role === "pluck" && recipe.source === "sample" && !recipe.sampleEvidence?.length) {
+  if (recipe.role === "pluck" && recipe.source === "sample" && !recipe.sampleEvidence?.length && !recipe.sampleEvidenceGroups?.length) {
     throw new Error(`Pluck sample recipe ${recipe.id} needs filename evidence terms`);
   }
   const current = findPrimarySource(ref.track);
@@ -236,6 +447,10 @@ export async function applySoundRecipe(
       requested_source: requestedDevice,
       message: "请明确要求将这条轨道应用该风格方案后再更换主音源。",
     });
+  }
+
+  if (sourceKind === "sample" && selectedSample && recipe.samplePlayback) {
+    return applyStagedSampleRecipe(context, ref, current, recipe, selectedSample);
   }
 
   let importedSample: string | undefined;
