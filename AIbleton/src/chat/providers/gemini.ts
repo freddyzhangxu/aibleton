@@ -17,6 +17,7 @@ import { errMessage, friendlyApiError, settingsPath } from "../../errors.js";
 import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
+import { logProviderUsage } from "./usage.js";
 import {
   languageCorrectionPrompt,
   MAX_REPLY_LANGUAGE_CORRECTIONS,
@@ -97,7 +98,7 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
   for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
     const requestBody = JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPromptFor(req.language, req.selectedSkillNames) }] },
+      systemInstruction: { parts: [{ text: req.systemPrompt ?? systemPromptFor(req.language, req.selectedSkillNames, req.simpleEdit) }] },
       contents,
       ...(languageRewriteOnly ? {} : { tools }),
       ...(thinkingBudget ? { generationConfig: { thinkingConfig: { thinkingBudget } } } : {}),
@@ -105,6 +106,12 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     let data: {
       candidates?: { content?: { parts?: GeminiPart[] } }[];
       error?: { message?: string };
+      usageMetadata?: {
+        promptTokenCount?: number;
+        candidatesTokenCount?: number;
+        totalTokenCount?: number;
+        cachedContentTokenCount?: number;
+      };
     };
     let status = 0;
     try {
@@ -150,6 +157,7 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       });
     }
 
+    logProviderUsage(context, "gemini", round, data.usageMetadata);
     const parts = data.candidates?.[0]?.content?.parts ?? [];
     toolHooks.debugLog(
       context,

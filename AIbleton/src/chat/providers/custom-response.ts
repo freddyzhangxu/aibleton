@@ -9,6 +9,14 @@ export interface ChatCompletionsData {
       }[];
     };
   }[];
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    input_tokens?: number;
+    output_tokens?: number;
+    [key: string]: unknown;
+  };
   error?: { message?: string };
 }
 

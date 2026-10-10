@@ -23,6 +23,7 @@ import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
 import { measureAsync, monotonicNow } from "../timing.js";
+import { logProviderUsage } from "./usage.js";
 import {
   languageCorrectionPrompt,
   MAX_REPLY_LANGUAGE_CORRECTIONS,
@@ -120,6 +121,13 @@ export interface OpenAIResponseData {
   output?: OpenAIOutputItem[];
   error?: { message?: string };
   status?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+  };
 }
 
 /**
@@ -254,7 +262,7 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
     if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
     const requestBody = JSON.stringify({
       model: cfg.model,
-      instructions: systemPromptFor(req.language, req.selectedSkillNames),
+      instructions: req.systemPrompt ?? systemPromptFor(req.language, req.selectedSkillNames, req.simpleEdit),
       input,
       ...(languageRewriteOnly ? {} : { tools }),
       store: false,
@@ -322,6 +330,7 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
         language: req.language,
       });
     }
+    logProviderUsage(context, "openai", round, data.usage);
     if (data.status === "failed") {
       throw friendlyApiError({
         what: "Codex",

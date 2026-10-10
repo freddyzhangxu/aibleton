@@ -24,6 +24,7 @@ import {
 } from "../../i18n/language.js";
 import { measureAsync } from "../timing.js";
 import { parseCustomResponse, type ChatCompletionsData } from "./custom-response.js";
+import { logProviderUsage } from "./usage.js";
 import { readChatCompletionsStream } from "./custom-stream.js";
 
 // ---------- OpenAI-compatible chat/completions (custom endpoint) ----------
@@ -98,7 +99,7 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       CUSTOM_INCOMPLETE_HINT[req.language ?? ""] ?? CUSTOM_INCOMPLETE_HINT.en);
   }
   const messages: unknown[] = [
-    { role: "system", content: systemPromptFor(req.language, req.selectedSkillNames) },
+    { role: "system", content: req.systemPrompt ?? systemPromptFor(req.language, req.selectedSkillNames, req.simpleEdit) },
     ...historyWithTools(currentSession(), {
       userText: (text) => ({ role: "user", content: text }),
       assistantText: (text) => ({ role: "assistant", content: text }),
@@ -210,6 +211,7 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
         language: req.language,
       });
     }
+    logProviderUsage(context, "custom", round, data.usage);
     const msg = data.choices?.[0]?.message ?? {};
     const calls = (msg.tool_calls ?? []).filter((c) => c.function?.name);
     toolHooks.debugLog(context,

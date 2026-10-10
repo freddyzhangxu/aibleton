@@ -31,6 +31,7 @@ export async function readChatCompletionsStream(
   let content = "";
   let reasoningChars = 0;
   let finishReason: string | null = null;
+  let usage: ChatCompletionsData["usage"];
   let sawDone = false;
   let events = 0;
   let rawNonSse = "";
@@ -54,6 +55,7 @@ export async function readChatCompletionsStream(
         };
         finish_reason?: string | null;
       }[];
+      usage?: ChatCompletionsData["usage"];
       error?: { message?: string };
     };
     try {
@@ -62,6 +64,7 @@ export async function readChatCompletionsStream(
       return; // keepalive noise from the gateway
     }
     if (evt.error?.message) throw new Error(evt.error.message);
+    if (evt.usage && typeof evt.usage === "object") usage = evt.usage;
     const choice = Array.isArray(evt.choices) ? evt.choices[0] : undefined;
     if (!choice) return; // usage-only tail chunks carry no choices
     events++;
@@ -159,5 +162,6 @@ export async function readChatCompletionsStream(
         },
       },
     ],
+    ...(usage ? { usage } : {}),
   };
 }

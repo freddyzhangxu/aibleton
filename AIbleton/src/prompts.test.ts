@@ -99,9 +99,9 @@ test("maps Rock, Jazz, and Funk parts to available recipes and handles gaps expl
   assert.match(prompt, /Jazz Fusion overrides: Bass → electric bass \(jazz_fusion_bass/);
   assert.match(prompt, /Jazz aliases:.*Guitar → clean electric\/hollowbody guitar \(guitar_clean.*Pluck → warm synth pluck \(pluck_warm/);
   assert.match(prompt, /Funk aliases:.*Role-to-sound mappings: Bass → fingerstyle electric bass \(funk_bass/);
-  assert.match(prompt, /Funk aliases:.*Guitar → muted funk guitar \(guitar_muted.*Keys → FM keyboard \(keys_dx7_synth.*Lead → analog synth lead \(lead_analog.*Melody → analog synth lead \(lead_analog/);
+  assert.match(prompt, /Funk aliases:.*Guitar → muted funk guitar \(guitar_muted.*Keys → Clavinet-style percussive keyboard \(keys_clav_synth.*Operator approximation.*Lead → analog synth lead \(lead_analog.*Melody → analog synth lead \(lead_analog/);
   assert.match(prompt, /Funk Pick aliases: picked funk, funk pick, pick bass funk\. Funk Pick overrides: Bass → picked electric bass \(funk_pick_bass/);
-  assert.match(prompt, /DX7-style approximation, not a Clavinet preset/);
+  assert.match(prompt, /Operator approximation, not a Clavinet preset/);
   assert.match(prompt, /Use profiles only to choose an instrument or timbre for a role already selected by the user or arrangement/);
   assert.match(prompt, /For an unlisted role, keep the selected role and use normal role-specific defaults or current Set context/);
   assert.doesNotMatch(prompt, /Core parts:|Optional parts:/);
@@ -123,9 +123,9 @@ test("selects Guitar recipes by acoustic, clean, muted, or overdriven character"
 test("separates Piano samples from the broader Keys family", () => {
   const prompt = systemPromptFor("en");
   assert.match(prompt, /Piano is a specific instrument within the Keys family/);
-  assert.match(prompt, /only an explicit Piano request or a genre profile that names Piano selects keys_piano_sample/);
-  assert.match(prompt, /Generic Keys does not default to piano samples/);
-  assert.match(prompt, /DX7, FM, electric piano, or Rhodes selects keys_dx7_synth/);
+  assert.match(prompt, /Only an explicit Piano request or a genre profile that names Piano selects Piano samples/);
+  assert.match(prompt, /Generic Keys never defaults to Piano samples/);
+  assert.match(prompt, /Rhodes\/tine\/electric piano → keys_rhodes_synth; Clav\/Clavinet → keys_clav_synth; DX7\/FM → keys_dx7_synth/);
   assert.doesNotMatch(prompt, /Generic Keys or Pop Keys defaults to keys_piano_sample/);
 });
 

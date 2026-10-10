@@ -48,7 +48,7 @@ import { chatCustom } from "./chat/providers/custom.js";
 import { chatGemini } from "./chat/providers/gemini.js";
 import { toolHooks, toolState, type ArtistMemory } from "./state.js";
 import { toBpm, toStrArr } from "./tools/helpers.js";
-import { NO_AUTH_HINT } from "./prompts.js";
+import { buildSystemPrompt, NO_AUTH_HINT } from "./prompts.js";
 import { lastUserText, loadSkills, matchSkills, skillProblems } from "./skills.js";
 import { selectSkillsForTurn } from "./chat/skill-selector.js";
 import { testConnection, testAudioConnection, listModels } from "./chat/testconn.js";
@@ -402,6 +402,9 @@ async function chat(context: Ctx, req: ChatRequest) {
       selectedSkillNames: selected.map((skill) => skill.name),
       simpleEdit: req.attachments?.length ? undefined : simpleEditKind(userText),
     };
+    const builtPrompt = buildSystemPrompt(selectedReq.language, selectedReq.selectedSkillNames, selectedReq.simpleEdit);
+    selectedReq.systemPrompt = builtPrompt.prompt;
+    debugLog(context, `PROMPT chars=${JSON.stringify(builtPrompt.breakdown)}`);
     const taskConfig = withTaskEffort(cfg, selectedReq, userText);
     if (selectedReq.simpleEdit || taskConfig !== cfg) {
       debugLog(context, `TASK policy simpleEdit=${selectedReq.simpleEdit ?? "none"} effort=${taskConfig.reasoningEffort ?? taskConfig.effort ?? "provider-default"}`);

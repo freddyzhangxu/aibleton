@@ -12,6 +12,12 @@ export interface AnthropicContentBlock extends Record<string, unknown> {
 export interface AnthropicStreamData {
   content: AnthropicContentBlock[];
   stop_reason: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
 }
 
 /** Rebuild the final Messages response while consuming its SSE body. */
@@ -26,6 +32,7 @@ export async function readAnthropicStream(stream: AsyncIterable<Uint8Array>): Pr
   let started = false;
   let stopped = false;
   let stopReason: string | undefined;
+  const usage: NonNullable<AnthropicStreamData["usage"]> = {};
 
   const dispatch = () => {
     if (!dataLines.length) {
@@ -46,6 +53,10 @@ export async function readAnthropicStream(stream: AsyncIterable<Uint8Array>): Pr
     if (type === "ping") return;
     if (type === "message_start") {
       started = true;
+      const message = event.message as { usage?: AnthropicStreamData["usage"] } | undefined;
+      if (typeof message?.usage?.input_tokens === "number") usage.input_tokens = message.usage.input_tokens;
+      if (typeof message?.usage?.cache_read_input_tokens === "number") usage.cache_read_input_tokens = message.usage.cache_read_input_tokens;
+      if (typeof message?.usage?.cache_creation_input_tokens === "number") usage.cache_creation_input_tokens = message.usage.cache_creation_input_tokens;
       return;
     }
     if (!started) throw new Error("Claude SSE event arrived before message_start");
@@ -90,6 +101,9 @@ export async function readAnthropicStream(stream: AsyncIterable<Uint8Array>): Pr
     if (type === "message_delta") {
       const delta = event.delta as { stop_reason?: unknown } | undefined;
       if (typeof delta?.stop_reason === "string") stopReason = delta.stop_reason;
+      const messageUsage = event.usage as AnthropicStreamData["usage"] | undefined;
+      if (typeof messageUsage?.output_tokens === "number") usage.output_tokens = messageUsage.output_tokens;
+      if (typeof messageUsage?.input_tokens === "number") usage.input_tokens = messageUsage.input_tokens;
       return;
     }
     if (type === "message_stop") stopped = true;
@@ -139,5 +153,9 @@ export async function readAnthropicStream(stream: AsyncIterable<Uint8Array>): Pr
     }
     blocks[index]!.input = parsed as Record<string, unknown>;
   }
-  return { content: blocks as AnthropicContentBlock[], stop_reason: stopReason };
+  return {
+    content: blocks as AnthropicContentBlock[],
+    stop_reason: stopReason,
+    ...(Object.keys(usage).length ? { usage } : {}),
+  };
 }

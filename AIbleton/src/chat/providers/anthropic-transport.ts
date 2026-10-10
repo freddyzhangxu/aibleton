@@ -3,6 +3,12 @@ import { readAnthropicStream, type AnthropicContentBlock } from "./anthropic-str
 export interface AnthropicRoundData {
   content?: AnthropicContentBlock[];
   stop_reason?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
   error?: { message?: string };
 }
 

@@ -13,6 +13,7 @@ import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
 import { requestAnthropicRound, type AnthropicRoundData } from "./anthropic-transport.js";
+import { logProviderUsage } from "./usage.js";
 import {
   languageCorrectionPrompt,
   MAX_REPLY_LANGUAGE_CORRECTIONS,
@@ -96,7 +97,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     const requestBody = {
       model,
       max_tokens: CLAUDE_MAX_TOKENS,
-      system: systemPromptFor(req.language, req.selectedSkillNames),
+      system: req.systemPrompt ?? systemPromptFor(req.language, req.selectedSkillNames, req.simpleEdit),
       ...(languageRewriteOnly ? {} : { tools: chatTools }),
       messages,
       ...(thinking && !suppressThinking ? { thinking } : {}),
@@ -156,6 +157,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
       });
     }
 
+    logProviderUsage(context, "anthropic", round, data.usage);
     const content = data.content ?? [];
     toolHooks.debugLog(
       context,

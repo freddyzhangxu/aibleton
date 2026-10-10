@@ -233,11 +233,64 @@ function formatProfile(profile: GenreProfile): string {
   return `${profile.label} aliases: ${profile.aliases.join(", ")}. Role-to-sound mappings: ${parts}.${subgenres ? ` ${subgenres}.` : ""}`;
 }
 
+const LOCALIZED_GENRE_ALIASES: Record<string, string[]> = {
+  pop: ["流行", "流行音乐"],
+  rock: ["摇滚", "摇滚乐"],
+  jazz: ["爵士", "爵士乐"],
+  funk: ["放克", "芬克"],
+  "r&b": ["节奏布鲁斯", "节奏蓝调", "节奏与布鲁斯"],
+  "pop rock": ["流行摇滚"],
+  "dance pop": ["舞曲流行", "舞曲流行乐"],
+  "synth pop": ["合成器流行", "合成器流行乐"],
+  "piano rock": ["钢琴摇滚"],
+  "synth rock": ["合成器摇滚"],
+  "straight-ahead jazz": ["传统爵士", "正统爵士"],
+  "jazz fusion": ["爵士融合", "融合爵士"],
+  "bossa nova": ["波萨诺瓦", "巴萨诺瓦", "巴西波萨诺瓦"],
+  "funk slap": ["拍击放克"],
+  "funk pick": ["拨片放克"],
+  "disco funk": ["迪斯科放克"],
+  "modern r&b": ["现代节奏布鲁斯", "现代节奏蓝调"],
+  "neo-soul": ["新灵魂乐", "新灵魂"],
+  "trap-influenced r&b": ["陷阱节奏布鲁斯", "陷阱灵魂乐"],
+};
+
+function inputAliases(label: string, aliases: readonly string[]): string[] {
+  return [...aliases, ...(LOCALIZED_GENRE_ALIASES[label.toLocaleLowerCase()] ?? [])];
+}
+
 /** Build the prompt section from the same recipe catalog used by apply_sound_recipe. */
-export function genreInstrumentProfilePrompt(): string {
-  const profiles = Object.values(GENRE_INSTRUMENT_PROFILES).map(formatProfile);
+export function genreInstrumentProfilePrompt(userText = "", selectedRoles?: readonly GenrePartRole[]): string {
+  const normalized = userText.toLocaleLowerCase();
+  const roles = selectedRoles ? new Set(selectedRoles) : undefined;
+  const allProfiles = Object.values(GENRE_INSTRUMENT_PROFILES);
+  const profiles = (normalized
+    ? allProfiles.filter((profile) =>
+        [...inputAliases(profile.label, profile.aliases), ...profile.subgenres.flatMap((subgenre) => inputAliases(subgenre.label, subgenre.aliases))]
+          .some((alias) => normalized.includes(alias.toLocaleLowerCase())),
+      )
+    : allProfiles
+  ).map((profile) => {
+    const parts = roles ? profile.parts.filter((part) => roles.has(part.role)) : profile.parts;
+    const subgenres = normalized
+      ? profile.subgenres.filter((subgenre) =>
+          inputAliases(subgenre.label, subgenre.aliases).some((alias) => normalized.includes(alias.toLocaleLowerCase())),
+        )
+      : profile.subgenres;
+    return {
+      ...profile,
+      parts,
+      subgenres: roles
+        ? subgenres.map((subgenre) => ({
+            ...subgenre,
+            overrides: subgenre.overrides.filter((part) => roles.has(part.role)),
+          })).filter((subgenre) => subgenre.overrides.length > 0)
+        : subgenres,
+    };
+  }).filter((profile) => !roles || profile.parts.length > 0 || profile.subgenres.length > 0)
+    .map(formatProfile);
   return [
-    `Genre-to-instrument profiles for new parts only: ${profiles.join(" ")}`,
+    profiles.length ? `Genre-to-instrument profiles for new parts only: ${profiles.join(" ")}` : "",
     "Use profiles only to choose an instrument or timbre for a role already selected by the user or arrangement.",
     "Never add, omit, require, or forbid parts because of a genre profile; profiles are not a role whitelist.",
     "An explicit subgenre overrides the parent genre for listed roles; inherit the parent profile for roles it does not change.",
@@ -245,5 +298,5 @@ export function genreInstrumentProfilePrompt(): string {
     "For an unlisted role, keep the selected role and use normal role-specific defaults or current Set context; ask only when that role's sound remains unclear.",
     "When a listed sample is unavailable, use its declared synth fallback and explain the approximation.",
     "Do not invent a recipe or imply an unsupported genre-specific sound.",
-  ].join(" ");
+  ].filter(Boolean).join(" ");
 }
