@@ -65,13 +65,13 @@ test("describes Piano as a specific instrument within the broader Keys family", 
   assert.match(recipeTool.description, /Generic Keys does not default to Piano samples/);
   assert.match(recipeTool.description, /explicit Piano request or a genre profile that names Piano/);
   assert.doesNotMatch(recipeTool.description, /Generic Keys defaults to keys_piano_sample/);
-  assert.match(recipeTool.description, /Use the genre profile in system instructions to select supported recipes for an already selected role/);
+  assert.match(recipeTool.description, /Use genre profile mappings as sound and recipe references for roles chosen through musical judgment/);
 });
 
 test("keeps genre profiles from constraining which roles are created", () => {
   const recipeTool = TOOLS.find((tool) => tool.name === "apply_sound_recipe");
   assert.ok(recipeTool);
-  assert.match(recipeTool.description, /profiles map sounds and never choose which roles to create/);
+  assert.match(recipeTool.description, /profiles do not mandate or exclude a track's role lineup/);
   assert.doesNotMatch(recipeTool.description, /core\/optional parts/i);
 });
 

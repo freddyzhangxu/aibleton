@@ -110,8 +110,8 @@ test("maps Rock, Jazz, and Funk parts to available recipes and handles gaps expl
   assert.match(prompt, /Funk aliases:.*Guitar → muted funk guitar \(guitar_muted.*Keys → Clavinet-style percussive keyboard \(keys_clav_synth.*Operator approximation.*Lead → analog synth lead \(lead_analog.*Melody → analog synth lead \(lead_analog/);
   assert.match(prompt, /Funk Pick aliases: picked funk, funk pick, pick bass funk\. Funk Pick overrides: Bass → picked electric bass \(funk_pick_bass/);
   assert.match(prompt, /Operator approximation, not a Clavinet preset/);
-  assert.match(prompt, /Use profiles only to choose an instrument or timbre for a role already selected by the user or arrangement/);
-  assert.match(prompt, /For an unlisted role, keep the selected role and use normal role-specific defaults or current Set context/);
+  assert.match(prompt, /Use profiles as suggestions for instrument and timbre choices while exercising musical judgment about which roles a complete arrangement needs/);
+  assert.match(prompt, /For an unlisted role, choose a suitable sound using musical judgment/);
   assert.doesNotMatch(prompt, /Core parts:|Optional parts:/);
   assert.match(prompt, /Use the profile catalog as the single source of genre-to-recipe mappings/i);
   assert.match(prompt, /When a profile specifies source_preference, pass that value to apply_sound_recipe/);
@@ -142,10 +142,11 @@ test("uses current Set context before artist memory when a sound choice is open"
   assert.match(prompt, /prefer the genre\/subgenre in the current request, then inspect the current Set context[\s\S]*use relevant artist memory only as a preference when both leave the choice open/);
 });
 
-test("uses genre profiles for timbre selection without treating them as a part whitelist", () => {
+test("lets musical judgment choose a complete arrangement lineup across genres", () => {
   const prompt = systemPromptFor("en");
-  assert.match(prompt, /Use profiles only to choose an instrument or timbre for a role already selected by the user or arrangement/);
-  assert.match(prompt, /Never add, omit, require, or forbid parts because of a genre profile/);
+  assert.match(prompt, /there is no fixed role lineup for any genre/);
+  assert.match(prompt, /Profiles do not mandate or exclude roles/);
+  assert.match(prompt, /A request for one named part stays scoped to that part/);
   assert.doesNotMatch(prompt, /core\/optional parts/);
   assert.doesNotMatch(prompt, /choose a compact, conventional subset of core and optional parts/);
 });

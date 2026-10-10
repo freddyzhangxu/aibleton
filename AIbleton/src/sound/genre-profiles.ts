@@ -457,9 +457,9 @@ export function genreDrumProfilePrompt(userText = ""): string {
 
   return [
     mappings.length ? `Genre-to-drum-timbre profiles for requested drum roles only: ${mappings.join(" ")}` : "",
-    "Use drum profiles only to guide timbre for parts already requested or present; they do not prescribe rhythm or instrumentation.",
+    "Use drum profiles as timbre references; choose drum roles and rhythms using musical judgment based on the genre, user intent, and current Set.",
     "Explicitly named drum timbres take precedence over profile guidance.",
-    "Do not add, omit, or require drum parts or patterns from these profiles; use the current Set context when no profile matches.",
+    "Drum profiles neither require nor prohibit parts or patterns; adapt them to the requested style and current Set, including when no profile matches.",
     "Keep the selected drum kit as the starting point. Only when the user explicitly requests a drum-pad timbre that the selected sample does not clearly provide, use search_samples with the pad role and requested timbre, and choose a clear one-shot match.",
     "For an existing Set, call get_drum_pad_sample on the target pad before replacing; call replace_drum_pad_sample only for the requested pad. A genre profile alone never authorizes sample replacement.",
     "If no clear local match is found, keep the current pad sample and explain the approximation.",
@@ -498,11 +498,11 @@ export function genreInstrumentProfilePrompt(userText = "", selectedRoles?: read
     .map(formatProfile);
   return [
     profiles.length ? `Genre-to-instrument profiles for new parts only: ${profiles.join(" ")}` : "",
-    "Use profiles only to choose an instrument or timbre for a role already selected by the user or arrangement.",
-    "Never add, omit, require, or forbid parts because of a genre profile; profiles are not a role whitelist.",
+    "Use profiles as suggestions for instrument and timbre choices while exercising musical judgment about which roles a complete arrangement needs.",
+    "Profiles do not mandate or exclude roles; adapt the lineup to the genre, subgenre, user intent, mood, and current Set.",
     "An explicit subgenre overrides the parent genre for listed roles; inherit the parent profile for roles it does not change.",
     "If no listed subgenre matches, retain the parent genre profile and do not guess a subgenre override.",
-    "For an unlisted role, keep the selected role and use normal role-specific defaults or current Set context; ask only when that role's sound remains unclear.",
+    "For an unlisted role, choose a suitable sound using musical judgment, available recipes, and current Set context; ask only when the role's sound remains unclear.",
     "When a listed sample is unavailable, use its declared synth fallback and explain the approximation.",
     "Do not invent a recipe or imply an unsupported genre-specific sound.",
   ].filter(Boolean).join(" ");

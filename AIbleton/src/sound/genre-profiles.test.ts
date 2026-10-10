@@ -8,7 +8,7 @@ test("profile guide maps sound by role and gives subgenres precedence", () => {
   assert.match(guide, /Role-to-sound mappings: Bass/);
   assert.match(guide, /An explicit subgenre overrides the parent genre for listed roles/);
   assert.match(guide, /If no listed subgenre matches, retain the parent genre profile/);
-  assert.match(guide, /For an unlisted role, keep the selected role and use normal role-specific defaults or current Set context/);
+  assert.match(guide, /For an unlisted role, choose a suitable sound using musical judgment/);
   assert.doesNotMatch(guide, /Core parts:|Optional parts:/);
 });
 
@@ -44,11 +44,17 @@ test("contextual Pop Bass exposes sample and synth preferences", () => {
   assert.match(guide, /synth bass when synth\/dance arrangement \(pop_bass, contextual source; fallback Operator; prefer synth\)/);
 });
 
-test("genre profiles guide timbre for selected roles without constraining the role lineup", () => {
+test("genre profiles guide sound choices while leaving role selection to musical judgment", () => {
   const guide = genreInstrumentProfilePrompt();
-  assert.match(guide, /Use profiles only to choose an instrument or timbre for a role already selected by the user or arrangement/);
-  assert.match(guide, /Never add, omit, require, or forbid parts because of a genre profile/);
+  assert.match(guide, /Use profiles as suggestions for instrument and timbre choices while exercising musical judgment about which roles a complete arrangement needs/);
+  assert.match(guide, /Profiles do not mandate or exclude roles/);
   assert.doesNotMatch(guide, /Core parts:|Optional parts:/);
+});
+
+test("drum timbre profiles leave part and pattern choices to musical judgment", () => {
+  const guide = genreDrumProfilePrompt("house drums");
+  assert.match(guide, /choose drum roles and rhythms using musical judgment/);
+  assert.match(guide, /Drum profiles neither require nor prohibit parts or patterns/);
 });
 
 test("maps Guitar roles to distinct sample timbres by subgenre and sound character", () => {
