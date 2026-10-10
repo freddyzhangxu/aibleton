@@ -46,14 +46,12 @@ import { commonText } from "../i18n/common.js";
 export const AGENT_MAX_ROUNDS = 48;
 
 /**
- * Hard cap on EXECUTED Set-mutating calls per turn. Deliberately small: a
- * focused goal needs a handful of landings (create → load → write → tweak),
- * and a model that needs more is flailing, not finishing. Verify-failed calls
+ * Hard cap on EXECUTED Set-mutating calls per turn. Verify-failed calls
  * consume budget too (they DID mutate the Set — "executed but missed target"
  * is still a change the next call must reckon with); denied/thrown calls
  * never executed and cost nothing.
  */
-export const AGENT_MAX_STEPS = 36;
+export const AGENT_MAX_STEPS = 72;
 
 /** Goal-gate replans per turn. */
 export const AGENT_MAX_RETRIES = 3;

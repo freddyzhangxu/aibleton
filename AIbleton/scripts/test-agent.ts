@@ -44,13 +44,13 @@ console.log("== 循环上限常量 ==");
 {
   check("重试上限恰为 1（PR7 决策：单次 replan）", AGENT_MAX_RETRIES === 1);
   check(
-    "步数预算在 5~12 之间（PR7 建议区间）",
-    AGENT_MAX_STEPS >= 5 && AGENT_MAX_STEPS <= 12,
+    "改动预算设为 72 次",
+    AGENT_MAX_STEPS === 72,
     `AGENT_MAX_STEPS=${AGENT_MAX_STEPS}`,
   );
   check(
-    "round 兜底大于步数预算（留出分析/声明/收尾的轮次）",
-    AGENT_MAX_ROUNDS > AGENT_MAX_STEPS,
+    "模型调用轮次上限独立保持为 48",
+    AGENT_MAX_ROUNDS === 48,
     `rounds=${AGENT_MAX_ROUNDS} steps=${AGENT_MAX_STEPS}`,
   );
 }
@@ -120,7 +120,7 @@ interface SimResult {
 }
 
 function simulate(
-  model: (s: { round: number; lastRefused: boolean; retries: number; mutations: number }) => "mutate" | "exit",
+  model: (s: { round: number; lastRefused: boolean; retries: number; mutations: number }) => "mutate" | "mutate-batch" | "exit",
   metWhen: (mutations: number) => boolean,
 ): SimResult {
   const executed: string[] = [];
@@ -129,13 +129,16 @@ function simulate(
   let lastRefused = false;
   for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     const choice = model({ round, lastRefused, retries, mutations: executed.length });
-    if (choice === "mutate") {
-      if (countMutations(executed, READ_ONLY) >= AGENT_MAX_STEPS) {
-        refusedCalls++; // server returns stepBudgetError() — NOT executed
-        lastRefused = true;
-      } else {
-        executed.push("write_midi_clip");
-        lastRefused = false;
+    if (choice === "mutate" || choice === "mutate-batch") {
+      const calls = choice === "mutate-batch" ? 2 : 1;
+      for (let i = 0; i < calls; i++) {
+        if (countMutations(executed, READ_ONLY) >= AGENT_MAX_STEPS) {
+          refusedCalls++; // server returns stepBudgetError() — NOT executed
+          lastRefused = true;
+        } else {
+          executed.push("write_midi_clip");
+          lastRefused = false;
+        }
       }
       continue;
     }
@@ -194,13 +197,13 @@ console.log("== 终止性：预算耗尽时未达成 → 不再 retry，直接�
 console.log("== 终止性：最顽固模型（无视拒绝永远尝试改动）也不会失控 ==");
 {
   const r = simulate(
-    () => "mutate", // Stubborn model: never exits or stops.
+    () => "mutate-batch", // Parallel tool calls can spend multiple mutations per provider round.
     () => false,
   );
   check("改动数永远不超预算", r.mutations === AGENT_MAX_STEPS, JSON.stringify(r));
   check(
     "之后的每次尝试都被拒绝且未执行",
-    r.refusedCalls === AGENT_MAX_ROUNDS - AGENT_MAX_STEPS,
+    r.refusedCalls === 2 * (AGENT_MAX_ROUNDS - AGENT_MAX_STEPS / 2),
   );
   check("最终撞 round 兜底中止 — 不存在无限 ReAct", r.ended === "round-cap" && r.rounds === AGENT_MAX_ROUNDS);
   check("全程未注入 retry（gate 从未被触发）", r.retries === 0);
