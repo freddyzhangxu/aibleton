@@ -1016,8 +1016,8 @@ export async function runTool(
         track_index: Number(input.track_index),
         track_name: String(input.track_name ?? ""),
         recipe_id: String(input.recipe_id ?? "") as import("../sound/recipes.js").SoundRecipeId,
-        ...(input.source_preference === "sample" || input.source_preference === "synth"
-          ? { source_preference: input.source_preference }
+        ...(typeof input.instrument_name === "string" && input.instrument_name.trim()
+          ? { instrument_name: input.instrument_name.trim() }
           : {}),
       });
     }

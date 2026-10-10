@@ -1,4 +1,18 @@
 export type SoundRecipeId =
+  | "source_bass_sample"
+  | "source_bass_synth"
+  | "source_pad_sample"
+  | "source_pad_synth"
+  | "source_pluck_sample"
+  | "source_pluck_synth"
+  | "source_guitar_sample"
+  | "source_guitar_synth"
+  | "source_lead_sample"
+  | "source_lead_synth"
+  | "source_keys_sample"
+  | "source_keys_synth"
+  | "source_piano_sample"
+  | "source_piano_synth"
   | "rock_bass"
   | "reggae_bass"
   | "pop_bass"
@@ -74,209 +88,65 @@ export type SoundRecipe = {
   sampleExcludeEvidence?: readonly string[];
   instrument?: string;
   fallbackInstrument: string;
-  targets: Readonly<Record<string, readonly RecipeParameterTarget[]>>;
 };
 
-const simpleSampleEnvelope = (
-  attack: number,
-  sustain: number,
-  release: number,
-): readonly RecipeParameterTarget[] => [
-  // Live's envelope times can span many seconds, so bass transients use small
-  // fractions of the device range while sustain stays near its target level.
-  { id: "attack", kind: "numeric", aliases: ["Amp Attack", "Volume Attack"], normalizedValue: attack },
-  { id: "sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain"], normalizedValue: sustain },
-  { id: "release", kind: "numeric", aliases: ["Amp Release", "Volume Release"], normalizedValue: release },
-];
-
-const simplePluckEnvelope = (
-  attack: number,
-  decay: number,
-  sustain: number,
-  release: number,
-): readonly RecipeParameterTarget[] => [
-  { id: "attack", kind: "numeric", aliases: ["Amp Attack", "Volume Attack"], normalizedValue: attack },
-  { id: "decay", kind: "numeric", aliases: ["Amp Decay", "Volume Decay"], normalizedValue: decay },
-  { id: "sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain"], normalizedValue: sustain },
-  { id: "release", kind: "numeric", aliases: ["Amp Release", "Volume Release"], normalizedValue: release },
-];
-
-const operatorBassControls: readonly RecipeParameterTarget[] = [
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.04 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.12 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain"], normalizedValue: 0.34 },
-  { id: "amp_release", kind: "numeric", aliases: ["Amp Release", "Volume Release"], normalizedValue: 0.003 },
-];
-
-const warmOperatorBassControls: readonly RecipeParameterTarget[] = [
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.025 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.05 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain"], normalizedValue: 0.38 },
-  { id: "amp_release", kind: "numeric", aliases: ["Amp Release", "Volume Release"], normalizedValue: 0.003 },
-];
-
-const punchyOperatorBassControls: readonly RecipeParameterTarget[] = [
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.08 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.16 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain", "Volume Sustain"], normalizedValue: 0.32 },
-  { id: "amp_release", kind: "numeric", aliases: ["Amp Release", "Volume Release"], normalizedValue: 0.0015 },
-];
-
-const wavetableBrightPluckControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Amp Attack"], normalizedValue: 0.0005 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Amp Decay"], normalizedValue: 0.22 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain"], normalizedValue: 0.08 },
-  { id: "amp_release", kind: "numeric", aliases: ["Amp Release"], normalizedValue: 0.03 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.65 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.08 },
-];
-
-const driftWarmPluckControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Env 1 Attack"], normalizedValue: 0.002 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Env 1 Decay"], normalizedValue: 0.3 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Env 1 Sustain"], normalizedValue: 0.12 },
-  { id: "amp_release", kind: "numeric", aliases: ["Env 1 Release"], normalizedValue: 0.05 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["LP Freq"], normalizedValue: 0.3 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["LP Res"], normalizedValue: 0.03 },
-];
-
-const operatorBellPluckControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.0001 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.18 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.02 },
-  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.04 },
-  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.16 },
-  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.42 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.55 },
-];
-
-const operatorDx7KeysControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.0002 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.42 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.28 },
-  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.12 },
-  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.18 },
-  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.28 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.7 },
-];
-
-const operatorRhodesKeysControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.006 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.5 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.24 },
-  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.2 },
-  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.22 },
-  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.38 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.58 },
-];
-
-const operatorClavKeysControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.0001 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.24 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.06 },
-  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.045 },
-  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.34 },
-  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.48 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.4 },
-];
-
-const operatorPianoFallbackControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.004 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.48 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.34 },
-  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.2 },
-  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.1 },
-  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.16 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.55 },
-];
-
-const pianoKeysSampleControls = simplePluckEnvelope(0.001, 0.36, 0.45, 0.18);
-const grandPianoSampleControls = simplePluckEnvelope(0.001, 0.3, 0.58, 0.16);
-const feltPianoSampleControls = simplePluckEnvelope(0.012, 0.42, 0.38, 0.24);
-
-const driftWarmPadControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Env 1 Attack"], normalizedValue: 0.18 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Env 1 Decay"], normalizedValue: 0.58 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Env 1 Sustain"], normalizedValue: 0.7 },
-  { id: "amp_release", kind: "numeric", aliases: ["Env 1 Release"], normalizedValue: 0.5 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["LP Freq"], normalizedValue: 0.28 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["LP Res"], normalizedValue: 0.04 },
-];
-
-const wavetableAiryPadControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Amp Attack"], normalizedValue: 0.28 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Amp Decay"], normalizedValue: 0.62 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain"], normalizedValue: 0.68 },
-  { id: "amp_release", kind: "numeric", aliases: ["Amp Release"], normalizedValue: 0.68 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.76 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.06 },
-];
-
-const operatorDarkPadControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Ae Attack"], normalizedValue: 0.2 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Ae Decay"], normalizedValue: 0.64 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Ae Sustain"], normalizedValue: 0.62 },
-  { id: "amp_release", kind: "numeric", aliases: ["Ae Release"], normalizedValue: 0.55 },
-  { id: "osc_b_coarse", kind: "numeric", aliases: ["B Coarse", "Osc B Coarse", "Oscillator B Coarse"], normalizedValue: 0.12 },
-  { id: "osc_b_level", kind: "numeric", aliases: ["B Level", "Osc B Level", "Oscillator B Level"], normalizedValue: 0.26 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.28 },
-];
-
-const driftCleanLeadControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Env 1 Attack"], normalizedValue: 0.006 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Env 1 Decay"], normalizedValue: 0.34 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Env 1 Sustain"], normalizedValue: 0.58 },
-  { id: "amp_release", kind: "numeric", aliases: ["Env 1 Release"], normalizedValue: 0.1 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["LP Freq"], normalizedValue: 0.46 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["LP Res"], normalizedValue: 0.035 },
-];
-
-const driftAnalogLeadControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Env 1 Attack"], normalizedValue: 0.012 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Env 1 Decay"], normalizedValue: 0.42 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Env 1 Sustain"], normalizedValue: 0.64 },
-  { id: "amp_release", kind: "numeric", aliases: ["Env 1 Release"], normalizedValue: 0.15 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["LP Freq"], normalizedValue: 0.36 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["LP Res"], normalizedValue: 0.08 },
-];
-
-const wavetableAggressiveLeadControls: readonly RecipeParameterTarget[] = [
-  { id: "amp_attack", kind: "numeric", aliases: ["Amp Attack"], normalizedValue: 0.0005 },
-  { id: "amp_decay", kind: "numeric", aliases: ["Amp Decay"], normalizedValue: 0.32 },
-  { id: "amp_sustain", kind: "numeric", aliases: ["Amp Sustain"], normalizedValue: 0.48 },
-  { id: "amp_release", kind: "numeric", aliases: ["Amp Release"], normalizedValue: 0.04 },
-  { id: "filter_frequency", kind: "numeric", aliases: ["Filter Frequency", "Filter Freq"], normalizedValue: 0.82 },
-  { id: "filter_resonance", kind: "numeric", aliases: ["Filter Resonance", "Filter Res"], normalizedValue: 0.14 },
-];
-
-const padLoopPlaybackControls: readonly RecipeParameterTarget[] = [
-  { id: "playback_mode", kind: "enum", aliases: ["Mode", "Playback Mode"], optionAliases: ["Classic"] },
-  { id: "loop", kind: "enum", aliases: ["Loop"], optionAliases: ["On"] },
-];
-
-const padWarmSampleControls: readonly RecipeParameterTarget[] = [
-  ...padLoopPlaybackControls,
-  ...simplePluckEnvelope(0.12, 0.68, 0.78, 0.62),
-];
-
-const padAirySampleControls: readonly RecipeParameterTarget[] = [
-  ...padLoopPlaybackControls,
-  ...simplePluckEnvelope(0.2, 0.62, 0.72, 0.78),
-];
-
-const padDarkSampleControls: readonly RecipeParameterTarget[] = [
-  ...padLoopPlaybackControls,
-  ...simplePluckEnvelope(0.16, 0.62, 0.64, 0.7),
-];
-
-const brightPluckSampleControls = simplePluckEnvelope(0.0005, 0.22, 0.08, 0.04);
-const warmPluckSampleControls = simplePluckEnvelope(0.002, 0.3, 0.16, 0.08);
-const bellPluckSampleControls = simplePluckEnvelope(0.0001, 0.18, 0.02, 0.04);
-const cleanLeadSampleControls = simplePluckEnvelope(0.006, 0.28, 0.58, 0.1);
-const analogLeadSampleControls = simplePluckEnvelope(0.012, 0.35, 0.64, 0.15);
-const aggressiveLeadSampleControls = simplePluckEnvelope(0.0005, 0.28, 0.48, 0.04);
-
 export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
+  source_bass_sample: {
+    id: "source_bass_sample", role: "bass", label: "Bass sample source", genreTerms: [],
+    source: "sample", sampleQueries: ["bass"], fallbackInstrument: "Operator",
+  },
+  source_bass_synth: {
+    id: "source_bass_synth", role: "bass", label: "Bass synth source", genreTerms: [],
+    source: "synth", sampleQueries: [], fallbackInstrument: "Operator",
+  },
+  source_pad_sample: {
+    id: "source_pad_sample", role: "pad", label: "Pad sample source", genreTerms: [],
+    source: "sample", sampleQueries: ["pad", "texture", "atmosphere", "drone"], samplePlayback: "loop", fallbackInstrument: "Wavetable",
+  },
+  source_pad_synth: {
+    id: "source_pad_synth", role: "pad", label: "Pad synth source", genreTerms: [],
+    source: "synth", sampleQueries: [], fallbackInstrument: "Wavetable",
+  },
+  source_pluck_sample: {
+    id: "source_pluck_sample", role: "pluck", label: "Pluck sample source", genreTerms: [],
+    source: "sample", sampleQueries: ["pluck", "mallet", "marimba", "glockenspiel", "kalimba"], samplePlayback: "one_shot", fallbackInstrument: "Wavetable",
+  },
+  source_pluck_synth: {
+    id: "source_pluck_synth", role: "pluck", label: "Pluck synth source", genreTerms: [],
+    source: "synth", sampleQueries: [], fallbackInstrument: "Wavetable",
+  },
+  source_guitar_sample: {
+    id: "source_guitar_sample", role: "guitar", label: "Guitar sample source", genreTerms: [],
+    source: "sample", sampleQueries: ["guitar"], samplePlayback: "one_shot", fallbackInstrument: "Drift",
+  },
+  source_guitar_synth: {
+    id: "source_guitar_synth", role: "guitar", label: "Guitar synth source", genreTerms: [],
+    source: "synth", sampleQueries: [], fallbackInstrument: "Drift",
+  },
+  source_lead_sample: {
+    id: "source_lead_sample", role: "lead", label: "Lead sample source", genreTerms: [],
+    source: "sample", sampleQueries: ["lead", "synth lead", "keyboard lead"], samplePlayback: "one_shot", fallbackInstrument: "Drift",
+  },
+  source_lead_synth: {
+    id: "source_lead_synth", role: "lead", label: "Lead synth source", genreTerms: [],
+    source: "synth", sampleQueries: [], fallbackInstrument: "Drift",
+  },
+  source_keys_sample: {
+    id: "source_keys_sample", role: "keys", label: "Keys sample source", genreTerms: [],
+    source: "sample", sampleQueries: ["keyboard", "keys", "electric piano"], samplePlayback: "one_shot", fallbackInstrument: "Operator",
+  },
+  source_keys_synth: {
+    id: "source_keys_synth", role: "keys", label: "Keys synth source", genreTerms: [],
+    source: "synth", sampleQueries: [], fallbackInstrument: "Operator",
+  },
+  source_piano_sample: {
+    id: "source_piano_sample", role: "piano", label: "Piano sample source", genreTerms: [],
+    source: "sample", sampleQueries: ["piano"], samplePlayback: "one_shot", fallbackInstrument: "Operator",
+  },
+  source_piano_synth: {
+    id: "source_piano_synth", role: "piano", label: "Piano synth source", genreTerms: [],
+    source: "synth", sampleQueries: [], fallbackInstrument: "Operator",
+  },
   rock_bass: {
     id: "rock_bass",
     role: "bass",
@@ -285,10 +155,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     source: "sample",
     sampleQueries: ["picked electric bass", "plucked bass", "rock bass"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simpleSampleEnvelope(0.0002, 0.72, 0.003),
-      Operator: operatorBassControls,
-    },
   },
   reggae_bass: {
     id: "reggae_bass",
@@ -298,10 +164,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     source: "sample",
     sampleQueries: ["reggae bass", "fingered bass", "muted electric bass"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simpleSampleEnvelope(0.0005, 0.9, 0.005),
-      Operator: operatorBassControls,
-    },
   },
   pop_bass: {
     id: "pop_bass",
@@ -311,10 +173,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     source: "contextual",
     sampleQueries: ["clean electric bass", "pop bass", "synth bass"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simpleSampleEnvelope(0.0002, 0.8, 0.003),
-      Operator: operatorBassControls,
-    },
   },
   electronic_bass: {
     id: "electronic_bass",
@@ -325,7 +183,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Operator",
     fallbackInstrument: "Operator",
-    targets: { Operator: operatorBassControls },
   },
   hiphop_808_bass: {
     id: "hiphop_808_bass",
@@ -335,10 +192,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     source: "sample",
     sampleQueries: ["808 bass", "808 sub", "sub bass"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simpleSampleEnvelope(0, 1, 0.002),
-      Operator: operatorBassControls,
-    },
   },
   jazz_bass: {
     id: "jazz_bass",
@@ -348,10 +201,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     source: "sample",
     sampleQueries: ["upright bass", "double bass", "jazz bass"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simpleSampleEnvelope(0.0003, 0.82, 0.004),
-      Operator: warmOperatorBassControls,
-    },
   },
   jazz_fusion_bass: {
     id: "jazz_fusion_bass",
@@ -361,10 +210,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     source: "sample",
     sampleQueries: ["flatwound electric bass", "fingerstyle electric bass", "jazz electric bass"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simpleSampleEnvelope(0.0002, 0.76, 0.003),
-      Operator: warmOperatorBassControls,
-    },
   },
   bossa_bass: {
     id: "bossa_bass",
@@ -374,10 +219,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     source: "sample",
     sampleQueries: ["bossa upright bass", "upright bass", "mellow electric bass"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simpleSampleEnvelope(0.0004, 0.8, 0.003),
-      Operator: warmOperatorBassControls,
-    },
   },
   funk_bass: {
     id: "funk_bass",
@@ -387,10 +228,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     source: "sample",
     sampleQueries: ["funk finger bass", "fingerstyle bass", "funk bass"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simpleSampleEnvelope(0.0001, 0.78, 0.002),
-      Operator: punchyOperatorBassControls,
-    },
   },
   funk_pick_bass: {
     id: "funk_pick_bass",
@@ -400,10 +237,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     source: "sample",
     sampleQueries: ["picked electric bass", "funk pick bass", "pick bass"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simpleSampleEnvelope(0.00005, 0.72, 0.0015),
-      Operator: punchyOperatorBassControls,
-    },
   },
   funk_slap_bass: {
     id: "funk_slap_bass",
@@ -413,10 +246,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     source: "sample",
     sampleQueries: ["slap electric bass", "funk slap bass", "slap bass"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simpleSampleEnvelope(0, 0.66, 0.001),
-      Operator: punchyOperatorBassControls,
-    },
   },
   pluck_bright: {
     id: "pluck_bright",
@@ -427,7 +256,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Wavetable",
     fallbackInstrument: "Wavetable",
-    targets: { Wavetable: wavetableBrightPluckControls },
   },
   pluck_warm: {
     id: "pluck_warm",
@@ -438,7 +266,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Drift",
     fallbackInstrument: "Drift",
-    targets: { Drift: driftWarmPluckControls },
   },
   pluck_bell: {
     id: "pluck_bell",
@@ -449,7 +276,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Operator",
     fallbackInstrument: "Operator",
-    targets: { Operator: operatorBellPluckControls },
   },
   pluck_guitar: {
     id: "pluck_guitar",
@@ -460,10 +286,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["nylon guitar", "muted guitar", "clean electric guitar", "guitar"],
     sampleEvidence: ["guitar", "gtr"],
     fallbackInstrument: "Drift",
-    targets: {
-      Simpler: simplePluckEnvelope(0.0003, 0.24, 0.1, 0.04),
-      Drift: driftWarmPluckControls,
-    },
   },
   pluck_kalimba: {
     id: "pluck_kalimba",
@@ -474,10 +296,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: ["kalimba", "mbira", "thumb piano"],
     sampleEvidence: ["kalimba", "mbira", "thumb piano"],
     fallbackInstrument: "Operator",
-    targets: {
-      Simpler: simplePluckEnvelope(0.0001, 0.14, 0.03, 0.035),
-      Operator: operatorBellPluckControls,
-    },
   },
   guitar_acoustic: {
     id: "guitar_acoustic",
@@ -489,10 +307,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleEvidenceGroups: [["guitar", "gtr"], ["nylon", "acoustic", "steelstring"]],
     samplePlayback: "one_shot",
     fallbackInstrument: "Drift",
-    targets: {
-      Simpler: simplePluckEnvelope(0.0008, 0.28, 0.28, 0.12),
-      Drift: driftWarmPluckControls,
-    },
   },
   guitar_clean: {
     id: "guitar_clean",
@@ -505,10 +319,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleExcludeEvidence: ["distort", "overdrive", "fuzz"],
     samplePlayback: "one_shot",
     fallbackInstrument: "Drift",
-    targets: {
-      Simpler: simplePluckEnvelope(0.0004, 0.24, 0.24, 0.08),
-      Drift: driftCleanLeadControls,
-    },
   },
   guitar_muted: {
     id: "guitar_muted",
@@ -520,10 +330,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleEvidenceGroups: [["guitar", "gtr"], ["muted", "mute", "chank"]],
     samplePlayback: "one_shot",
     fallbackInstrument: "Drift",
-    targets: {
-      Simpler: simplePluckEnvelope(0.0001, 0.12, 0.04, 0.025),
-      Drift: driftWarmPluckControls,
-    },
   },
   guitar_overdrive: {
     id: "guitar_overdrive",
@@ -536,10 +342,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "one_shot",
     instrument: "Wavetable",
     fallbackInstrument: "Wavetable",
-    targets: {
-      Simpler: simplePluckEnvelope(0.0002, 0.42, 0.62, 0.07),
-      Wavetable: wavetableAggressiveLeadControls,
-    },
   },
   pad_warm: {
     id: "pad_warm",
@@ -550,7 +352,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Drift",
     fallbackInstrument: "Drift",
-    targets: { Drift: driftWarmPadControls },
   },
   pad_airy: {
     id: "pad_airy",
@@ -561,7 +362,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Wavetable",
     fallbackInstrument: "Wavetable",
-    targets: { Wavetable: wavetableAiryPadControls },
   },
   pad_dark: {
     id: "pad_dark",
@@ -572,7 +372,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Operator",
     fallbackInstrument: "Operator",
-    targets: { Operator: operatorDarkPadControls },
   },
   lead_clean: {
     id: "lead_clean",
@@ -583,7 +382,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Drift",
     fallbackInstrument: "Drift",
-    targets: { Drift: driftCleanLeadControls },
   },
   lead_analog: {
     id: "lead_analog",
@@ -594,7 +392,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Drift",
     fallbackInstrument: "Drift",
-    targets: { Drift: driftAnalogLeadControls },
   },
   lead_aggressive: {
     id: "lead_aggressive",
@@ -605,7 +402,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Wavetable",
     fallbackInstrument: "Wavetable",
-    targets: { Wavetable: wavetableAggressiveLeadControls },
   },
   pad_warm_sample: {
     id: "pad_warm_sample",
@@ -617,7 +413,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "loop",
     sampleEvidenceGroups: [["pad", "atmosphere", "texture", "drone"], ["warm", "soft", "mellow", "analog"]],
     fallbackInstrument: "Drift",
-    targets: { Simpler: padWarmSampleControls, Drift: driftWarmPadControls },
   },
   pad_airy_sample: {
     id: "pad_airy_sample",
@@ -629,7 +424,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "loop",
     sampleEvidenceGroups: [["pad", "atmosphere", "texture"], ["airy", "shimmer", "shimmering", "bright"]],
     fallbackInstrument: "Wavetable",
-    targets: { Simpler: padAirySampleControls, Wavetable: wavetableAiryPadControls },
   },
   pad_dark_sample: {
     id: "pad_dark_sample",
@@ -641,7 +435,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "loop",
     sampleEvidenceGroups: [["pad", "drone", "texture"], ["dark", "cinematic", "moody"]],
     fallbackInstrument: "Operator",
-    targets: { Simpler: padDarkSampleControls, Operator: operatorDarkPadControls },
   },
   pluck_bright_sample: {
     id: "pluck_bright_sample",
@@ -653,7 +446,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "one_shot",
     sampleEvidenceGroups: [["pluck", "mallet", "marimba", "glockenspiel", "kalimba"], ["bright", "crisp", "punchy", "bell"]],
     fallbackInstrument: "Wavetable",
-    targets: { Simpler: brightPluckSampleControls, Wavetable: wavetableBrightPluckControls },
   },
   pluck_warm_sample: {
     id: "pluck_warm_sample",
@@ -665,7 +457,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "one_shot",
     sampleEvidenceGroups: [["pluck", "guitar", "nylon", "kalimba", "mbira"], ["warm", "soft", "mellow", "nylon"]],
     fallbackInstrument: "Drift",
-    targets: { Simpler: warmPluckSampleControls, Drift: driftWarmPluckControls },
   },
   pluck_bell_sample: {
     id: "pluck_bell_sample",
@@ -677,7 +468,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "one_shot",
     sampleEvidenceGroups: [["pluck", "kalimba", "mallet", "bell", "glockenspiel"], ["bell", "metallic", "tine", "bright"]],
     fallbackInstrument: "Operator",
-    targets: { Simpler: bellPluckSampleControls, Operator: operatorBellPluckControls },
   },
   lead_clean_sample: {
     id: "lead_clean_sample",
@@ -689,7 +479,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "one_shot",
     sampleEvidenceGroups: [["lead", "synth lead", "mono lead", "keyboard lead"], ["clean", "clear", "rounded", "pristine"]],
     fallbackInstrument: "Drift",
-    targets: { Simpler: cleanLeadSampleControls, Drift: driftCleanLeadControls },
   },
   lead_analog_sample: {
     id: "lead_analog_sample",
@@ -701,7 +490,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "one_shot",
     sampleEvidenceGroups: [["lead", "synth lead", "mono lead"], ["analog", "vintage", "warm", "retro"]],
     fallbackInstrument: "Drift",
-    targets: { Simpler: analogLeadSampleControls, Drift: driftAnalogLeadControls },
   },
   lead_aggressive_sample: {
     id: "lead_aggressive_sample",
@@ -713,7 +501,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "one_shot",
     sampleEvidenceGroups: [["lead", "synth lead", "mono lead"], ["aggressive", "distorted", "dirty", "hard", "gritty"]],
     fallbackInstrument: "Wavetable",
-    targets: { Simpler: aggressiveLeadSampleControls, Wavetable: wavetableAggressiveLeadControls },
   },
   keys_piano_sample: {
     id: "keys_piano_sample",
@@ -725,7 +512,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     samplePlayback: "one_shot",
     sampleEvidenceGroups: [["piano", "grand piano", "acoustic piano", "upright piano"]],
     fallbackInstrument: "Operator",
-    targets: { Simpler: pianoKeysSampleControls, Operator: operatorPianoFallbackControls },
   },
   keys_piano_grand_sample: {
     id: "keys_piano_grand_sample",
@@ -738,7 +524,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleEvidenceGroups: [["grand piano", "grand", "concert piano", "acoustic piano"]],
     sampleExcludeEvidence: ["felt", "upright", "toy", "electric", "rhodes"],
     fallbackInstrument: "Operator",
-    targets: { Simpler: grandPianoSampleControls, Operator: operatorPianoFallbackControls },
   },
   keys_piano_felt_sample: {
     id: "keys_piano_felt_sample",
@@ -751,7 +536,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleEvidenceGroups: [["piano"], ["felt", "upright", "soft", "warm"]],
     sampleExcludeEvidence: ["grand", "concert", "electric", "rhodes"],
     fallbackInstrument: "Operator",
-    targets: { Simpler: feltPianoSampleControls, Operator: operatorPianoFallbackControls },
   },
   keys_dx7_synth: {
     id: "keys_dx7_synth",
@@ -762,7 +546,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Operator",
     fallbackInstrument: "Operator",
-    targets: { Operator: operatorDx7KeysControls },
   },
   keys_rhodes_synth: {
     id: "keys_rhodes_synth",
@@ -773,7 +556,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Operator",
     fallbackInstrument: "Operator",
-    targets: { Operator: operatorRhodesKeysControls },
   },
   keys_clav_synth: {
     id: "keys_clav_synth",
@@ -784,8 +566,18 @@ export const SOUND_RECIPES: Readonly<Record<SoundRecipeId, SoundRecipe>> = {
     sampleQueries: [],
     instrument: "Operator",
     fallbackInstrument: "Operator",
-    targets: { Operator: operatorClavKeysControls },
   },
 };
 
-export const SOUND_RECIPE_IDS = Object.keys(SOUND_RECIPES) as SoundRecipeId[];
+/** Public recipe choices select only role + source; legacy flavor recipes remain internal. */
+export const SOURCE_RECIPE_IDS = [
+  "source_bass_sample", "source_bass_synth",
+  "source_pad_sample", "source_pad_synth",
+  "source_pluck_sample", "source_pluck_synth",
+  "source_guitar_sample", "source_guitar_synth",
+  "source_lead_sample", "source_lead_synth",
+  "source_keys_sample", "source_keys_synth",
+  "source_piano_sample", "source_piano_synth",
+] as const satisfies readonly SoundRecipeId[];
+
+export const SOUND_RECIPE_IDS = SOURCE_RECIPE_IDS;

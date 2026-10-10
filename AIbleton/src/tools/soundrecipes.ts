@@ -2,7 +2,7 @@ import { basename } from "node:path";
 import { MidiTrack, Simpler, type Device } from "@ableton-extensions/sdk";
 import { searchSampleIndex } from "../samplemeta.js";
 import { soundRecipeIsAuthorized, soundRecipeSourceChangeAuthorized } from "../chat/deleteauth.js";
-import { SOUND_RECIPES, type SoundRecipeId, type SoundRecipe } from "../sound/recipes.js";
+import { SOUND_RECIPES, SOUND_RECIPE_IDS, type RecipeParameterTarget, type SoundRecipeId, type SoundRecipe } from "../sound/recipes.js";
 import { matchRecipeTargets } from "../sound/parameter-targets.js";
 import { toolHooks, toolState, type Ctx } from "../state.js";
 import { resolvedSelection } from "../setcontext.js";
@@ -13,6 +13,7 @@ const INSTRUMENT_NAMES = new Set([
   "analog", "collision", "drift", "electric", "impulse", "meld", "operator", "sampler",
   "simpler", "tension", "wavetable",
 ]);
+const RECIPE_SYNTH_NAMES = new Set([...INSTRUMENT_NAMES].filter((name) => !["sampler", "simpler", "impulse"].includes(name)));
 
 const EFFECT_NAMES = new Set([
   "amp", "auto filter", "auto pan", "cabinet", "chorus-ensemble", "compressor", "delay",
@@ -62,7 +63,7 @@ function sourceChangeIsAuthorized(context: Ctx, ref: TrackRef, recipeId: SoundRe
 
 function recipeFor(id: unknown): SoundRecipe {
   if (typeof id !== "string" || !Object.hasOwn(SOUND_RECIPES, id)) {
-    throw new Error(`未知音色方案；可用方案：${Object.keys(SOUND_RECIPES).join(", ")}`);
+    throw new Error(`未知音色方案；可用方案：${SOUND_RECIPE_IDS.join(", ")}`);
   }
   return SOUND_RECIPES[id as SoundRecipeId];
 }
@@ -81,6 +82,11 @@ const LEGACY_UNSUITABLE_SAMPLE = /(?:^|[^a-z0-9])(?:kick|snare|clap|hi[ -]?hat|h
 const DRUM_OR_FILL_SAMPLE = /(?:^|[^a-z0-9])(?:kick|snare|clap|hi[ -]?hat|hihat|cymbal|tom|rim|drum|percussion|perc|fill)(?:$|[^a-z0-9])/i;
 const LOOP_SAMPLE_MARKER = /(?:^|[^a-z0-9])(?:loop|looped|looping)(?:$|[^a-z0-9])/i;
 const ONE_SHOT_UNSUITABLE_MARKER = /(?:^|[^a-z0-9])(?:loop|looped|looping|phrase)(?:$|[^a-z0-9])/i;
+
+const PAD_SAMPLE_PLAYBACK_TARGETS: readonly RecipeParameterTarget[] = [
+  { id: "playback_mode", kind: "enum", aliases: ["Mode", "Playback Mode"], optionAliases: ["Classic"] },
+  { id: "loop", kind: "enum", aliases: ["Loop"], optionAliases: ["On"] },
+];
 
 export function isSuitableSample(recipe: SoundRecipe, filePath: string): boolean {
   const fileName = basename(filePath).replace(/\.[^.]+$/, "").normalize("NFKC").toLocaleLowerCase();
@@ -105,7 +111,7 @@ export function isSuitableSample(recipe: SoundRecipe, filePath: string): boolean
     return recipe.sampleEvidenceGroups.every((group) => group.some(hasEvidence));
   }
   const evidence = recipe.sampleEvidence ?? [];
-  return evidence.some(hasEvidence);
+  return recipe.id.startsWith("source_") || evidence.some(hasEvidence);
 }
 
 function findSample(recipe: SoundRecipe): string | undefined {
@@ -266,8 +272,13 @@ async function applyDeleteFirstSampleRecipe(
   const replaced = ensured.replaced;
   const stagedName = staged.name;
 
-  const targets = recipe.targets.Simpler ?? [];
-  const match = matchRecipeTargets(staged.parameters, targets);
+  // Playback mode is required for loop-based Pad samples. Sound-design
+  // parameters (envelopes, filters, oscillator levels) stay under the model's
+  // musical judgment and are never imposed by a recipe.
+  const match = matchRecipeTargets(
+    staged.parameters,
+    recipe.samplePlayback === "loop" ? PAD_SAMPLE_PLAYBACK_TARGETS : [],
+  );
   const requiredPlaybackIds = recipe.samplePlayback === "loop" ? ["playback_mode", "loop"] : [];
   const skippedIds = new Set(match.skipped.map(({ target }) => target.id));
   const missingRequired = requiredPlaybackIds.filter((id) => skippedIds.has(id));
@@ -327,37 +338,6 @@ async function applyDeleteFirstSampleRecipe(
     );
   }
 
-  const failed: { target: string; parameter: string; error: string }[] = [];
-  for (const item of match.matched) {
-    if (requiredPlaybackIds.includes(item.target.id)) continue;
-    try {
-      const value = await setParamValue(item.parameter, item.value);
-      applied.push({
-        target: item.target.id,
-        parameter: item.parameter.name,
-        value: formattedValue(staged, item.parameter.name, value),
-      });
-    } catch (error) {
-      failed.push({
-        target: item.target.id,
-        parameter: item.parameter.name,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-  if (failed.length) {
-    const cleanupError = await cleanupStagedSampleDevice(context, ref, staged);
-    return stagedSampleFailure(
-      ref,
-      recipe,
-      stagedName,
-      "无法应用一个或多个匹配的 Simpler 包络参数。",
-      cleanupError,
-      replaced,
-      { file: importedSample, failed },
-    );
-  }
-
   return trackResult(ref, {
     recipe: recipe.id,
     role: recipe.role,
@@ -380,6 +360,7 @@ export async function applySoundRecipe(
     track_index: number;
     track_name: string;
     recipe_id: SoundRecipeId;
+    instrument_name?: string;
     source_preference?: "sample" | "synth";
   },
 ): Promise<Record<string, unknown>> {
@@ -417,7 +398,8 @@ export async function applySoundRecipe(
   if (recipe.role === "pluck" && recipe.source === "contextual") {
     throw new Error(`Pluck recipe ${recipe.id} must choose a specific synth or sample source`);
   }
-  if ((recipe.role === "pluck" || recipe.role === "guitar") && recipe.source === "sample" && !recipe.sampleEvidence?.length && !recipe.sampleEvidenceGroups?.length) {
+  if ((recipe.role === "pluck" || recipe.role === "guitar") && recipe.source === "sample" &&
+      !recipe.id.startsWith("source_") && !recipe.sampleEvidence?.length && !recipe.sampleEvidenceGroups?.length) {
     throw new Error(`Pluck/Guitar sample recipe ${recipe.id} needs filename evidence terms`);
   }
   const current = findPrimarySource(ref.track);
@@ -445,7 +427,17 @@ export async function applySoundRecipe(
       fallback = true;
     }
   }
-  const requestedDevice = sourceKind === "sample" ? "Simpler" : recipe.instrument ?? recipe.fallbackInstrument;
+  const requestedInstrument = input.instrument_name?.trim();
+  const canonicalInstrument = requestedInstrument
+    ? [...RECIPE_SYNTH_NAMES].find((name) => name.toLocaleLowerCase() === requestedInstrument.toLocaleLowerCase())
+    : undefined;
+  if (requestedInstrument && !canonicalInstrument) {
+    throw new Error(`不支持的内置合成器音源“${requestedInstrument}”；可用音源：${[...RECIPE_SYNTH_NAMES].join(", ")}`);
+  }
+  if (sourceKind === "sample" && requestedInstrument) {
+    throw new Error("选择 sample source 时不能同时指定 instrument_name。");
+  }
+  const requestedDevice = sourceKind === "sample" ? "Simpler" : canonicalInstrument ?? recipe.instrument ?? recipe.fallbackInstrument;
   const currentSample = current?.device instanceof Simpler ? current.device.sample?.filePath : undefined;
   const sampleChange = sourceKind === "sample" && !!current &&
     (!(current.device instanceof Simpler) || !!currentSample);
@@ -500,27 +492,6 @@ export async function applySoundRecipe(
     }
   }
 
-  const targets = recipe.targets[device.name] ?? [];
-  const match = matchRecipeTargets(device.parameters, targets);
-  const applied: { target: string; parameter: string; value: string | number }[] = [];
-  const failed: { target: string; parameter: string; error: string }[] = [];
-  for (const item of match.matched) {
-    try {
-      const value = await setParamValue(item.parameter, item.value);
-      applied.push({
-        target: item.target.id,
-        parameter: item.parameter.name,
-        value: formattedValue(device, item.parameter.name, value),
-      });
-    } catch (error) {
-      failed.push({
-        target: item.target.id,
-        parameter: item.parameter.name,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
   return trackResult(ref, {
     recipe: recipe.id,
     role: recipe.role,
@@ -537,8 +508,7 @@ export async function applySoundRecipe(
       } : {}),
       ...(ensured.replaced ? { replaced: ensured.replaced } : {}),
     },
-    applied,
-    skipped: match.skipped.map(({ target, reason }) => ({ target: target.id, reason })),
-    ...(failed.length ? { failed } : {}),
+    applied: [],
+    skipped: [],
   });
 }

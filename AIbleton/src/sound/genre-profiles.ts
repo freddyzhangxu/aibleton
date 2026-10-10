@@ -28,159 +28,6 @@ export type GenreProfile = {
   subgenres: readonly GenreSubgenreProfile[];
 };
 
-type DrumRole = "Kick" | "Snare/Clap" | "Hi-hats" | "Percussion";
-
-type DrumTimbreSubgenreProfile = {
-  label: string;
-  aliases: readonly string[];
-  localizedAliases?: readonly string[];
-  overrides: Readonly<Partial<Record<DrumRole, string>>>;
-};
-
-type DrumTimbreProfile = {
-  label: string;
-  aliases: readonly string[];
-  localizedAliases?: readonly string[];
-  roles: Readonly<Partial<Record<DrumRole, string>>>;
-  subgenres?: readonly DrumTimbreSubgenreProfile[];
-};
-
-/** Descriptive starting points for drum sounds; these do not prescribe parts or patterns. */
-const GENRE_DRUM_PROFILES: readonly DrumTimbreProfile[] = [
-  {
-    label: "Techno",
-    aliases: ["techno"],
-    localizedAliases: ["科技舞曲", "铁克诺"],
-    roles: {
-      Kick: "tight, punchy, focused low end",
-      "Snare/Clap": "short, firm, restrained",
-      "Hi-hats": "crisp, controlled high end",
-      Percussion: "dark, sparse, and textural",
-    },
-    subgenres: [
-      {
-        label: "Dark Techno",
-        aliases: ["dark techno", "dark-techno"],
-        localizedAliases: ["暗黑科技舞曲", "暗黑 Techno"],
-        overrides: {
-          Kick: "heavy, controlled, dark low end",
-          "Hi-hats": "muted, restrained high end",
-          Percussion: "industrial, sparse, and textural",
-        },
-      },
-      {
-        label: "Melodic Techno",
-        aliases: ["melodic techno", "melodic-techno"],
-        localizedAliases: ["旋律科技舞曲", "旋律 Techno"],
-        overrides: {
-          Kick: "solid, rounded, and controlled low end",
-          "Snare/Clap": "short and understated",
-          Percussion: "subtle and atmospheric",
-        },
-      },
-    ],
-  },
-  {
-    label: "House",
-    aliases: ["house"],
-    localizedAliases: ["浩室", "浩室舞曲"],
-    roles: {
-      Kick: "rounded, warm, and steady",
-      "Snare/Clap": "short, dry, and clean",
-      "Hi-hats": "bright, light, and optionally shuffled",
-      Percussion: "light, syncopated, and groove-focused",
-    },
-    subgenres: [
-      {
-        label: "Tech House",
-        aliases: ["tech house", "tech-house"],
-        localizedAliases: ["科技浩室", "Tech House"],
-        overrides: {
-          Kick: "tight, punchy, club-forward",
-          "Hi-hats": "crisp and syncopated",
-          Percussion: "dry, syncopated, and groove-focused",
-        },
-      },
-      {
-        label: "Deep House",
-        aliases: ["deep house", "deep-house"],
-        localizedAliases: ["深浩室", "深度浩室"],
-        overrides: {
-          Kick: "rounded, deep, and warm",
-          "Snare/Clap": "soft, short, and understated",
-          "Hi-hats": "smooth, airy, and controlled",
-        },
-      },
-    ],
-  },
-  {
-    label: "Hip-hop",
-    aliases: ["hip-hop", "hip hop", "hiphop"],
-    localizedAliases: ["嘻哈", "说唱"],
-    roles: {
-      Kick: "deep, rounded, and weighty",
-      "Snare/Clap": "dry, forward, and clearly defined",
-      "Hi-hats": "crisp but controlled",
-      Percussion: "sparse, dry, and supportive",
-    },
-  },
-  {
-    label: "Trap",
-    aliases: ["trap"],
-    localizedAliases: ["陷阱", "陷阱音乐"],
-    roles: {
-      Kick: "deep, tuned 808-style low end",
-      "Snare/Clap": "sharp, compact, and forward",
-      "Hi-hats": "bright, precise, and cleanly articulated",
-      Percussion: "sparse, sharp, and supportive",
-    },
-  },
-  {
-    label: "Pop",
-    aliases: ["pop"],
-    localizedAliases: ["流行", "流行音乐"],
-    roles: {
-      Kick: "solid, controlled, and balanced",
-      "Snare/Clap": "bright, polished, and clear",
-      "Hi-hats": "clean, balanced, and not overly sharp",
-      Percussion: "clean, light, and supportive",
-    },
-  },
-  {
-    label: "Rock",
-    aliases: ["rock"],
-    localizedAliases: ["摇滚", "摇滚乐"],
-    roles: {
-      Kick: "punchy with a natural, acoustic drum character",
-      "Snare/Clap": "crack-like, dynamic, and natural",
-      "Hi-hats": "bright, lively cymbal character",
-      Percussion: "natural and restrained",
-    },
-  },
-  {
-    label: "Jazz",
-    aliases: ["jazz"],
-    localizedAliases: ["爵士", "爵士乐"],
-    roles: {
-      Kick: "soft, low, and natural",
-      "Snare/Clap": "light, nuanced, and optionally brush-like",
-      "Hi-hats": "soft, metallic, and controlled",
-      Percussion: "subtle, organic, and understated",
-    },
-  },
-  {
-    label: "Funk",
-    aliases: ["funk"],
-    localizedAliases: ["放克", "芬克"],
-    roles: {
-      Kick: "tight, punchy, and clearly defined",
-      "Snare/Clap": "dry, sharp, and snappy",
-      "Hi-hats": "crisp and bright",
-      Percussion: "crisp, dry, and groove-focused",
-    },
-  },
-];
-
 /** Profiles reference only recipes that apply_sound_recipe already supports. */
 export const GENRE_INSTRUMENT_PROFILES = {
   pop: {
@@ -358,17 +205,20 @@ export const GENRE_INSTRUMENT_PROFILES = {
 
 function sourceLabel(recipeId: SoundRecipeId): string {
   const recipe = SOUND_RECIPES[recipeId];
-  return recipe.source === "sample" ? "sample" : recipe.source === "synth" ? `synth ${recipe.instrument}` : "contextual source";
+  return recipe.source === "sample" ? "sample" : recipe.source === "synth" ? `synth ${recipe.instrument ?? recipe.fallbackInstrument}` : "contextual source";
 }
 
 function formatChoice(choice: GenreInstrumentChoice): string {
   const condition = choice.when ? ` when ${choice.when}` : "";
-  const capability = choice.capabilityNote ? `; ${choice.capabilityNote}` : "";
-  if (!choice.recipe) return `${choice.instrument}${condition}${capability}`;
+  if (!choice.recipe) return `${choice.sourcePreference ?? "source not specified"}${condition}`;
 
   const recipe = SOUND_RECIPES[choice.recipe];
-  const sourcePreference = choice.sourcePreference ? `; prefer ${choice.sourcePreference}` : "";
-  return `${choice.instrument}${condition} (${choice.recipe}, ${sourceLabel(choice.recipe)}; fallback ${recipe.fallbackInstrument}${sourcePreference}${capability})`;
+  const source = choice.sourcePreference === "sample"
+    ? "sample"
+    : choice.sourcePreference === "synth"
+      ? `synth ${recipe.instrument ?? recipe.fallbackInstrument}`
+      : sourceLabel(choice.recipe);
+  return `${source}${condition}`;
 }
 
 function formatPart(part: GenrePartProfile): string {
@@ -383,7 +233,7 @@ function formatSubgenre(subgenre: GenreSubgenreProfile): string {
 function formatProfile(profile: GenreProfile): string {
   const parts = profile.parts.map(formatPart).join("; ") || "no profile-specific mappings";
   const subgenres = profile.subgenres.map(formatSubgenre).join(". ");
-  return `${profile.label} aliases: ${profile.aliases.join(", ")}. Role-to-sound mappings: ${parts}.${subgenres ? ` ${subgenres}.` : ""}`;
+  return `${profile.label} aliases: ${profile.aliases.join(", ")}. Role-to-source mappings: ${parts}.${subgenres ? ` ${subgenres}.` : ""}`;
 }
 
 const LOCALIZED_GENRE_ALIASES: Record<string, string[]> = {
@@ -412,58 +262,19 @@ function inputAliases(label: string, aliases: readonly string[]): string[] {
   return [...aliases, ...(LOCALIZED_GENRE_ALIASES[label.toLocaleLowerCase()] ?? [])];
 }
 
-function containsGenreAlias(text: string, alias: string): boolean {
-  if (/[\u3400-\u9fff]/u.test(alias)) return text.includes(alias.toLocaleLowerCase());
-  const escaped = alias.toLocaleLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, "i").test(text);
-}
-
-function selectedDrumRoles(text: string): DrumRole[] | undefined {
-  const roles: Array<{ role: DrumRole; pattern: RegExp }> = [
-    { role: "Kick", pattern: /\bkick(?:s| drum)?\b|底鼓|大鼓|踢鼓/i },
-    { role: "Snare/Clap", pattern: /\b(?:snare|clap)(?:s| drum)?\b|军鼓|小鼓|拍手/i },
-    { role: "Hi-hats", pattern: /\b(?:hi[ -]?hats?|hats?|cymbals?)\b|踩镲|镲片|钹/i },
-    { role: "Percussion", pattern: /\bpercussion\b|\bperc\b|打击乐|打击乐器/i },
-  ];
-  const selected = roles.filter(({ pattern }) => pattern.test(text)).map(({ role }) => role);
-  return selected.length ? [...new Set(selected)] : undefined;
-}
-
-/** Build concise genre-based drum timbre guidance only for drum-related requests. */
+/** Build source-only drum guidance for drum-related requests. */
 export function genreDrumProfilePrompt(userText = ""): string {
   const normalized = userText.toLocaleLowerCase();
-  const isDrumRequest =
-    /\b(?:drums?|beat|groove|rhythm)\b|鼓|节奏|律动|打击乐/i.test(normalized) ||
-    selectedDrumRoles(normalized) !== undefined;
+  const isDrumRequest = /\b(?:drums?|kick|snare|clap|hi[ -]?hat|percussion|beat|groove|rhythm)\b|鼓|底鼓|大鼓|军鼓|小鼓|踩镲|打击乐|节奏|律动/i.test(normalized);
   if (!isDrumRequest) return "";
 
-  const roles = selectedDrumRoles(normalized);
-  const profiles = GENRE_DRUM_PROFILES.filter((profile) =>
-    [...profile.aliases, ...(profile.localizedAliases ?? [])].some((alias) => containsGenreAlias(normalized, alias)),
-  );
-  const mappings = profiles.map((profile) => {
-    const subgenre = profile.subgenres?.find((candidate) =>
-      [...candidate.aliases, ...(candidate.localizedAliases ?? [])].some((alias) => containsGenreAlias(normalized, alias)),
-    );
-    const timbres = subgenre ? { ...profile.roles, ...subgenre.overrides } : profile.roles;
-    const parts = Object.entries(timbres)
-      .filter(([role]) => !roles || roles.includes(role as DrumRole))
-      .map(([role, timbre]) => `${role} → ${timbre}`)
-      .join("; ");
-    return subgenre
-      ? `${subgenre.label} overrides ${profile.label}: ${parts}.`
-      : `${profile.label} aliases: ${profile.aliases.join(", ")}. Drum timbre: ${parts}.`;
-  });
-
   return [
-    mappings.length ? `Genre-to-drum-timbre profiles for requested drum roles only: ${mappings.join(" ")}` : "",
-    "Use drum profiles as timbre references; choose drum roles and rhythms using musical judgment based on the genre, user intent, and current Set.",
-    "Explicitly named drum timbres take precedence over profile guidance.",
-    "Drum profiles neither require nor prohibit parts or patterns; adapt them to the requested style and current Set, including when no profile matches.",
-    "Keep the selected drum kit as the starting point. Only when the user explicitly requests a drum-pad timbre that the selected sample does not clearly provide, use search_samples with the pad role and requested timbre, and choose a clear one-shot match.",
+    "Drum kits and individual drum samples are sample sources. Choose a factory kit or local sample source that matches the user's explicit source/style request; genre is a source-selection hint only.",
+    "Do not prescribe per-pad synthesis or specific envelope, filter, or effect settings; let the model use musical judgment for how the selected sample source fits the part.",
+    "Drum guidance does not require or prohibit parts or patterns; choose them from the request and current Set.",
     "For an existing Set, call get_drum_pad_sample on the target pad before replacing; call replace_drum_pad_sample only for the requested pad. A genre profile alone never authorizes sample replacement.",
-    "If no clear local match is found, keep the current pad sample and explain the approximation.",
-  ].filter(Boolean).join(" ");
+    "If no sample source is available, keep the current pad sample and explain the limitation.",
+  ].join(" ");
 }
 
 /** Build the prompt section from the same recipe catalog used by apply_sound_recipe. */
@@ -498,12 +309,11 @@ export function genreInstrumentProfilePrompt(userText = "", selectedRoles?: read
     .map(formatProfile);
   return [
     profiles.length ? `Genre-to-instrument profiles for new parts only: ${profiles.join(" ")}` : "",
-    "Use profiles as suggestions for instrument and timbre choices while exercising musical judgment about which roles a complete arrangement needs.",
+    "Use profiles as suggestions only for sample versus synth or a named built-in synth source; they do not prescribe timbre design.",
     "Profiles do not mandate or exclude roles; adapt the lineup to the genre, subgenre, user intent, mood, and current Set.",
-    "An explicit subgenre overrides the parent genre for listed roles; inherit the parent profile for roles it does not change.",
+    "An explicit subgenre overrides the parent genre only for source selections it changes; inherit the parent profile's source choice otherwise.",
     "If no listed subgenre matches, retain the parent genre profile and do not guess a subgenre override.",
-    "For an unlisted role, choose a suitable sound using musical judgment, available recipes, and current Set context; ask only when the role's sound remains unclear.",
-    "When a listed sample is unavailable, use its declared synth fallback and explain the approximation.",
-    "Do not invent a recipe or imply an unsupported genre-specific sound.",
+    "For an unlisted role, choose a suitable source using musical judgment, available instruments, and current Set context; ask only when the source remains unclear.",
+    "When a selected sample source is unavailable, choose a suitable synth source and explain the substitution.",
   ].filter(Boolean).join(" ");
 }

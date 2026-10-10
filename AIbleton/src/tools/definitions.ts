@@ -655,17 +655,16 @@ export const TOOLS = [
   {
     name: "apply_sound_recipe",
     description:
-      "Apply one of AIbleton's reusable Bass, Pad, Pluck, Guitar, Lead, Keys, or Piano sound recipes to a MIDI track. Use genre profile mappings as sound and recipe references for roles chosen through musical judgment; the profiles do not mandate or exclude a track's role lineup. Guitar recipes cover acoustic/nylon, clean/hollowbody, muted/Funk, and overdrive/distortion samples. Guitar sample searches use flavor-specific filename evidence and use their declared Drift or Wavetable synth fallback when no matching file is available. Piano is a specific instrument within the Keys family: choose keys_piano_grand_sample for grand/concert/acoustic, keys_piano_felt_sample for felt/upright/soft, or keys_piano_sample when unspecified. Generic Keys does not default to Piano samples. Only an explicit Piano request or a genre profile that names Piano selects Piano samples. For synth Keys, Rhodes/tine/electric piano selects keys_rhodes_synth, Clav/Clavinet selects keys_clav_synth, and DX7/FM selects keys_dx7_synth. Rhodes and Clav are distinct Operator-based approximations, not exact or sampled emulations. The Piano recipes search local one-shot samples with flavor-specific filename evidence and fall back to Operator when none match; report the approximation clearly. Use new sample recipes when the user explicitly asks for samples or a genre profile selects them; otherwise prefer synth recipes. Bass recipes and the existing Kalimba Pluck recipes may search local samples and use their declared built-in synth fallback. New Pluck/Lead/Guitar sample recipes use non-loop samples in Simpler; Pad sample recipes require an explicitly loop-marked file plus exact Simpler Mode=Classic and Loop=On controls. For a matching sample recipe, the explicitly authorized primary instrument is deleted before inserting Simpler and loading the sample. If no sample is suitable, use the declared synth fallback under normal source authorization and report it. If insertion, Pad loop controls, sample loading, or a matched parameter write fails after source deletion, report that the old source was deleted and give Live Undo guidance. The tool applies only exact supported controls, reports skipped controls, and changes no clips, mixer settings, effects, or other tracks. Use only when the sound style and target track are clear.",
+      "Apply a role-specific source recipe to a MIDI track: use it only to select a sample or built-in synth, insert/replace that source when authorized, and load a matching sample when available. Genre profiles do not mandate or exclude track roles. Recipes never set envelope, filter, oscillator, or effect parameters; the model retains musical judgment over timbre design. If a sample cannot be found, use the recipe's declared synth source/fallback and report the substitution. Loop-based Pad samples must use Simpler Classic plus Loop On; one-shot samples use non-loop playback. If source insertion, required playback mode, or sample loading fails after source deletion, report that the old source was deleted and give Live Undo guidance. The tool changes no clips, mixer settings, effects, or other tracks. Use only when the role, source type, and target track are clear.",
     input_schema: {
       type: "object",
       properties: {
         track_index: { type: "number", description: "0-based MIDI track index" },
         track_name: { type: "string", description: TRACK_NAME_DESC },
         recipe_id: { type: "string", enum: SOUND_RECIPE_IDS },
-        source_preference: {
+        instrument_name: {
           type: "string",
-          enum: ["sample", "synth"],
-          description: "Optional for pop_bass: choose sample for a band/acoustic arrangement or synth for a synth/dance arrangement. Omit when unclear; the tool uses the current primary source or its neutral Operator fallback.",
+          description: "Optional built-in synth/device name to use when recipe_id selects a synth source; the recipe otherwise uses its role default.",
         },
       },
       required: ["track_index", "track_name", "recipe_id"],

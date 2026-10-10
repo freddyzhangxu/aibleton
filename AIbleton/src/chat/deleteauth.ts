@@ -154,7 +154,7 @@ export function soundRecipeSourceChangeAuthorized(
   if (yolo) return true;
   if (authorization?.has("sound_source") !== true) return false;
   const allowedRecipes = authorization.allowedSoundRecipeIds;
-  return !allowedRecipes || (recipeId !== undefined && allowedRecipes.has(recipeId));
+  return !allowedRecipes || (recipeId !== undefined && recipeAuthorizedBySet(allowedRecipes, recipeId));
 }
 
 export function soundRecipeIsAuthorized(
@@ -162,7 +162,14 @@ export function soundRecipeIsAuthorized(
   recipeId: SoundRecipeId,
   yolo = false,
 ): boolean {
-  return yolo || !authorization?.allowedSoundRecipeIds || authorization.allowedSoundRecipeIds.has(recipeId);
+  return yolo || !authorization?.allowedSoundRecipeIds || recipeAuthorizedBySet(authorization.allowedSoundRecipeIds, recipeId);
+}
+
+function recipeAuthorizedBySet(allowed: ReadonlySet<SoundRecipeId>, recipeId: SoundRecipeId): boolean {
+  if (allowed.has(recipeId)) return true;
+  // The public source-only Keys recipe supersedes the former timbre-specific
+  // Operator recipe while preserving its explicit no-sample authorization.
+  return recipeId === "source_keys_synth" && allowed.has("keys_dx7_synth");
 }
 
 export function isDeleteTool(name: string): name is keyof typeof DELETE_TOOL_KINDS {

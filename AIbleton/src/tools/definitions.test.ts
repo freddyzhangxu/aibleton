@@ -58,14 +58,13 @@ test("documents actual creation result fields so later plan steps can reference 
   assert.match(createMidi.description, /step-id#\/created/);
 });
 
-test("describes Piano as a specific instrument within the broader Keys family", () => {
+test("describes recipes as source selection only", () => {
   const recipeTool = TOOLS.find((tool) => tool.name === "apply_sound_recipe");
   assert.ok(recipeTool);
-  assert.match(recipeTool.description, /Piano is a specific instrument within the Keys family/);
-  assert.match(recipeTool.description, /Generic Keys does not default to Piano samples/);
-  assert.match(recipeTool.description, /explicit Piano request or a genre profile that names Piano/);
-  assert.doesNotMatch(recipeTool.description, /Generic Keys defaults to keys_piano_sample/);
-  assert.match(recipeTool.description, /Use genre profile mappings as sound and recipe references for roles chosen through musical judgment/);
+  assert.match(recipeTool.description, /use it only to select a sample or built-in synth/i);
+  assert.match(recipeTool.description, /Recipes never set envelope, filter, oscillator, or effect parameters/);
+  assert.match(recipeTool.description, /the model retains musical judgment over timbre design/);
+  assert.doesNotMatch(recipeTool.description, /choose keys_piano_grand_sample|Rhodes\/tine\/electric piano selects/);
 });
 
 test("keeps genre profiles from constraining which roles are created", () => {
@@ -75,11 +74,12 @@ test("keeps genre profiles from constraining which roles are created", () => {
   assert.doesNotMatch(recipeTool.description, /core\/optional parts/i);
 });
 
-test("documents the Guitar sample profiles and their declared synth fallbacks", () => {
+test("documents sample playback modes and source fallbacks", () => {
   const recipeTool = TOOLS.find((tool) => tool.name === "apply_sound_recipe");
   assert.ok(recipeTool);
-  assert.match(recipeTool.description, /Guitar recipes cover acoustic\/nylon, clean\/hollowbody, muted\/Funk, and overdrive\/distortion samples/);
-  assert.match(recipeTool.description, /use their declared Drift or Wavetable synth fallback/);
+  assert.match(recipeTool.description, /Loop-based Pad samples must use Simpler Classic plus Loop On/);
+  assert.match(recipeTool.description, /If a sample cannot be found, use the recipe's declared synth source\/fallback/);
+  assert.doesNotMatch(recipeTool.description, /Guitar recipes cover acoustic\/nylon/);
 });
 
 test("simple edits advertise their reads and writes without the full tool catalog", () => {
