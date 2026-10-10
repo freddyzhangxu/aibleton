@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { genreInstrumentProfilePrompt } from "./genre-profiles.js";
+import { genreDrumProfilePrompt, genreInstrumentProfilePrompt } from "./genre-profiles.js";
 
 test("profile guide maps sound by role and gives subgenres precedence", () => {
   const guide = genreInstrumentProfilePrompt();
@@ -58,4 +58,41 @@ test("maps Guitar roles to distinct sample timbres by subgenre and sound charact
   assert.match(guide, /Jazz aliases:.*Guitar → clean electric guitar \(guitar_clean/);
   assert.match(guide, /Bossa Nova overrides:.*Guitar → acoustic\/nylon guitar \(guitar_acoustic/);
   assert.match(guide, /Funk aliases:.*Guitar → muted funk guitar \(guitar_muted/);
+});
+
+test("maps drum timbre by genre and filters guidance to requested roles", () => {
+  const techno = genreDrumProfilePrompt("techno drums");
+  assert.match(techno, /Techno aliases:.*Kick → tight, punchy, focused low end/);
+  assert.match(techno, /Snare\/Clap → short, firm, restrained/);
+  assert.match(techno, /Hi-hats → crisp, controlled high end/);
+
+  const trap = genreDrumProfilePrompt("trap kick");
+  assert.match(trap, /Trap aliases:.*Kick → deep, tuned 808-style low end/);
+  assert.doesNotMatch(trap, /Snare\/Clap →/);
+  assert.doesNotMatch(trap, /Hi-hats →/);
+});
+
+test("drum genre profiles guide timbre without prescribing parts or replacing explicit choices", () => {
+  const guide = genreDrumProfilePrompt("house drums");
+  assert.match(guide, /Use drum profiles only to guide timbre for parts already requested or present/);
+  assert.match(guide, /Explicitly named drum timbres take precedence/);
+  assert.match(guide, /Do not add, omit, or require drum parts or patterns from these profiles/);
+});
+
+test("explicit drum subgenres override parent timbres and inherit unlisted roles", () => {
+  const techHouse = genreDrumProfilePrompt("tech house drums");
+  assert.match(techHouse, /Tech House overrides House:.*Kick → tight, punchy, club-forward/);
+  assert.doesNotMatch(techHouse, /Kick → rounded, warm, and steady/);
+  assert.match(techHouse, /Snare\/Clap → short, dry, and clean/);
+
+  const darkTechno = genreDrumProfilePrompt("dark techno drums");
+  assert.match(darkTechno, /Dark Techno overrides Techno:.*Kick → heavy, controlled, dark low end/);
+  assert.doesNotMatch(darkTechno, /Kick → tight, punchy, focused low end/);
+});
+
+test("unlisted drum subgenres keep the parent genre profile", () => {
+  const guide = genreDrumProfilePrompt("house drums, deep and late-night");
+  assert.match(guide, /House aliases:.*Kick → rounded, warm, and steady/);
+  assert.doesNotMatch(guide, /Tech House overrides/);
+  assert.doesNotMatch(guide, /Deep House overrides/);
 });
