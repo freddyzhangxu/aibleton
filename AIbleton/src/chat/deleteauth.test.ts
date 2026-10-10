@@ -146,3 +146,15 @@ test("does not infer device deletion from vague or negated replacement requests"
     assert.equal(deleteToolIsAuthorized("delete_device", deleteAuthorizationFor(text)), false, text);
   }
 });
+
+test("a normal sound-design request does not authorize replacing an existing source", () => {
+  assert.equal(deleteAuthorizationFor("Design an airy Pad sound.").has("sound_source"), false);
+  assert.equal(deleteAuthorizationFor("设计一个空灵的 Pad 音色。").has("sound_source"), false);
+});
+
+test("an explicit sound-source replacement authorizes the requested recipe", () => {
+  assert.equal(
+    deleteAuthorizationFor("Replace the Operator source on Lead with an airy Pad sound.").has("sound_source"),
+    true,
+  );
+});

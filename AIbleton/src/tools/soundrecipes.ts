@@ -50,7 +50,7 @@ function trackIsInCurrentScope(context: Ctx, ref: TrackRef): boolean {
   const selected = selectedTrackIndices(context);
   const inExplicitScope = !explicit.length || explicit.includes(ref.index);
   const inSelection = !selected.length || selected.includes(ref.index);
-  if (inExplicitScope && inSelection && (explicit.length > 0 || selected.length > 0)) return true;
+  if (inExplicitScope && inSelection) return true;
   const id = handleIdOf(ref.track);
   return id !== undefined && toolState.activeCreatedTrackHandles.has(id);
 }
@@ -393,6 +393,16 @@ export async function applySoundRecipe(
   }
   if (!(ref.track instanceof MidiTrack)) {
     return trackResult(ref, { executed: false, error: "音色方案目前只能应用到 MIDI 轨道。" });
+  }
+  const trackId = handleIdOf(ref.track);
+  const createdThisTurn = trackId !== undefined && toolState.activeCreatedTrackHandles.has(trackId);
+  const explicitReplacement = toolState.activeDeleteAuthorization?.has("sound_source") === true;
+  if (!createdThisTurn && !explicitReplacement) {
+    return trackResult(ref, {
+      executed: false,
+      requires_new_track: true,
+      message: "新音色设计需要新建 MIDI 轨道；只有用户明确要求替换或更换现有音源时，才能修改已有轨道。",
+    });
   }
   const recipe = recipeFor(input.recipe_id);
   if (!soundRecipeIsAuthorized(toolState.activeDeleteAuthorization, recipe.id, toolState.activeYolo)) {

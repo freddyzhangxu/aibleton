@@ -92,6 +92,14 @@ test("chooses genre-aware timbres for new melodic parts without replacing named 
   assert.match(prompt, /For generic instrument insertion without sound-design intent, use the genre-aware rule first; when none resolves, use these role defaults/);
 });
 
+test("puts new sound designs on dedicated MIDI tracks unless replacement is explicit", () => {
+  const prompt = systemPromptFor("en");
+  assert.match(prompt, /For every new sound-design request, create a dedicated MIDI track, name it for the role or timbre, then apply the recipe to that new track/);
+  assert.match(prompt, /Only target a pre-existing track when the user explicitly asks to replace or change its sound source/);
+  assert.match(prompt, /If the request names an existing track without explicitly asking to replace or change its sound source, leave it intact and create a new track for comparison/);
+  assert.doesNotMatch(prompt, /Apply recipes to the named or selected MIDI track/);
+});
+
 test("maps Rock, Jazz, and Funk parts to available recipes and handles gaps explicitly", () => {
   const prompt = systemPromptFor("en");
   assert.match(prompt, /Rock aliases:.*Role-to-sound mappings: Bass → electric bass \(rock_bass, sample; fallback Operator\).*Guitar → overdriven electric guitar.*guitar_overdrive.*clean electric guitar.*guitar_clean.*Piano → piano \(keys_piano_sample/);

@@ -99,13 +99,13 @@ export function deleteAuthorizationFor(userText: string): DeleteAuthorization {
   if (NEGATED_DESTRUCTIVE_ACTION.test(userText)) return new Set();
   if (NEGATED_SAMPLE_RECIPE_REQUEST.test(userText)) {
     // Explicitly rejected samples still permit the named Keys Operator route,
-    // but authorize no generic device deletion or sample source replacement.
+    // but do not authorize replacing a pre-existing track's sound source.
     if (
       SOUND_RECIPE_ACTION.test(userText) &&
       KEYS_OPERATOR_RECIPE_REQUEST.test(userText) &&
       !NEGATED_KEYS_OPERATOR_ACTION.test(userText)
     ) {
-      const authorization = new Set<DeleteKind>(["sound_source"]) as Set<DeleteKind> & {
+      const authorization = new Set<DeleteKind>() as Set<DeleteKind> & {
         allowedSoundRecipeIds?: ReadonlySet<SoundRecipeId>;
       };
       authorization.allowedSoundRecipeIds = new Set(["keys_dx7_synth"]);
@@ -138,7 +138,7 @@ export function deleteAuthorizationFor(userText: string): DeleteAuthorization {
   }
   const recipeIntent = SOUND_RECIPE_ID.test(userText) ||
     (SOUND_RECIPE_STYLE.test(userText) && SOUND_RECIPE_ROLE.test(userText));
-  if (SOUND_RECIPE_ACTION.test(userText) && recipeIntent) {
+  if (SOUND_RECIPE_ACTION.test(userText) && recipeIntent && replacementRequested) {
     kinds.add("sound_source");
   }
   return kinds;
