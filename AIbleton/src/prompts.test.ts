@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { SYSTEM_PROMPT, systemPromptFor } from "./prompts.js";
+import { instrumentPromptFor } from "./prompts/instruments.js";
 import { DEFAULT_INSTRUMENT_BY_ROLE } from "./tools/instruments.js";
 
 test("keeps track indices internal and presents user-facing tracks one-based", () => {
@@ -71,24 +72,24 @@ test("auto-creates a MIDI track when MIDI writing targets an Audio Track", () =>
 });
 
 test("selects a stable instrument by musical role when none is named", () => {
-  const prompt = systemPromptFor("en");
+  const prompt = instrumentPromptFor("Create a new sound", "Create a new sound");
   assert.match(prompt, /Never pass device_name "random"/);
   for (const [role, device] of Object.entries(DEFAULT_INSTRUMENT_BY_ROLE)) {
     assert.match(prompt, new RegExp(`${role}: ${device}`));
   }
-  assert.match(prompt, /ask the user when the musical role is unclear/i);
+  assert.match(prompt, /For generic instrument insertion without source-selection intent, use the genre-aware source guidance first/);
+  assert.match(prompt, /ask when the musical role or requested source is unclear/i);
 });
 
 test("uses genre guidance only for source selection and leaves timbre design open", () => {
-  const prompt = systemPromptFor("en");
+  const prompt = instrumentPromptFor("Create a melodic techno bassline", "Create a melodic techno bassline");
   assert.match(prompt, /prefer the genre\/subgenre in the current request, then inspect the current Set context[\s\S]*use artist memory only as a source preference/i);
-  assert.match(prompt, /profiles may guide only whether a role uses a sample or a named built-in synth, never how to design that source's timbre/);
+  assert.match(prompt, /profiles may guide only whether a role uses a sample or a named built-in synth, never how to design that source's timbre/i);
   assert.match(prompt, /Use apply_sound_recipe only to establish the selected source or load a selected sample/);
   assert.match(prompt, /Do not apply recipe envelope, filter, oscillator, or other timbre settings/);
   assert.doesNotMatch(prompt, /Lead → clean rounded synth lead|Ambient → airy|House\/Techno with no timbre detail, use aggressive/);
   assert.match(prompt, /An explicitly named instrument or source type takes precedence/);
-  assert.match(prompt, /never replace an existing instrument implicitly/);
-  assert.match(prompt, /For generic instrument insertion without source-selection intent, use the genre-aware source guidance first/);
+  assert.match(prompt, /preserve existing instruments and never replace them implicitly/);
 });
 
 test("puts new source designs on dedicated MIDI tracks unless replacement is explicit", () => {
@@ -100,8 +101,8 @@ test("puts new source designs on dedicated MIDI tracks unless replacement is exp
 });
 
 test("maps genre profiles to source types without prescribing timbre recipes", () => {
-  const prompt = systemPromptFor("en");
-  assert.match(prompt, /Rock aliases:.*Role-to-source mappings: Bass → sample; Guitar → sample; Piano → sample/);
+  const prompt = instrumentPromptFor("Create Rock, Jazz Fusion, and Funk parts", "Create Rock, Jazz Fusion, and Funk parts");
+  assert.match(prompt, /Rock aliases:.*Role-to-source mappings: Bass → sample; Guitar → sample[^;]*; Piano → sample/);
   assert.match(prompt, /Jazz aliases:.*Role-to-source mappings: Bass → sample/);
   assert.match(prompt, /Jazz Fusion overrides: Bass → sample/);
   assert.match(prompt, /Funk aliases:.*Role-to-source mappings: Bass → sample.*Keys → synth Operator/);
@@ -113,21 +114,21 @@ test("maps genre profiles to source types without prescribing timbre recipes", (
 });
 
 test("does not prescribe Guitar timbre from genre or style labels", () => {
-  const prompt = systemPromptFor("en");
+  const prompt = instrumentPromptFor("Create a Rock guitar part", "Create a Rock guitar part");
   assert.match(prompt, /Guitar: sample/);
   assert.doesNotMatch(prompt, /acoustic\/nylon →|muted\/Funk →|overdrive\/distortion →/i);
 });
 
 test("keeps Piano and Keys source choices without prescribing their timbre", () => {
-  const prompt = systemPromptFor("en");
+  const prompt = instrumentPromptFor("Add piano and keys", "Add piano and keys");
   assert.match(prompt, /Piano: sample/);
-  assert.match(prompt, /Keys: synth Operator/);
+  assert.match(prompt, /Keys: (?:sample, )?synth Operator/);
   assert.doesNotMatch(prompt, /Rhodes\/tine\/electric piano →|Clav\/Clavinet →/);
 });
 
 test("uses current Set context before artist memory when a sound choice is open", () => {
-  const prompt = systemPromptFor("en");
-  assert.match(prompt, /prefer the genre\/subgenre in the current request, then inspect the current Set context[\s\S]*use relevant artist memory only as a preference when both leave the choice open/);
+  const prompt = instrumentPromptFor("Create a bassline", "Create a bassline");
+  assert.match(prompt, /prefer the genre\/subgenre in the current request, then inspect the current Set context[\s\S]*use artist memory only as a source preference when both leave the choice open/i);
 });
 
 test("lets musical judgment choose a complete arrangement lineup across genres", () => {

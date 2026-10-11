@@ -44,7 +44,7 @@ test("recognizes creation requests in every supported UI language and keeps goal
   }
 });
 
-test("selects the Bass recipe rules for multilingual Bass requests", () => {
+test("selects source-only Bass guidance for multilingual Bass requests", () => {
   const requests = [
     "Write a bassline.",
     "写一条贝斯线",
@@ -56,9 +56,9 @@ test("selects the Bass recipe rules for multilingual Bass requests", () => {
   ];
   for (const request of requests) {
     const prompt = instrumentPromptFor(request, request);
-    assert.match(prompt, /For Bass sound design or a new Bass part/, request);
-    assert.doesNotMatch(prompt, /When Guitar is the selected instrument/, request);
-    assert.doesNotMatch(prompt, /For Pluck sound design/, request);
+    assert.match(prompt, /Available sources by role: Bass: sample, synth Operator\./, request);
+    assert.match(prompt, /Do not apply recipe envelope, filter, oscillator, or other timbre settings/, request);
+    assert.doesNotMatch(prompt, /For Bass sound design or a new Bass part|For Pluck sound design/, request);
   }
 });
 

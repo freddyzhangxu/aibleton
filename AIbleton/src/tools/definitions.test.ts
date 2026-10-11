@@ -70,7 +70,7 @@ test("describes recipes as source selection only", () => {
 test("keeps genre profiles from constraining which roles are created", () => {
   const recipeTool = TOOLS.find((tool) => tool.name === "apply_sound_recipe");
   assert.ok(recipeTool);
-  assert.match(recipeTool.description, /profiles do not mandate or exclude a track's role lineup/);
+  assert.match(recipeTool.description, /Genre profiles do not mandate or exclude track roles/);
   assert.doesNotMatch(recipeTool.description, /core\/optional parts/i);
 });
 
