@@ -120,7 +120,7 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
         ]),
     }),
   ];
-  const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  const actions = toolState.activeActions ?? [];
   let languageCorrections = 0;
   let languageRewriteOnly = false;
   attachImages(messages, req, (last, images) => {

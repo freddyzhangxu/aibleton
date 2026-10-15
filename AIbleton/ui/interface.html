@@ -2726,7 +2726,10 @@
       setBusy(false);
       const h = await fetch('/api/history').then(r => r.json()).catch(() => null);
       if (h) renderMessages(h.messages);
-      if (s.error) addMsg('error', t('error') + s.error);
+      const lastMessage = h && Array.isArray(h.messages) ? h.messages[h.messages.length - 1] : null;
+      if (s.error && !(lastMessage && lastMessage.role === 'assistant' && lastMessage.content === s.error)) {
+        addMsg('error', t('error') + s.error);
+      }
     }
 
     // ----- update check -----

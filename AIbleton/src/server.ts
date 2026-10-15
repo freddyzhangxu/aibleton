@@ -30,6 +30,7 @@ import {
   createSession,
   currentSession,
   deleteSession,
+  failChat,
   listSessions,
   loadStore,
   saveStore,
@@ -999,6 +1000,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         toolState.activeMasterIntent = hasMasterIntent(text);
         toolState.phase = "thinking";
         toolState.activity = null;
+        toolState.activeActions = [];
         // Respond immediately: the task runs in the background on the extension
         // side, so closing the dialog (which kills this connection) does NOT
         // stop it. Clients poll /api/status and then read /api/history.
@@ -1021,8 +1023,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             const rawError = err instanceof Error ? err.stack ?? err.message : String(err);
             lastError = friendlyBoundaryError(err, languageContext.replyLanguage);
             debugLog(context, `TASK error elapsedMs=${(monotonicNow() - taskStartedAt).toFixed(1)}: ${rawError}`);
-            session.messages.pop(); // roll back the user message to keep the conversation consistent
-            saveStore(context);
+            failChat(context, session, toolState.activeActions ?? [], lastError);
           } finally {
             busy = false;
             toolState.abortCtl = null;
@@ -1038,6 +1039,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             toolState.phase = null;
             toolState.activity = null;
             toolState.progress = { completedTools: 0, plan: undefined };
+            toolState.activeActions = null;
             // Never leave a confirmation dangling past its task's lifetime.
             answerConfirmation(false);
           }

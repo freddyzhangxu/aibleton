@@ -41,7 +41,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
       },
     ],
   });
-  const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  const actions = toolState.activeActions ?? [];
   let languageCorrections = 0;
   let languageRewriteOnly = false;
   attachImages(messages, req, (last, images) => {

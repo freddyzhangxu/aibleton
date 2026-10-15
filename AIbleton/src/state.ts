@@ -5,6 +5,7 @@ import type { LocalConfig, Provider } from "./config/local.js";
 import type { SampleEntry } from "./samplemeta.js";
 import type { TurnLanguageContext } from "./i18n/language.js";
 import type { ExplicitEditScope } from "./selectionguard.js";
+import type { ToolAction } from "./chat/receipt.js";
 
 export type Ctx = ExtensionContext<"1.0.0">;
 
@@ -85,6 +86,9 @@ export const toolState = {
   activity: null as { key: string; detail?: string } | null,
   /** Measured completed tools and active sequential batch, if any. */
   progress: { completedTools: 0, plan: undefined as { completed: number; total: number } | undefined },
+  /** Tool calls from the active provider turn, persisted if its final model
+   * response fails after the Live Set has already been changed. */
+  activeActions: null as ToolAction[] | null,
 };
 
 /**

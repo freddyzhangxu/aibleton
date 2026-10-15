@@ -199,6 +199,18 @@ export function finishChat(
   return { reply: cleanReply, actions };
 }
 
+/** Persist a failed turn without losing its request or any work already run. */
+export function failChat(
+  context: Ctx,
+  session: ChatSession,
+  actions: ToolAction[],
+  error: string,
+) {
+  session.messages.push({ role: "assistant", content: stripEmoji(error), actions });
+  session.updatedAt = Date.now();
+  saveStore(context);
+}
+
 /** Cap a tool-result payload the same way for live calls and history replay. */
 export function truncateResult(resultJson: string): string {
   if (resultJson.length <= 6000) return resultJson;

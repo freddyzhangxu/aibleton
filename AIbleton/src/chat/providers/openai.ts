@@ -239,7 +239,7 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
         { type: "function_call_output", call_id: p + i, output: truncateResult(JSON.stringify(a.result)) },
       ]),
   });
-  const actions: { tool: string; input: unknown; result: unknown }[] = [];
+  const actions = toolState.activeActions ?? [];
   let languageCorrections = 0;
   let languageRewriteOnly = false;
   attachImages(input, req, (last, images) => {
