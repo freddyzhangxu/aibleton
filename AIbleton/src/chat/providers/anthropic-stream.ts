@@ -13,6 +13,7 @@ export interface AnthropicStreamData {
   content: AnthropicContentBlock[];
   stop_reason: string;
   usage?: {
+    speed?: string;
     input_tokens?: number;
     output_tokens?: number;
     cache_read_input_tokens?: number;
@@ -54,6 +55,7 @@ export async function readAnthropicStream(stream: AsyncIterable<Uint8Array>): Pr
     if (type === "message_start") {
       started = true;
       const message = event.message as { usage?: AnthropicStreamData["usage"] } | undefined;
+      if (typeof message?.usage?.speed === "string") usage.speed = message.usage.speed;
       if (typeof message?.usage?.input_tokens === "number") usage.input_tokens = message.usage.input_tokens;
       if (typeof message?.usage?.cache_read_input_tokens === "number") usage.cache_read_input_tokens = message.usage.cache_read_input_tokens;
       if (typeof message?.usage?.cache_creation_input_tokens === "number") usage.cache_creation_input_tokens = message.usage.cache_creation_input_tokens;
@@ -102,6 +104,7 @@ export async function readAnthropicStream(stream: AsyncIterable<Uint8Array>): Pr
       const delta = event.delta as { stop_reason?: unknown } | undefined;
       if (typeof delta?.stop_reason === "string") stopReason = delta.stop_reason;
       const messageUsage = event.usage as AnthropicStreamData["usage"] | undefined;
+      if (typeof messageUsage?.speed === "string") usage.speed = messageUsage.speed;
       if (typeof messageUsage?.output_tokens === "number") usage.output_tokens = messageUsage.output_tokens;
       if (typeof messageUsage?.input_tokens === "number") usage.input_tokens = messageUsage.input_tokens;
       return;

@@ -19,6 +19,7 @@ export interface ChatRequest {
   language?: string;
   /** Provider-specific reasoning choice (empty = detected/default behavior). */
   effort?: string;
+  fastMode?: boolean;
   /** false = ask the user before any Set-modifying tool call (default true = run freely). */
   yolo?: boolean;
   attachments?: Attachment[];
@@ -80,6 +81,7 @@ export interface ResolvedConfig {
   reasoningEffort?: string;
   /** UI-selected provider-specific reasoning choice. */
   effort?: string;
+  fastMode?: boolean;
 }
 
 export function resolveConfig(req: ChatRequest): ResolvedConfig {
@@ -90,6 +92,7 @@ export function resolveConfig(req: ChatRequest): ResolvedConfig {
   // Manual settings-UI config wins over CLI autodetect; per-request fields win over both.
   const local: LocalConfig = { ...(loadLocalConfig(provider) ?? {}), ...(toolHooks.getManualConfig(provider) ?? {}) };
   const fromLocal = !req.apiKey && Boolean(local.authToken || local.apiKey);
+  const fastMode = typeof req.fastMode === "boolean" ? req.fastMode : local.fastMode === true;
 
   if (provider === "custom") {
     // Generic OpenAI-compatible endpoint (Grok / DeepSeek / Kimi / OpenRouter /
@@ -105,6 +108,7 @@ export function resolveConfig(req: ChatRequest): ResolvedConfig {
       model: req.model || local.model || "",
       fromLocal,
       effort: req.effort,
+      fastMode,
     };
   }
   if (provider === "codex") {
@@ -126,6 +130,7 @@ export function resolveConfig(req: ChatRequest): ResolvedConfig {
       // UI effort selector wins over the CLI config file.
       reasoningEffort: req.effort || local.reasoningEffort,
       effort: req.effort,
+      fastMode,
     };
   }
   if (provider === "gemini") {
@@ -136,6 +141,7 @@ export function resolveConfig(req: ChatRequest): ResolvedConfig {
       model: req.model || local.model || "gemini-flash-latest",
       fromLocal,
       effort: req.effort,
+      fastMode,
     };
   }
   return {
@@ -145,5 +151,6 @@ export function resolveConfig(req: ChatRequest): ResolvedConfig {
     model: req.model || local.model || "claude-sonnet-5",
     fromLocal,
     effort: req.effort,
+    fastMode,
   };
 }

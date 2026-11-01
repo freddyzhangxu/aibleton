@@ -44,6 +44,23 @@ test("recognizes creation requests in every supported UI language and keeps goal
   }
 });
 
+test("Chinese creation synonyms consistently select Live creation, planning and sound sources", () => {
+  for (const verb of ["制作", "製作", "创作", "創作", "编写", "編寫", "写", "寫", "做", "作曲", "编曲", "編曲", "谱写", "譜寫"]) {
+    const request = `帮我${verb}一首布鲁斯`;
+    const { sectionChars } = selectWorkflowRules(request);
+    for (const heading of ["Making music that actually produces sound", "Goals (tasks that change the Set)", "Plans (multi-step tasks)"]) {
+      assert.ok(sectionChars[heading] > 0, `${request}: ${heading}`);
+    }
+    assert.ok(instrumentPromptFor(request, request).length > 0, `${request}: instrument sources`);
+  }
+});
+
+test("creation guidance survives an additional analysis intent", () => {
+  const { sectionChars } = selectWorkflowRules("创作一首布鲁斯，然后分析混音");
+  assert.ok(sectionChars["Making music that actually produces sound"] > 0);
+  assert.ok(sectionChars["Song analysis (read-only)"] > 0);
+});
+
 test("selects source-only Bass guidance for multilingual Bass requests", () => {
   const requests = [
     "Write a bassline.",

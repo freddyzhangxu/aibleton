@@ -39,8 +39,10 @@ import {
 } from "./chat/session.js";
 import { answerConfirmation, getPendingConfirm } from "./chat/gates.js";
 import { deleteAuthorizationFor } from "./chat/deleteauth.js";
+import { audioGenerationAuthorized } from "./chat/audioauth.js";
 import { explicitEditScopeFor } from "./selectionguard.js";
 import { resolveConfig, simpleEditKind, withTaskEffort, type Attachment, type ChatRequest, type ResolvedConfig } from "./chat/config.js";
+import { beginSpeedTurn, getSpeedStatus, speedCapability } from "./chat/speed.js";
 import { resetTurnState } from "./agent/runtime.js";
 import { clearRightClickFocus, clearSelectionContext, updateSetContext } from "./setcontext.js";
 import { chatAnthropic } from "./chat/providers/anthropic.js";
@@ -395,6 +397,7 @@ async function chat(context: Ctx, req: ChatRequest) {
   const setFp = updateSetContext(context);
   if (setFp) debugLog(context, `SET key=${setFp.key}${setFp.changed ? " CHANGED" : ""}`);
   const cfg = resolveConfig(req);
+  beginSpeedTurn(cfg);
   const withSelectedSkills = async (): Promise<{ request: ChatRequest; config: ResolvedConfig }> => {
     const selected = await selectSkillsForTurn(context, cfg, lastUserText());
     const userText = lastUserText();
@@ -465,6 +468,16 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
       clearRightClickFocus();
       clearSelectionContext();
       send(200, chatInterface.replaceAll("__APP_VERSION__", APP_VERSION), "text/html");
+      return;
+    }
+    if (req.method === "GET" && req.url?.startsWith("/api/speed?")) {
+      const query = new URL(req.url, "http://127.0.0.1").searchParams;
+      const cfg = resolveConfig({
+        provider: query.get("provider") ?? undefined,
+        baseUrl: query.get("baseUrl") || undefined,
+        model: query.get("model") || undefined,
+      });
+      send(200, JSON.stringify({ ...speedCapability(cfg), enabled: cfg.fastMode === true }));
       return;
     }
     if (req.method === "GET" && req.url?.startsWith("/api/health")) {
@@ -618,6 +631,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
           if (typeof v === "string" && v.trim()) (cur as Record<string, unknown>)[key] = v.trim();
           else if (key in fields) delete (cur as Record<string, unknown>)[key];
         }
+        if (typeof fields.fastMode === "boolean") cur.fastMode = fields.fastMode;
         if (Object.keys(cur).length) manualConfigs[provider] = cur;
         else delete manualConfigs[provider];
         saveManualConfigs();
@@ -894,6 +908,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         phase: toolState.phase,
         activity: toolState.activity,
         progress: busy ? toolState.progress : null,
+        speed: getSpeedStatus(),
       }));
       return;
     }
@@ -991,6 +1006,10 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
         toolState.abortCtl = new AbortController();
         toolState.activeAudioConfig = resolveAudioConfig(
           mergeAudioRequest(parsed.audio as AudioRequestConfig | undefined));
+        const previousMessage = session.messages.at(-2);
+        toolState.activeAudioGenerationAuthorized = audioGenerationAuthorized(
+          text, previousMessage?.role === "assistant" ? previousMessage.content : undefined,
+        );
         toolState.activeLanguage = languageContext.replyLanguage;
         toolState.activeLanguageContext = languageContext;
         toolState.activeDeleteAuthorization = deleteAuthorizationFor(text);
@@ -1030,6 +1049,7 @@ export function startServer(context: Ctx): Promise<{ url: string; port: number }
             toolState.stopReason = null;
             toolState.activeLanguage = undefined;
             toolState.activeLanguageContext = null;
+            toolState.activeAudioGenerationAuthorized = false;
             toolState.activeDeleteAuthorization = undefined;
             toolState.activeYolo = false;
             toolState.activeCreatedDeviceHandles.clear();

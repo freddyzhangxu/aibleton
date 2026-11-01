@@ -112,6 +112,7 @@ import { toolHooks, toolState, type Ctx } from "../state.js";
 import { truncateResult } from "../chat/session.js";
 import { clearTurnGoalOutcome, setTurnGoalOutcome } from "./turnoutcome.js";
 import { commonText } from "../i18n/common.js";
+import { audioGenerationRefusal } from "../chat/audioauth.js";
 import { measureAsync } from "../chat/timing.js";
 
 // ---------- Goal/Intent layer (goal/) ----------
@@ -914,6 +915,12 @@ export async function callTool(
   input: Record<string, unknown>,
   yolo: boolean,
 ): Promise<string> {
+  if (name === "generate_audio" && !toolState.activeAudioGenerationAuthorized) {
+    const refused = stopAfterRepeatedToolError(context, name, audioGenerationRefusal(toolState.activeLanguage));
+    actions.push({ tool: name, input, result: refused });
+    toolHooks.debugLog(context, `TOOL ${name} REFUSED: AI audio generation was not requested`);
+    return JSON.stringify(refused);
+  }
   // Prompt context is helpful but not a security boundary. Re-resolve the
   // transient Live selection immediately before every mutation so an agent
   // cannot accidentally write beyond the range/slots the user selected.

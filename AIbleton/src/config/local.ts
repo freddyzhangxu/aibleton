@@ -23,6 +23,8 @@ export interface LocalConfig {
   refreshToken?: string;
   chatgpt?: boolean;
   reasoningEffort?: string;
+  /** Explicit opt-in to a paid speed tier, independent of reasoning effort. */
+  fastMode?: boolean;
 }
 
 const configCache: Partial<Record<Provider, LocalConfig | null>> = {};

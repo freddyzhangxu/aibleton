@@ -1,4 +1,5 @@
 export interface ChatCompletionsData {
+  service_tier?: string;
   choices?: {
     message?: {
       content?: string | null;

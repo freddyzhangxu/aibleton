@@ -3,7 +3,7 @@ import { genreDrumProfilePrompt, genreInstrumentProfilePrompt, type GenrePartRol
 import { SOUND_RECIPES } from "../sound/recipes.js";
 
 function isInstrumentIntent(userText: string): boolean {
-  return !userText.trim() || /\b(?:bass(?:line)?|kick|drum|lead|melody|pad|pluck|keys?|piano|guitar|instrument|synth|sound|timbre|patch|wavetable|operator|add|create|write|make|build|program|produce|compose|insert|load|replace|swap|bajo|basse|basslinie|basso|guitare|guitarra|chitarra|teclado|tastiera|clavier|mélodie|melodía|melodia|schlagzeug|batterie|batería|instrumento|strumento|instrument|crée|fais|écris|compose|ajoute|crea|haz|escribe|añade|agrega|scrivi|componi|aggiungi|mach|schreib|erstelle)\b|音色|音源|贝斯|鼓|旋律|吉他|钢琴|键盘|合成器|乐器|ベース|ドラム|メロディ|ギター|ピアノ|鍵盤|シンセ|新建|添加|创建|编写|制作|编程|替换|更换|加载/i.test(userText);
+  return !userText.trim() || /\b(?:bass(?:line)?|kick|drum|lead|melody|pad|pluck|keys?|piano|guitar|instrument|synth|sound|timbre|patch|wavetable|operator|add|create|write|make|build|program|produce|compose|insert|load|replace|swap|bajo|basse|basslinie|basso|guitare|guitarra|chitarra|teclado|tastiera|clavier|mélodie|melodía|melodia|schlagzeug|batterie|batería|instrumento|strumento|instrument|crée|fais|écris|compose|ajoute|crea|haz|escribe|añade|agrega|scrivi|componi|aggiungi|mach|schreib|erstelle)\b|音色|音源|贝斯|鼓|旋律|吉他|钢琴|键盘|合成器|乐器|ベース|ドラム|メロディ|ギター|ピアノ|鍵盤|シンセ|新建|添加|创建|编写|編寫|制作|製作|创作|創作|谱写|譜寫|写|寫|做|作曲|编曲|編曲|生成|编程|替换|更换|加载/i.test(userText);
 }
 
 function selectedInstrumentRoles(userText: string): GenrePartRole[] | undefined {

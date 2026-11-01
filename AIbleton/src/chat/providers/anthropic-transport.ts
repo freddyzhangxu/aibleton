@@ -4,6 +4,7 @@ export interface AnthropicRoundData {
   content?: AnthropicContentBlock[];
   stop_reason?: string;
   usage?: {
+    speed?: string;
     input_tokens?: number;
     output_tokens?: number;
     cache_read_input_tokens?: number;

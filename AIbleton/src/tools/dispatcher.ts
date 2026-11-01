@@ -50,6 +50,7 @@ import { resolvedSelection } from "../setcontext.js";
 import { selectionGuard } from "../selectionguard.js";
 import { actionableError } from "../errors.js";
 import { commonText } from "../i18n/common.js";
+import { audioGenerationRefusal } from "../chat/audioauth.js";
 import {
   applySwing,
   buildSongSnapshot,
@@ -297,6 +298,9 @@ export async function runTool(
   name: string,
   input: Record<string, unknown>,
 ): Promise<unknown> {
+  if (name === "generate_audio" && !toolState.activeAudioGenerationAuthorized) {
+    return audioGenerationRefusal(toolState.activeLanguage);
+  }
   const song = context.application.song;
   // runTool is also used by tests and could gain non-agent callers later.
   // Keep destructive and selection boundaries protected even if runtime is

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { TOOLS, activeTools } from "./definitions.js";
+import { toolState } from "../state.js";
 
 test("describes generic insertion attempts for named built-in Live vocal devices", () => {
   const insertDevice = TOOLS.find((tool) => tool.name === "insert_device");
@@ -88,4 +89,21 @@ test("simple edits advertise their reads and writes without the full tool catalo
   for (const name of ["get_song_overview", "get_track_mixer", "set_track_mixer", "get_return_track_mixer", "set_return_track_mixer"]) assert.ok(mixer.includes(name));
   assert.ok(mixer.length < 10);
   assert.ok(activeTools().length > 60, "ambiguous and creative tasks keep the full catalog");
+});
+
+test("ordinary song creation does not advertise paid audio generation", () => {
+  assert.ok(!activeTools().some((tool) => tool.name === "generate_audio"));
+  for (const name of ["create_midi_track", "insert_device", "write_midi_clip", "load_drum_kit", "search_samples"]) {
+    assert.ok(activeTools().some((tool) => tool.name === name), name);
+  }
+});
+
+test("explicit audio generation authorization opens only this turn's tool", () => {
+  toolState.activeAudioGenerationAuthorized = true;
+  try {
+    assert.ok(activeTools().some((tool) => tool.name === "generate_audio"));
+  } finally {
+    toolState.activeAudioGenerationAuthorized = false;
+  }
+  assert.ok(!activeTools().some((tool) => tool.name === "generate_audio"));
 });

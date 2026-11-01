@@ -34,6 +34,7 @@ export type CommonMessageKey =
   | "contentTruncated"
   | "webDisabled"
   | "deleteNotAuthorized"
+  | "audioGenerationNotRequested"
   | "moveRoutingSetup"
   | "movePairHint"
   | "movePairCode"
@@ -48,6 +49,7 @@ type CommonCopy = Record<CommonMessageKey, string>;
 
 const COPY: Record<SupportedLanguage, CommonCopy> = {
   zh: {
+    audioGenerationNotRequested: "音频生成未执行：本轮没有明确要求 AI 音频生成。请使用 Ableton Live 的乐器、鼓组、MIDI Clip 和编曲工具完成制作；音频素材请先搜索本地采样。",
     noTextReply: "（无文本回复）", emptyMessage: "消息不能为空", busy: "上一个任务还在进行中，请稍候",
     sessionNotFound: "会话不存在", noRunningTask: "当前没有运行中的任务", serverStartFailed: "无法启动本地服务",
     userDenied: "用户拒绝了该操作", verificationFailed: "验证失败（操作已执行，未达预期）：{0}",
@@ -70,6 +72,7 @@ const COPY: Record<SupportedLanguage, CommonCopy> = {
     settingsAi: "设置（齿轮）→ AI 配置", settingsAudio: "设置（齿轮）→ 音频生成",
   },
   en: {
+    audioGenerationNotRequested: "Audio generation did not run: AI audio generation was not requested this turn. Make the music with Ableton Live instruments, drum kits, MIDI clips and arrangement tools; search local samples for audio assets.",
     noTextReply: "(No text response)", emptyMessage: "Message cannot be empty", busy: "The previous task is still running; please wait",
     sessionNotFound: "Conversation not found", noRunningTask: "No task is currently running", serverStartFailed: "Couldn't start the local server",
     userDenied: "The user denied this action", verificationFailed: "Verification failed (the action ran but missed the expected result): {0}",
@@ -92,6 +95,7 @@ const COPY: Record<SupportedLanguage, CommonCopy> = {
     settingsAi: "Settings (gear icon) → AI Provider", settingsAudio: "Settings (gear icon) → Audio Generation",
   },
   de: {
+    audioGenerationNotRequested: "Keine Audiogenerierung: Für diese Anfrage wurde keine KI-Audiogenerierung angefordert. Nutze Instrumente, Drum-Kits, MIDI-Clips und Arrangement-Werkzeuge in Ableton Live; suche Audiomaterial in lokalen Samples.",
     noTextReply: "(Keine Textantwort)", emptyMessage: "Die Nachricht darf nicht leer sein", busy: "Die vorherige Aufgabe läuft noch; bitte warten",
     sessionNotFound: "Unterhaltung nicht gefunden", noRunningTask: "Derzeit läuft keine Aufgabe", serverStartFailed: "Der lokale Server konnte nicht gestartet werden",
     userDenied: "Der Benutzer hat diese Aktion abgelehnt", verificationFailed: "Überprüfung fehlgeschlagen (Aktion ausgeführt, Ziel verfehlt): {0}",
@@ -110,6 +114,7 @@ const COPY: Record<SupportedLanguage, CommonCopy> = {
     settingsAi: "Einstellungen (Zahnrad) → AI-Anbieter", settingsAudio: "Einstellungen (Zahnrad) → Audio-Generierung",
   },
   fr: {
+    audioGenerationNotRequested: "Aucun audio généré : aucune génération audio par IA demandée pour ce tour. Utilise les instruments, kits de batterie, clips MIDI et outils d’arrangement d’Ableton Live ; cherche les samples localement.",
     noTextReply: "(Aucune réponse textuelle)", emptyMessage: "Le message ne peut pas être vide", busy: "La tâche précédente est toujours en cours ; veuillez patienter",
     sessionNotFound: "Conversation introuvable", noRunningTask: "Aucune tâche n'est en cours", serverStartFailed: "Impossible de démarrer le serveur local",
     userDenied: "L'utilisateur a refusé cette action", verificationFailed: "Échec de la vérification (action exécutée, résultat attendu manqué) : {0}",
@@ -128,6 +133,7 @@ const COPY: Record<SupportedLanguage, CommonCopy> = {
     settingsAi: "Paramètres (icône engrenage) → Fournisseur IA", settingsAudio: "Paramètres (icône engrenage) → Génération audio",
   },
   ja: {
+    audioGenerationNotRequested: "このターンではAI音声生成が明示的に依頼されていないため、実行しませんでした。Ableton Liveの楽器、ドラムキット、MIDIクリップ、アレンジ機能で制作し、音声素材はローカルサンプルから検索してください。",
     noTextReply: "（テキスト応答なし）", emptyMessage: "メッセージを空にできません", busy: "前のタスクが実行中です。しばらくお待ちください",
     sessionNotFound: "会話が見つかりません", noRunningTask: "現在実行中のタスクはありません", serverStartFailed: "ローカルサーバーを起動できませんでした",
     userDenied: "ユーザーがこの操作を拒否しました", verificationFailed: "検証失敗（操作は実行されましたが期待結果に未達成）：{0}",
@@ -146,6 +152,7 @@ const COPY: Record<SupportedLanguage, CommonCopy> = {
     settingsAi: "設定（歯車）→ AI プロバイダー", settingsAudio: "設定（歯車）→ 音声生成",
   },
   es: {
+    audioGenerationNotRequested: "No se generó audio: no se solicitó generación de audio con IA en este turno. Usa instrumentos, kits de batería, clips MIDI y herramientas de arreglo de Ableton Live; busca muestras locales para el material de audio.",
     noTextReply: "(Sin respuesta de texto)", emptyMessage: "El mensaje no puede estar vacío", busy: "La tarea anterior sigue en curso; espera un momento",
     sessionNotFound: "No se encontró la conversación", noRunningTask: "No hay ninguna tarea en ejecución", serverStartFailed: "No se pudo iniciar el servidor local",
     userDenied: "El usuario rechazó esta acción", verificationFailed: "La verificación falló (la acción se ejecutó, pero no logró el resultado esperado): {0}",
@@ -164,6 +171,7 @@ const COPY: Record<SupportedLanguage, CommonCopy> = {
     settingsAi: "Ajustes (icono de engranaje) → Proveedor de IA", settingsAudio: "Ajustes (icono de engranaje) → Generación de audio",
   },
   it: {
+    audioGenerationNotRequested: "Nessun audio generato: in questo turno non è stata richiesta la generazione audio con IA. Usa strumenti, kit di batteria, clip MIDI e strumenti di arrangiamento di Ableton Live; cerca campioni locali per il materiale audio.",
     noTextReply: "(Nessuna risposta testuale)", emptyMessage: "Il messaggio non può essere vuoto", busy: "L'attività precedente è ancora in corso; attendi",
     sessionNotFound: "Conversazione non trovata", noRunningTask: "Nessuna attività è in esecuzione", serverStartFailed: "Impossibile avviare il server locale",
     userDenied: "L'utente ha rifiutato questa azione", verificationFailed: "Verifica non riuscita (azione eseguita, risultato previsto non raggiunto): {0}",

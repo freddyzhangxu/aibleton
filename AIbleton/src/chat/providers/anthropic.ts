@@ -14,6 +14,7 @@ import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
 import { requestAnthropicRound, type AnthropicRoundData } from "./anthropic-transport.js";
 import { logProviderUsage } from "./usage.js";
+import { speedRequestBody, speedRequestHeaders, recordSpeedResult } from "../speed.js";
 import {
   languageCorrectionPrompt,
   MAX_REPLY_LANGUAGE_CORRECTIONS,
@@ -101,6 +102,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
       ...(languageRewriteOnly ? {} : { tools: chatTools }),
       messages,
       ...(thinking && !suppressThinking ? { thinking } : {}),
+      ...speedRequestBody(cfg),
     };
     const requestChars = JSON.stringify({ ...requestBody, stream: true }).length;
     let data: AnthropicRoundData;
@@ -111,7 +113,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
     try {
       const res = await measureAsync(`MODEL provider=anthropic round=${round}`, () => requestAnthropicRound(
         `${baseUrl}/v1/messages`,
-        headers,
+        speedRequestHeaders(cfg, headers),
         requestBody,
         toolState.abortCtl?.signal ?? null,
         (code, mode) => {
@@ -121,6 +123,7 @@ export async function chatAnthropic(context: Ctx, cfg: ResolvedConfig, req: Chat
       ), (line) => toolHooks.debugLog(context, line));
       status = res.status;
       data = res.data;
+      if (status >= 200 && status < 300) recordSpeedResult(cfg, data);
       toolHooks.debugLog(context, `ROUND ${round}: Claude response complete elapsedMs=${(monotonicNow() - startedAt).toFixed(1)}`);
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.

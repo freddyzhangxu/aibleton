@@ -48,6 +48,8 @@ export const toolState = {
   artistMemory: {} as ArtistMemory,
   /** Resolved audio-generation config for the running chat task. */
   activeAudioConfig: null as AudioGenConfig | null,
+  /** Explicit user choice of AI audio generation, scoped to the active turn. */
+  activeAudioGenerationAuthorized: false,
   /** Reply language of the running chat task. Kept as a compatibility alias
    * while tools migrate to activeLanguageContext. */
   activeLanguage: undefined as string | undefined,

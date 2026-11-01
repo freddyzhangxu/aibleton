@@ -18,6 +18,7 @@ import { attachImages, historyWithTools } from "../history.js";
 import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
 import { logProviderUsage } from "./usage.js";
+import { speedRequestBody, recordSpeedResult } from "../speed.js";
 import {
   languageCorrectionPrompt,
   MAX_REPLY_LANGUAGE_CORRECTIONS,
@@ -102,6 +103,7 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       contents,
       ...(languageRewriteOnly ? {} : { tools }),
       ...(thinkingBudget ? { generationConfig: { thinkingConfig: { thinkingBudget } } } : {}),
+      ...speedRequestBody(cfg),
     });
     let data: {
       candidates?: { content?: { parts?: GeminiPart[] } }[];
@@ -127,11 +129,13 @@ export async function chatGemini(context: Ctx, cfg: ResolvedConfig, req: ChatReq
         );
         return {
           status: res.status,
+          serviceTier: String(res.headers["x-gemini-service-tier"] ?? ""),
           data: JSON.parse(await readAll(res.stream)) as typeof data,
         };
       }, (line) => toolHooks.debugLog(context, line));
       status = response.status;
       data = response.data;
+      if (status >= 200 && status < 300) recordSpeedResult(cfg, {}, response.serviceTier);
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));

@@ -876,7 +876,7 @@ export const TOOLS = [
   {
     name: "generate_audio",
     description:
-      "Generate NEW audio with an AI music model (Stable Audio / ElevenLabs / MiniMax — whichever is configured in Settings) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Pass importTo to place the result onto an audio track's arrangement (or a Session View slot via importTo.scene_index) in the same atomic call (preferred for loops/stems); without it, follow up with import_audio_clip (arrangement or Session) or load_sample (one-shots into a Simpler). Every generation is recorded in the generation registry (generation_id in the result) so gen_* goal criteria can judge the artifact.",
+      "Only for explicitly requested AI audio generation or a generation offer the user accepted. Ordinary song/part creation uses Live instruments and MIDI clips. Generate NEW audio with an AI music model (Stable Audio / ElevenLabs / MiniMax — whichever is configured in Settings) and save it into the User Library's 'AIbleton' folder. Costs API credits and takes ~10–60 s. Pass importTo to place the result onto an audio track's arrangement (or a Session View slot via importTo.scene_index) in the same atomic call (preferred for loops/stems); without it, follow up with import_audio_clip (arrangement or Session) or load_sample (one-shots into a Simpler). Every generation is recorded in the generation registry (generation_id in the result) so gen_* goal criteria can judge the artifact.",
     input_schema: {
       type: "object",
       properties: {
@@ -1100,6 +1100,7 @@ export function activeTools(simpleEdit?: "tempo" | "mixer"): typeof TOOLS {
       : null;
   return TOOLS.filter((t) =>
     (!allowed || allowed.has(t.name)) &&
+    (t.name !== "generate_audio" || toolState.activeAudioGenerationAuthorized) &&
     (toolState.webSettings.enabled || (t.name !== "web_search" && t.name !== "web_fetch")),
   );
 }

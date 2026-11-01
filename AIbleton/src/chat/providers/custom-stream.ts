@@ -32,6 +32,7 @@ export async function readChatCompletionsStream(
   let reasoningChars = 0;
   let finishReason: string | null = null;
   let usage: ChatCompletionsData["usage"];
+  let serviceTier: string | undefined;
   let sawDone = false;
   let events = 0;
   let rawNonSse = "";
@@ -43,6 +44,7 @@ export async function readChatCompletionsStream(
       return;
     }
     let evt: {
+      service_tier?: string;
       choices?: {
         delta?: {
           content?: string | null;
@@ -63,6 +65,7 @@ export async function readChatCompletionsStream(
     } catch {
       return; // keepalive noise from the gateway
     }
+    if (evt.service_tier) serviceTier = evt.service_tier;
     if (evt.error?.message) throw new Error(evt.error.message);
     if (evt.usage && typeof evt.usage === "object") usage = evt.usage;
     const choice = Array.isArray(evt.choices) ? evt.choices[0] : undefined;
@@ -163,5 +166,6 @@ export async function readChatCompletionsStream(
       },
     ],
     ...(usage ? { usage } : {}),
+    ...(serviceTier ? { service_tier: serviceTier } : {}),
   };
 }

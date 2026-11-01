@@ -120,3 +120,15 @@ test("rejects a stream with a missing content block index", async () => {
   ].join("");
   await assert.rejects(readAnthropicStream(chunks(Buffer.from(wire), [])), /complete content/);
 });
+
+test("preserves the server's actual speed in a streamed response", async () => {
+  const stream = (async function* () {
+    yield Buffer.from([
+      'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":1,"speed":"fast"}}}\n\n',
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ].join(''));
+  })();
+  const data = await readAnthropicStream(stream);
+  assert.equal((data.usage as { speed?: string }).speed, "fast");
+});

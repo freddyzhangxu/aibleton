@@ -6,6 +6,7 @@ import { simpleEditKind, type ResolvedConfig } from "./config.js";
 import { measureAsync } from "./timing.js";
 import { readResponsesStream } from "./providers/openai.js";
 import { parseCustomResponse } from "./providers/custom-response.js";
+import { speedRequestBody, speedRequestHeaders } from "./speed.js";
 
 const MAX_CATALOG_CHARS = 12_000;
 const MAX_SELECTION_MS = 10_000;
@@ -88,18 +89,19 @@ async function requestSelectionText(
 
   if (cfg.provider === "claude") {
     const response = await rawPost(new URL(`${cfg.baseUrl}/v1/messages`), {
-      headers: {
+      headers: speedRequestHeaders(cfg, {
         "content-type": "application/json",
         "anthropic-version": "2023-06-01",
         authorization: `Bearer ${cfg.authToken}`,
         "x-api-key": cfg.authToken,
         ...(cfg.authToken.startsWith("sk-ant-oat") ? { "anthropic-beta": "oauth-2025-04-20" } : {}),
-      },
+      }),
       body: JSON.stringify({
         model: cfg.model,
         max_tokens: 128,
         system: SELECTOR_INSTRUCTIONS,
         messages: [{ role: "user", content: bodyText }],
+        ...speedRequestBody(cfg),
       }),
       proxy,
       signal,
@@ -120,6 +122,7 @@ async function requestSelectionText(
           systemInstruction: { parts: [{ text: SELECTOR_INSTRUCTIONS }] },
           contents: [{ role: "user", parts: [{ text: bodyText }] }],
           generationConfig: { maxOutputTokens: 128 },
+          ...speedRequestBody(cfg),
         }),
         proxy,
         signal,
@@ -153,6 +156,7 @@ async function requestSelectionText(
         max_output_tokens: 128,
         store: false,
         ...(cfg.chatgpt ? { stream: true } : {}),
+        ...speedRequestBody(cfg),
       }),
       proxy,
       signal,
@@ -183,6 +187,7 @@ async function requestSelectionText(
         { role: "user", content: bodyText },
       ],
       max_tokens: 128,
+      ...speedRequestBody(cfg),
     }),
     proxy,
     signal,

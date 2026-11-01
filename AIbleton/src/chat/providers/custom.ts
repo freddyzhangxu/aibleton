@@ -25,6 +25,7 @@ import {
 import { measureAsync } from "../timing.js";
 import { parseCustomResponse, type ChatCompletionsData } from "./custom-response.js";
 import { logProviderUsage } from "./usage.js";
+import { speedRequestBody, recordSpeedResult } from "../speed.js";
 import { readChatCompletionsStream } from "./custom-stream.js";
 
 // ---------- OpenAI-compatible chat/completions (custom endpoint) ----------
@@ -153,6 +154,7 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       // old JSON shape, handled below.
       stream: true,
       ...reasoning,
+      ...speedRequestBody(cfg),
     });
     let data: ChatCompletionsData;
     let status: number;
@@ -187,6 +189,7 @@ export async function chatCustom(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       }, (line) => toolHooks.debugLog(context, line));
       status = response.status;
       data = response.data;
+      if (status >= 200 && status < 300) recordSpeedResult(cfg, data);
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));

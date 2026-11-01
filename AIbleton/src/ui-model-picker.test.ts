@@ -38,7 +38,7 @@ function render(models: string[], detail = "", options: Record<string, unknown> 
   const model = new Element();
   const data = { models, detail, ...options };
   const context: Context = {
-    modelPop, cfgInputs: { model }, Event,
+    modelPop, modelCatalog: modelPop, modelBtn: new Element(), cfgInputs: { model }, Event,
     currentProvider: "custom", modelQuery: "", modelShowAll: false,
     modelListCache: { custom: data }, modelPreferenceWrites: Promise.resolve(),
     currentModelId: () => "current-model",
@@ -153,7 +153,7 @@ test("cross-window provider changes close the picker, invalidate catalogs and cl
   let listener: (event: { key: string; newValue: string }) => void = () => {};
   const context: Context = {
     window: { addEventListener: (_type: string, callback: typeof listener) => { listener = callback; } },
-    modelPop, currentProvider: "custom", healthModel: "old-provider-model", modelCatalogRequest: 1,
+    modelPop, modelCatalog: modelPop, modelBtn: new Element(), currentProvider: "custom", healthModel: "old-provider-model", modelCatalogRequest: 1,
     PROVIDERS: { custom: { name: "Custom" }, gemini: { name: "Gemini" } }, providerVal: new Element(),
     loadProviderFields() {}, renderProviders() {}, renderEfforts() {}, refreshHealth() {}, renderConnOut() {},
   };
@@ -165,7 +165,7 @@ test("cross-window provider changes close the picker, invalidate catalogs and cl
   assert.ok(context.modelCatalogRequest > 1);
 });
 
-test("selecting a discovered model updates the persisted settings field and closes the picker", () => {
+test("selecting a discovered model updates the persisted settings field and keeps settings open", () => {
   const { modelPop, model } = render(["current-model", "other-model"]);
   const pickerRows = rows(modelPop);
   assert.equal(pickerRows.length, 2);
@@ -173,7 +173,7 @@ test("selecting a discovered model updates the persisted settings field and clos
   pickerRows[1].listeners.click({ stopPropagation() {} });
   assert.equal(model.value, "other-model");
   assert.deepEqual(model.events, ["input", "change"]);
-  assert.ok(modelPop.classes.has("hidden"));
+  assert.ok(!modelPop.classes.has("hidden"));
 });
 
 test("typing in search rebuilds only the list — the controls element survives", () => {

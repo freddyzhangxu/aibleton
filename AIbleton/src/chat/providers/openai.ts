@@ -11,7 +11,7 @@ import { readHomeFile, writeHomeFile } from "../../paths.js";
 import { detectProxy, rawPost, readAll } from "../../http.js";
 import { updateCodexTokenCache } from "../../config/local.js";
 import { activeTools } from "../../tools/definitions.js";
-import { stopNote, systemPromptFor } from "../../prompts.js";
+import { stopNote } from "../../prompts.js";
 import {
   currentSession,
   finishChat,
@@ -24,6 +24,8 @@ import type { ChatRequest, ResolvedConfig } from "../config.js";
 import { commonText } from "../../i18n/common.js";
 import { measureAsync, monotonicNow } from "../timing.js";
 import { logProviderUsage } from "./usage.js";
+import { buildOpenAIRequest } from "./openai-request.js";
+import { speedRequestBody, recordSpeedResult } from "../speed.js";
 import {
   languageCorrectionPrompt,
   MAX_REPLY_LANGUAGE_CORRECTIONS,
@@ -111,6 +113,7 @@ export async function ensureCodexAuth(cfg: ResolvedConfig, language?: string): P
 
 interface OpenAIOutputItem {
   type: string;
+  encrypted_content?: string;
   name?: string;
   arguments?: string;
   call_id?: string;
@@ -118,6 +121,7 @@ interface OpenAIOutputItem {
 }
 
 export interface OpenAIResponseData {
+  service_tier?: string;
   output?: OpenAIOutputItem[];
   error?: { message?: string };
   status?: string;
@@ -260,17 +264,11 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
 
   for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
     if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
-    const requestBody = JSON.stringify({
-      model: cfg.model,
-      instructions: req.systemPrompt ?? systemPromptFor(req.language, req.selectedSkillNames, req.simpleEdit),
-      input,
-      ...(languageRewriteOnly ? {} : { tools }),
-      store: false,
-      // The ChatGPT backend requires SSE streaming; api.openai.com takes plain JSON.
-      ...(cfg.chatgpt ? { stream: true } : {}),
-      ...(cfg.reasoningEffort ? { reasoning: { effort: cfg.reasoningEffort } } : {}),
-    });
+    const requestBody = JSON.stringify(buildOpenAIRequest(
+      cfg, req, input, tools, currentSession().id, languageRewriteOnly,
+    ));
     const proxy = detectProxy();
+    toolHooks.debugLog(context, `SPEED provider=openai round=${round} requested=${JSON.stringify(speedRequestBody(cfg))}`);
     const doFetch = () =>
       rawPost(new URL(`${cfg.baseUrl}/responses`), {
         headers: {
@@ -305,6 +303,10 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
       }, (line) => toolHooks.debugLog(context, line));
       status = response.status;
       data = response.data;
+      if (status >= 200 && status < 300) {
+        recordSpeedResult(cfg, data);
+        toolHooks.debugLog(context, `SPEED provider=openai round=${round} returned=${data.service_tier ?? "missing"}`);
+      }
     } catch (err) {
       // Aborted mid-request by /api/stop — keep the partial work, no error.
       if (toolState.stopRequested) return finishChat(context, actions, stopNote(req.language));
@@ -344,6 +346,8 @@ export async function chatOpenAI(context: Ctx, cfg: ResolvedConfig, req: ChatReq
 
     const output = data.output ?? [];
     toolHooks.debugLog(context, `ROUND ${round}: output=${output.map((o) => o.type).join(",")}`);
+    const reasoningItems = output.filter((o) => o.type === "reasoning");
+    toolHooks.debugLog(context, `CONTEXT provider=openai round=${round} reasoningItems=${reasoningItems.length} encryptedReasoning=${reasoningItems.filter((o) => typeof o.encrypted_content === "string").length}`);
     const calls = output.filter((o) => o.type === "function_call");
     if (!calls.length) {
       const reply =

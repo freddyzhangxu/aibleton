@@ -494,22 +494,54 @@
 
     /* Toolbar under the input: model / effort / attach … YOLO */
     .bar { display: flex; gap: 6px; align-items: center; position: relative; }
-    /* Model picker popup above the toolbar model button (mirrors #skillPop). */
+    /* One compact control opens model, effort and speed together. */
+    .model-control { position: relative; min-width: 0; max-width: calc(100% - 110px); }
     #modelPop.hidden { display: none; }
     #modelPop {
-      position: absolute;
-      bottom: calc(100% + 4px);
-      left: 0;
-      width: min(320px, calc(100vw - 28px));
-      background: var(--c-input-bg);
-      border: 1px solid var(--c-border);
-      border-radius: 6px;
-      max-height: 300px;
-      overflow-y: auto;
-      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
-      z-index: 30;
-      padding: 2px 0;
+      position: absolute; bottom: calc(100% + 8px); left: 0;
+      width: min(246.4px, calc(100vw - 24px));
+      max-height: min(560px, calc(100dvh - 120px));
+      display: flex; flex-direction: column;
+      background: var(--c-input-bg); color: var(--c-text);
+      border: 1px solid var(--c-border); border-radius: 12px;
+      box-shadow: 0 10px 32px rgba(0, 0, 0, .45); z-index: 30;
+      overflow: auto; overscroll-behavior: contain;
     }
+    #modelCatalog { min-height: 64px; max-height: min(224px, 34vh); overflow-y: auto; flex: 1 1 auto; padding: 4px; }
+    .model-options { border-top: 1px solid var(--c-border); padding: 14px 16px 12px; flex: none; }
+    .effort-heading { display: flex; align-items: baseline; gap: 7px; font-size: 13px; }
+    .effort-heading > label { color: var(--c-text-dim); }
+    #effortLabel { font-weight: 600; }
+    #effortAutoBtn { margin-left: auto; border: 0; border-radius: 5px; padding: 3px 6px; color: var(--c-text-dim); background: transparent; font: inherit; font-size: 10px; cursor: pointer; }
+    #effortAutoBtn[aria-pressed="true"] { background: var(--c-border); color: var(--c-text); }
+    .effort-axis { display: flex; justify-content: space-between; color: var(--c-text-dim); font-size: 11px; margin-top: 10px; }
+    .effort-slider { position: relative; height: 36px; margin: 3px 0 8px; }
+    #effortSlider { appearance: none; -webkit-appearance: none; position: relative; z-index: 2; width: 100%; height: 36px; margin: 0; padding: 0; background: transparent; cursor: pointer; }
+    #effortSlider::-webkit-slider-runnable-track { height: 17px; border-radius: 12px; background: rgba(128, 128, 128, .22); }
+    #effortSlider::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 25px; height: 30px; border-radius: 8px; margin-top: -6.5px; background: var(--c-accent); border: 2px solid var(--c-input-bg); box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+    #effortSlider::-moz-range-track { height: 17px; border-radius: 12px; background: rgba(128,128,128,.22); }
+    #effortSlider::-moz-range-thumb { width: 21px; height: 26px; border-radius: 8px; background: var(--c-accent); border: 2px solid var(--c-input-bg); }
+    #effortSlider:focus-visible { outline: 1px solid var(--c-accent); outline-offset: 3px; border-radius: 8px; }
+    #effortTicks { position: absolute; inset: 0 12px; display: flex; align-items: center; justify-content: space-between; pointer-events: none; z-index: 1; }
+    #effortTicks i { width: 4px; height: 4px; border-radius: 50%; background: var(--c-text-dim); }
+    .speed-setting { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--c-border); padding-top: 12px; font-size: 13px; }
+    .speed-setting > svg { flex: none; }
+    .speed-setting > label { flex: 1; cursor: pointer; }
+    #speedBtn { position: relative; width: 36px; height: 21px; padding: 0; border: 0; border-radius: 12px; background: rgba(128,128,128,.4); cursor: pointer; transition: background .15s; }
+    #speedBtn::after { content: ''; position: absolute; top: 3px; left: 3px; width: 15px; height: 15px; border-radius: 50%; background: var(--c-text); transition: transform .15s; }
+    #speedBtn[aria-pressed="true"] { background: var(--c-accent); }
+    #speedBtn[aria-pressed="true"]::after { transform: translateX(15px); background: var(--c-input-bg); }
+    #speedBtn:disabled { opacity: .4; cursor: help; }
+    #speedBtn:focus-visible, #effortAutoBtn:focus-visible { outline: 1px solid var(--c-accent); outline-offset: 3px; }
+    #speedStatus, #speedHint { margin: 8px 0 0; color: var(--c-text-dim); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+    #modelBtn { max-width: 100%; gap: 5px; }
+    #modelBtn > svg { flex: none; }
+    #modelName { min-width: 0; }
+    #modelSummaryEffort { flex: none; color: var(--c-text-dim); font-size: 10px; }
+    #modelSummarySpeed { flex: none; color: var(--c-text-dim); }
+    #modelSummarySpeed.hidden, #speedSettingIcon.hidden, #speedStatus.hidden { display: none; }
+    .model-chevron { transition: transform .15s; }
+    #modelBtn[aria-expanded="true"] .model-chevron { transform: rotate(180deg); }
     .model-row {
       display: flex;
       gap: 6px;
@@ -550,38 +582,13 @@
     }
     .bar-btn:hover { color: var(--c-accent); }
     .bar-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .effort-control { position: relative; }
-    #effortPop.hidden { display: none; }
-    #effortPop {
-      position: absolute;
-      bottom: calc(100% + 4px);
-      left: 0;
-      min-width: 154px;
-      max-width: min(220px, calc(100vw - 28px));
-      background: var(--c-input-bg);
-      border: 1px solid var(--c-border);
-      border-radius: 6px;
-      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
-      z-index: 30;
-      padding: 2px 0;
-    }
-    .effort-row {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 10px;
-      background: transparent;
-      border: 0;
-      color: var(--c-text);
-      font: inherit;
-      font-size: 11px;
-      text-align: left;
-      cursor: pointer;
-    }
-    .effort-row:hover, .effort-row:focus-visible { background: var(--c-border); outline: none; }
-    .effort-row .tick { width: 14px; flex: none; color: var(--c-accent); font-size: 11px; }
-    .effort-row .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .model-row { border-radius: 6px; align-items: center; min-height: 28px; padding: 5px 8px; outline: none; }
+    .model-row[data-selected="true"] { background: rgba(128,128,128,.14); }
+    .model-row:focus-visible { box-shadow: inset 0 0 0 1px var(--c-accent); }
+    .model-row .m-name { order: 0; flex: 1; }
+    .model-row .tick { order: 3; margin-left: 4px; }
+    .model-row .model-preview { order: 1; }
+    .model-row .model-favorite { order: 2; margin-left: 3px; }
     .bar .spacer { flex: 1; }
 
     /* YOLO toggle switch */
@@ -911,13 +918,25 @@
       <textarea id="input" rows="2" placeholder="输入消息，Enter 发送（Shift+Enter 换行）"></textarea>
     </div>
     <div class="bar">
-      <div id="modelPop" class="hidden"></div>
-      <button id="modelBtn" class="bar-btn" title=""><span id="modelName">…</span></button>
-      <div class="effort-control">
-        <button id="effortBtn" class="bar-btn" type="button" title="" aria-haspopup="menu" aria-expanded="false">
-          <span id="effortLabel"></span>
+      <div class="model-control">
+        <button id="modelBtn" class="bar-btn" type="button" title="" aria-haspopup="dialog" aria-controls="modelPop" aria-expanded="false">
+          <span id="modelName">…</span><span id="modelSummaryEffort"></span>
+          <svg id="modelSummarySpeed" class="hidden" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-13h-7z"/></svg>
+          <svg class="model-chevron" width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 7 3-3 3 3"/></svg>
         </button>
-        <div id="effortPop" class="hidden" role="menu" aria-label="Effort"></div>
+        <div id="modelPop" class="hidden" role="dialog" aria-label="Model settings">
+          <div id="modelCatalog"></div>
+          <div class="model-options">
+            <div id="effortControl">
+              <div class="effort-heading"><label for="effortSlider" data-i18n="effortHeading">Effort</label><span id="effortLabel"></span><button id="effortAutoBtn" type="button" data-i18n="effortAuto">Auto</button></div>
+              <div class="effort-axis"><span data-i18n="effortFaster">Faster</span><span data-i18n="effortSmarter">Smarter</span></div>
+              <div class="effort-slider"><div id="effortTicks" aria-hidden="true"></div><input id="effortSlider" type="range" min="0" max="4" step="1"></div>
+            </div>
+            <div class="speed-setting"><svg id="speedSettingIcon" class="hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-13h-7z"/></svg><label id="speedLabel" for="speedBtn" data-i18n="speedLabel">Fast mode</label><button id="speedBtn" type="button" role="switch" aria-checked="false" aria-pressed="false" aria-labelledby="speedLabel" disabled></button></div>
+            <div id="speedStatus" class="hidden" role="status" aria-live="polite"></div>
+            <p id="speedHint"></p>
+          </div>
+        </div>
       </div>
       <button id="attachBtn" class="bar-btn" title="">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
@@ -1002,8 +1021,30 @@
         connConnected: '已连接', connNotConfigured: '未配置',
         connAuthExpired: '认证失效', connModelUnavailable: '模型不可用',
         connUnreachable: '无法连接', connError: '连接出错',
+        effortHeading: "思考强度",
+        effortAuto: "默认",
+        effortFaster: "更快",
+        effortSmarter: "更深入",
         effortDefault: '默认 Effort',
         effortTitle: '思考强度：更高 = 推理更深但更慢',
+        speedEnabled: "加速已开启",
+        speedActualResult: "本次模型响应：{state}",
+        speedRounds: "加速 {fast} 次 / 标准 {standard} 次 / 未确认 {unknown} 次",
+        speedMixed: "部分响应加速",
+        speedLabel: "加速",
+        speedOff: "加速已关闭",
+        speedRequested: "已请求加速，实际档位等待服务端确认",
+        speedFast: "已加速",
+        speedStandard: "标准速度",
+        speedUnknown: "未确认",
+        speedRouting: "优先路由",
+        speedUnavailableModel: "当前模型不支持服务加速，思考强度可单独调整",
+        speedUnavailableEndpoint: "当前接口尚未接入加速能力",
+        speedCost: "服务加速：可能增加费用或订阅额度消耗；保持当前模型和思考强度。账号权限以服务端为准。",
+        speedRouterCost: "优先选择低延迟服务商，价格和实际速度取决于路由结果。",
+        speedLoading: "正在检查加速支持…",
+        speedSaveFail: "加速设置保存失败，请重试",
+        speedCheckFail: "无法检查加速支持，请重试或重新打开窗口",
         attachTitle: '上传文件给 AI：图片、文本、MIDI、Ableton 工程均 ≤10MB；点击选择、拖入窗口或 ⌘V 粘贴',
         modelTitle: '当前模型 · 点击切换模型',
         modelLoading: '加载模型列表…', modelCustom: '自定义模型…', modelListFail: '获取模型列表失败',
@@ -1062,8 +1103,30 @@
         connConnected: 'Connected', connNotConfigured: 'Not configured',
         connAuthExpired: 'Authentication expired', connModelUnavailable: 'Model unavailable',
         connUnreachable: 'Unreachable', connError: 'Connection error',
+        effortHeading: "Effort",
+        effortAuto: "Auto",
+        effortFaster: "Faster",
+        effortSmarter: "Smarter",
         effortDefault: 'Default effort',
         effortTitle: 'Reasoning effort: higher = deeper but slower',
+        speedEnabled: "Speed boost enabled",
+        speedActualResult: "Model responses: {state}",
+        speedRounds: "Fast {fast} / Standard {standard} / Unverified {unknown}",
+        speedMixed: "Partially boosted",
+        speedLabel: "Fast",
+        speedOff: "Speed boost off",
+        speedRequested: "Speed boost requested; awaiting server confirmation",
+        speedFast: "Boosted",
+        speedStandard: "Standard",
+        speedUnknown: "Unverified",
+        speedRouting: "Fast routing",
+        speedUnavailableModel: "This model does not support a speed tier. Reasoning effort is separate.",
+        speedUnavailableEndpoint: "Speed boost is not integrated for this endpoint.",
+        speedCost: "Speed boost may increase charges or subscription usage. Model and reasoning effort stay the same. Server permissions apply.",
+        speedRouterCost: "Prefer lower-latency providers. Price and actual speed depend on the selected route.",
+        speedLoading: "Checking speed support…",
+        speedSaveFail: "Could not save speed preference; please retry",
+        speedCheckFail: "Could not check speed support; retry or reopen this window",
         attachTitle: 'Attach images, text, MIDI, or Live sets (≤10MB each): click, drag in, or paste',
         modelTitle: 'Current model · click to switch model',
         modelLoading: 'Loading models…', modelCustom: 'Custom model…', modelListFail: 'Could not load the model list',
@@ -1122,8 +1185,30 @@
         connConnected: 'Verbunden', connNotConfigured: 'Nicht konfiguriert',
         connAuthExpired: 'Authentifizierung abgelaufen', connModelUnavailable: 'Modell nicht verfügbar',
         connUnreachable: 'Nicht erreichbar', connError: 'Verbindungsfehler',
+        effortHeading: "Denktiefe",
+        effortAuto: "Auto",
+        effortFaster: "Schneller",
+        effortSmarter: "Gründlicher",
         effortDefault: 'Standard-Effort',
         effortTitle: 'Denktiefe: höher = gründlicher, aber langsamer',
+        speedEnabled: "Beschleunigung aktiviert",
+        speedActualResult: "Modellantworten: {state}",
+        speedRounds: "Schnell {fast} / Standard {standard} / Unbestätigt {unknown}",
+        speedMixed: "Teilweise beschleunigt",
+        speedLabel: "Schnell",
+        speedOff: "Beschleunigung aus",
+        speedRequested: "Beschleunigung angefragt; Serverbestätigung steht aus",
+        speedFast: "Beschleunigt",
+        speedStandard: "Standard",
+        speedUnknown: "Unbestätigt",
+        speedRouting: "Schnelle Route",
+        speedUnavailableModel: "Dieses Modell unterstützt keine Geschwindigkeitsstufe. Denktiefe ist separat.",
+        speedUnavailableEndpoint: "Für diesen Endpunkt ist keine Beschleunigung integriert.",
+        speedCost: "Beschleunigung kann Kosten oder Kontingentverbrauch erhöhen. Modell und Denktiefe bleiben gleich. Serverberechtigungen gelten.",
+        speedRouterCost: "Bevorzugt Anbieter mit geringer Latenz. Preis und Tempo hängen von der Route ab.",
+        speedLoading: "Prüfe Beschleunigung…",
+        speedSaveFail: "Tempoeinstellung nicht gespeichert; bitte erneut versuchen",
+        speedCheckFail: "Prüfung fehlgeschlagen; erneut versuchen oder Fenster öffnen",
         attachTitle: 'Dateien anhängen: Bilder, Text, MIDI und Live-Sets jeweils ≤10MB — klicken, ziehen oder einfügen',
         modelTitle: 'Aktuelles Modell · Klicken zum Wechseln',
         modelLoading: 'Modelle werden geladen…', modelCustom: 'Eigenes Modell…', modelListFail: 'Modellliste konnte nicht geladen werden',
@@ -1182,8 +1267,30 @@
         connConnected: 'Connecté', connNotConfigured: 'Non configuré',
         connAuthExpired: 'Authentification expirée', connModelUnavailable: 'Modèle indisponible',
         connUnreachable: 'Inaccessible', connError: 'Erreur de connexion',
+        effortHeading: "Raisonnement",
+        effortAuto: "Auto",
+        effortFaster: "Plus rapide",
+        effortSmarter: "Plus approfondi",
         effortDefault: 'Effort par défaut',
         effortTitle: 'Intensité de raisonnement : plus haut = plus profond mais plus lent',
+        speedEnabled: "Accélération activée",
+        speedActualResult: "Réponses du modèle : {state}",
+        speedRounds: "Rapides {fast} / Standard {standard} / Non confirmées {unknown}",
+        speedMixed: "Partiellement accéléré",
+        speedLabel: "Rapide",
+        speedOff: "Accélération désactivée",
+        speedRequested: "Accélération demandée ; confirmation du serveur en attente",
+        speedFast: "Accéléré",
+        speedStandard: "Standard",
+        speedUnknown: "Non confirmé",
+        speedRouting: "Routage rapide",
+        speedUnavailableModel: "Ce modèle ne propose pas de palier rapide. Le raisonnement se règle séparément.",
+        speedUnavailableEndpoint: "Accélération non intégrée pour ce point de terminaison.",
+        speedCost: "Peut augmenter les frais ou la consommation du forfait. Modèle et raisonnement inchangés. Accès selon le serveur.",
+        speedRouterCost: "Privilégie les fournisseurs à faible latence. Prix et vitesse dépendent du routage.",
+        speedLoading: "Vérification de la prise en charge…",
+        speedSaveFail: "Échec de sauvegarde ; veuillez réessayer",
+        speedCheckFail: "Vérification impossible ; réessayez ou rouvrez la fenêtre",
         attachTitle: 'Joindre images, texte, MIDI ou Live Sets (≤10 Mo chacun) : cliquer, glisser ou coller',
         modelTitle: 'Modèle actuel · cliquer pour changer',
         modelLoading: 'Chargement des modèles…', modelCustom: 'Modèle personnalisé…', modelListFail: 'Impossible de charger la liste des modèles',
@@ -1242,8 +1349,30 @@
         connConnected: '接続済み', connNotConfigured: '未設定',
         connAuthExpired: '認証の有効期限切れ', connModelUnavailable: 'モデル利用不可',
         connUnreachable: '接続できません', connError: '接続エラー',
+        effortHeading: "思考の強さ",
+        effortAuto: "自動",
+        effortFaster: "より速く",
+        effortSmarter: "より深く",
         effortDefault: 'デフォルト',
         effortTitle: '思考の強さ：高いほど深く推論しますが遅くなります',
+        speedEnabled: "高速モードはオン",
+        speedActualResult: "今回のモデル応答：{state}",
+        speedRounds: "高速 {fast} 回 / 標準 {standard} 回 / 未確認 {unknown} 回",
+        speedMixed: "一部の応答が高速",
+        speedLabel: "高速",
+        speedOff: "高速モードはオフ",
+        speedRequested: "高速処理をリクエスト済み。サーバーの確認待ち",
+        speedFast: "高速処理中",
+        speedStandard: "標準速度",
+        speedUnknown: "未確認",
+        speedRouting: "高速ルート",
+        speedUnavailableModel: "このモデルは高速処理に非対応です。思考の強さは別に調整できます。",
+        speedUnavailableEndpoint: "この接続先の高速処理は未対応です。",
+        speedCost: "料金や利用枠の消費が増える場合があります。モデルと思考の強さは維持されます。利用権限はサーバー側に依存します。",
+        speedRouterCost: "低遅延のプロバイダーを優先します。料金と速度は経路により異なります。",
+        speedLoading: "高速処理の対応状況を確認中…",
+        speedSaveFail: "高速設定を保存できませんでした。再試行してください",
+        speedCheckFail: "対応状況を確認できません。再試行するかウィンドウを開き直してください",
         attachTitle: 'ファイル添付：画像・テキスト・MIDI・Live Set は各 ≤10MB。クリック、ドラッグ、または貼り付け',
         modelTitle: '現在のモデル · クリックで切り替え',
         modelLoading: 'モデル一覧を読み込み中…', modelCustom: 'カスタムモデル…', modelListFail: 'モデル一覧を取得できませんでした',
@@ -1302,8 +1431,30 @@
         connConnected: 'Conectado', connNotConfigured: 'No configurado',
         connAuthExpired: 'Autenticación caducada', connModelUnavailable: 'Modelo no disponible',
         connUnreachable: 'Inalcanzable', connError: 'Error de conexión',
+        effortHeading: "Razonamiento",
+        effortAuto: "Auto",
+        effortFaster: "Más rápido",
+        effortSmarter: "Más profundo",
         effortDefault: 'Effort por defecto',
         effortTitle: 'Intensidad de razonamiento: mayor = más profundo pero más lento',
+        speedEnabled: "Aceleración activada",
+        speedActualResult: "Respuestas del modelo: {state}",
+        speedRounds: "Rápidas {fast} / Estándar {standard} / Sin confirmar {unknown}",
+        speedMixed: "Aceleración parcial",
+        speedLabel: "Rápido",
+        speedOff: "Aceleración desactivada",
+        speedRequested: "Aceleración solicitada; esperando confirmación del servidor",
+        speedFast: "Acelerado",
+        speedStandard: "Estándar",
+        speedUnknown: "Sin confirmar",
+        speedRouting: "Ruta rápida",
+        speedUnavailableModel: "Este modelo no admite un nivel rápido. El razonamiento se ajusta por separado.",
+        speedUnavailableEndpoint: "La aceleración no está integrada para este endpoint.",
+        speedCost: "Puede aumentar el coste o consumir más cuota. Modelo y razonamiento se mantienen. El acceso depende del servidor.",
+        speedRouterCost: "Prioriza proveedores con menor latencia. Precio y velocidad dependen de la ruta.",
+        speedLoading: "Comprobando compatibilidad…",
+        speedSaveFail: "No se pudo guardar la preferencia; reintenta",
+        speedCheckFail: "No se pudo comprobar; reintenta o abre de nuevo la ventana",
         attachTitle: 'Adjuntar imágenes, texto, MIDI o Sets de Live (≤10MB cada uno): clic, arrastrar o pegar',
         modelTitle: 'Modelo actual · clic para cambiar',
         modelLoading: 'Cargando modelos…', modelCustom: 'Modelo personalizado…', modelListFail: 'No se pudo cargar la lista de modelos',
@@ -1362,8 +1513,30 @@
         connConnected: 'Connesso', connNotConfigured: 'Non configurato',
         connAuthExpired: 'Autenticazione scaduta', connModelUnavailable: 'Modello non disponibile',
         connUnreachable: 'Irraggiungibile', connError: 'Errore di connessione',
+        effortHeading: "Ragionamento",
+        effortAuto: "Auto",
+        effortFaster: "Più rapido",
+        effortSmarter: "Più approfondito",
         effortDefault: 'Effort predefinito',
         effortTitle: 'Intensità di ragionamento: più alta = più profonda ma più lenta',
+        speedEnabled: "Accelerazione attivata",
+        speedActualResult: "Risposte del modello: {state}",
+        speedRounds: "Rapide {fast} / Standard {standard} / Non confermate {unknown}",
+        speedMixed: "Parzialmente accelerato",
+        speedLabel: "Veloce",
+        speedOff: "Accelerazione disattivata",
+        speedRequested: "Accelerazione richiesta; conferma del server in attesa",
+        speedFast: "Accelerato",
+        speedStandard: "Standard",
+        speedUnknown: "Non confermato",
+        speedRouting: "Percorso rapido",
+        speedUnavailableModel: "Questo modello non supporta un livello rapido. Il ragionamento si regola a parte.",
+        speedUnavailableEndpoint: "Accelerazione non integrata per questo endpoint.",
+        speedCost: "Può aumentare costi o consumo del piano. Modello e ragionamento restano invariati. Accesso secondo il server.",
+        speedRouterCost: "Preferisce fornitori a bassa latenza. Prezzo e velocità dipendono dal percorso.",
+        speedLoading: "Verifica compatibilità…",
+        speedSaveFail: "Impossibile salvare; riprova",
+        speedCheckFail: "Impossibile verificare; riprova o riapri la finestra",
         attachTitle: 'Allega immagini, testo, MIDI o Live Set (≤10MB ciascuno): clic, trascina o incolla',
         modelTitle: 'Modello attuale · clic per cambiare',
         modelLoading: 'Caricamento modelli…', modelCustom: 'Modello personalizzato…', modelListFail: "Impossibile caricare l'elenco dei modelli",
@@ -1455,6 +1628,7 @@
       fetch('/api/provider-config?provider=' + p).then(r => r.json()).then(s => {
         if (p !== currentProvider || !s) return;
         const saved = s.manual || {};
+        void refreshSpeed(true);
         let changed = false;
         for (const f of Object.keys(cfgInputs)) {
           const v = typeof saved[f] === 'string' ? saved[f] : '';
@@ -1542,6 +1716,7 @@
         if (p !== currentProvider) return;
         lastHealth = h;
         healthModel = h.model || '';
+        void refreshSpeed();
         updateModelName(h.model);
         if (!modelPop.classList.contains('hidden')) renderModelPop(modelListCache[p] || null);
         if (h.hasAuth) {
@@ -1995,8 +2170,7 @@
 
     document.getElementById('showSettings').addEventListener('click', (e) => {
       e.stopPropagation();
-      closeEffortPop();
-      document.getElementById('modelPop').classList.add('hidden');
+      closeModelPop();
       const opening = settingsPanel.classList.contains('hidden');
       settingsPanel.classList.toggle('hidden');
       historyPanel.classList.add('hidden');
@@ -2049,8 +2223,8 @@
       document.getElementById('showHistory').title = t('history');
       document.getElementById('showSettings').title = t('settings');
       document.getElementById('modelBtn').title = t('modelTitle');
-      document.getElementById('effortBtn').title = t('effortTitle');
-      document.getElementById('effortPop').setAttribute('aria-label', t('effortTitle'));
+      document.getElementById('effortSlider').title = t('effortTitle');
+      document.getElementById('modelPop').setAttribute('aria-label', t('modelTitle'));
       document.getElementById('attachBtn').title = t('attachTitle');
       document.getElementById('yoloLabel').title = t('yoloTitle');
       document.getElementById('confirmAllow').textContent = t('allow');
@@ -2715,6 +2889,7 @@
     async function pollStatus() {
       const s = await fetch('/api/status').then(r => r.json()).catch(() => null);
       if (!s) return;
+      updateSpeedStatus(s.speed);
       if (s.busy) {
         setThinking(true, s.phase, s.activity, s.progress);
         showConfirm(s.pending || null);
@@ -2770,6 +2945,7 @@
 
     // Pick up a task that is still running from before this window opened.
     fetch('/api/status').then(r => r.json()).then(s => {
+      if (s) updateSpeedStatus(s.speed);
       if (s && s.busy) {
         setBusy(true);
         setThinking(true, s.phase, s.activity);
@@ -2844,9 +3020,8 @@
 
     document.getElementById('showHistory').addEventListener('click', (e) => {
       e.stopPropagation();
-      closeEffortPop();
       settingsPanel.classList.add('hidden');
-      document.getElementById('modelPop').classList.add('hidden');
+      closeModelPop();
       historyPanel.classList.toggle('hidden');
       if (!historyPanel.classList.contains('hidden')) loadSessions();
     });
@@ -2854,9 +3029,110 @@
       if (!historyPanel.contains(e.target)) historyPanel.classList.add('hidden');
       if (!settingsPanel.contains(e.target)) settingsPanel.classList.add('hidden');
       const mp = document.getElementById('modelPop');
-      if (mp && !mp.contains(e.target)) mp.classList.add('hidden');
+      if (mp && !mp.contains(e.target) && !document.getElementById('modelBtn').contains(e.target)) closeModelPop();
     });
 
+    function renderModelSummary() {
+      const effort = selectedEffort ? selectedEffort[0].toUpperCase() + selectedEffort.slice(1) : t('effortAuto');
+      document.getElementById('modelSummaryEffort').textContent = '· ' + effort;
+      document.getElementById('modelSummarySpeed').classList.toggle('hidden', !speedEnabled || !speedConfig?.kind);
+      document.getElementById('speedSettingIcon').classList.toggle('hidden', !speedEnabled || !speedConfig?.kind);
+    }
+
+    // ----- speed control -----
+    const speedBtn = document.getElementById('speedBtn');
+    const speedStatus = document.getElementById('speedStatus');
+    let speedConfig = null;
+    let speedEnabled = false;
+    let speedActual = null;
+    let speedCounts = null;
+    let speedQuery = '';
+    let speedRequest = 0;
+    let speedSaving = false;
+    function renderSpeed() {
+      const available = Boolean(speedConfig?.kind);
+      speedBtn.disabled = !available || speedSaving;
+      speedBtn.setAttribute('aria-pressed', String(speedEnabled && available));
+      const key = ({
+        fast: 'speedFast', standard: 'speedStandard', unknown: 'speedUnknown', routing: 'speedRouting',
+      }[speedActual] || 'speedRequested');
+      // The button always shows the user's choice. Actual processing is a
+      // separate result, so a standard response cannot look like an opt-out.
+      speedBtn.setAttribute('aria-checked', String(speedEnabled && available));
+      renderModelSummary();
+      speedStatus.classList.toggle('hidden', !speedEnabled || !available);
+      const actualKey = speedCounts?.fast > 0 && speedCounts?.standard > 0 ? 'speedMixed' : key;
+      const detail = speedActual ? t('speedActualResult').replace('{state}', t(actualKey)) : '';
+      const counts = speedCounts && speedCounts.fast + speedCounts.standard + speedCounts.unknown > 0
+        ? t('speedRounds').replace('{fast}', speedCounts.fast).replace('{standard}', speedCounts.standard).replace('{unknown}', speedCounts.unknown) : '';
+      speedStatus.textContent = [t('speedEnabled'), detail, counts].filter(Boolean).join(' · ');
+      speedBtn.title = !speedConfig ? t('speedLoading')
+        : !available ? t(speedConfig.reason === 'model' ? 'speedUnavailableModel' : 'speedUnavailableEndpoint')
+        : t(speedConfig.kind === 'router' ? 'speedRouterCost' : 'speedCost') + '\n' +
+          (speedEnabled ? speedStatus.textContent : t('speedOff'));
+      speedBtn.setAttribute('aria-label', speedBtn.title);
+      document.getElementById('speedHint').textContent = !speedConfig?.kind ? speedBtn.title : t(speedConfig.kind === 'router' ? 'speedRouterCost' : 'speedCost');
+    }
+    async function refreshSpeed(force = false) {
+      const query = new URLSearchParams({ provider: currentProvider,
+        baseUrl: cfgInputs.baseUrl.value.trim(), model: currentModelId() }).toString();
+      if (!force && query === speedQuery) { renderSpeed(); return; }
+      speedQuery = query;
+      const request = ++speedRequest;
+      speedConfig = null;
+      speedEnabled = false;
+      renderSpeed();
+      try {
+        const response = await fetch('/api/speed?' + query);
+        if (!response.ok) throw new Error('speed check failed');
+        const data = await response.json();
+        if (request !== speedRequest) return;
+        speedConfig = data;
+        speedEnabled = data.enabled === true && Boolean(data.kind);
+        speedActual = null;
+        speedCounts = null;
+        renderSpeed();
+      } catch {
+        if (request !== speedRequest) return;
+        speedQuery = '';
+        renderSpeed();
+        speedBtn.title = t('speedCheckFail');
+        speedBtn.setAttribute('aria-label', speedBtn.title);
+      }
+    }
+    function updateSpeedStatus(status) {
+      if (!status || !speedConfig || status.scope !== speedConfig.scope) return;
+      speedActual = status.state;
+      speedCounts = status.roundCounts || null;
+      renderSpeed();
+    }
+    speedBtn.addEventListener('click', async () => {
+      if (speedBtn.disabled || !speedConfig?.kind) return;
+      const provider = currentProvider;
+      const request = ++speedRequest;
+      const enabled = !speedEnabled;
+      speedSaving = true;
+      renderSpeed();
+      try {
+        const response = await fetch('/api/provider-config', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ provider, config: { fastMode: enabled } }),
+        });
+        if (!response.ok) throw new Error('speed save failed');
+        if (request === speedRequest && provider === currentProvider) {
+          speedEnabled = enabled;
+          speedActual = null;
+          speedCounts = null;
+        }
+      } catch {
+        addMsg('error', t('speedSaveFail'));
+      } finally {
+        speedSaving = false;
+        renderSpeed();
+      }
+    });
+
+    // ----- effort control -----
     // ----- input-area toolbar: model / effort / attach / YOLO -----
     // Effort levels match each provider's own naming (Claude Code / Codex CLI /
     // Gemini thinking); Custom options are resolved from endpoint and model.
@@ -2865,9 +3141,13 @@
       codex:  ['minimal', 'low', 'medium', 'high', 'xhigh'],
       gemini: ['low', 'medium', 'high', 'max'],
     };
-    const effortBtn = document.getElementById('effortBtn');
+    const effortControl = document.getElementById('effortControl');
+    const effortSlider = document.getElementById('effortSlider');
+    const effortAutoBtn = document.getElementById('effortAutoBtn');
+    const effortTicks = document.getElementById('effortTicks');
+    let activeEffortLevels = [];
+    let defaultEffort = '';
     const effortLabel = document.getElementById('effortLabel');
-    const effortPop = document.getElementById('effortPop');
     let selectedEffort = '';
     function customEffortProfile() {
       const model = cfgInputs.model.value.trim().toLowerCase();
@@ -2913,101 +3193,36 @@
       return `ai.${currentProvider}.effort.${encodeURIComponent(endpoint)}${model}`;
     }
     function renderEfforts() {
+      void refreshSpeed();
       const profile = currentProvider === 'custom' ? customEffortProfile() : null;
-      const levels = profile?.levels ?? EFFORT_LEVELS[currentProvider] ?? [];
-      effortBtn.style.display = levels.length || currentProvider === 'custom' ? '' : 'none';
+      activeEffortLevels = profile?.levels ?? EFFORT_LEVELS[currentProvider] ?? [];
+      defaultEffort = profile?.default ?? '';
+      effortControl.style.display = activeEffortLevels.length ? '' : 'none';
       const saved = localStorage.getItem(effortStorageKey()) || '';
-      const dflt = document.createElement('option');
-      const defaultEffort = profile?.default ?? '';
-      dflt.value = defaultEffort;
-      // Custom profiles without a default send nothing until the user picks a
-      // level, so their first option reads "Auto" rather than "Default".
-      dflt.textContent = currentProvider === 'custom' && !defaultEffort
-        ? 'Auto'
-        : defaultEffort ? `${t('effortDefault')} (${defaultEffort})` : t('effortDefault');
-      const options = [dflt];
-      for (const lv of levels) {
-        if (lv === defaultEffort) continue;
-        const opt = document.createElement('option');
-        opt.value = lv;
-        opt.textContent = lv;
-        options.push(opt);
-      }
-      // Custom preferences are model-scoped; unsupported values use the
-      // detected profile default or the generic Auto option.
-      selectedEffort = levels.includes(saved) ? saved : defaultEffort;
-      const selected = options.find(option => option.value === selectedEffort) || dflt;
-      effortLabel.textContent = selected.textContent;
-      effortPop.innerHTML = '';
-      options.forEach(option => {
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'effort-row';
-        row.setAttribute('role', 'menuitemradio');
-        row.setAttribute('aria-checked', String(option.value === selectedEffort));
-        row.dataset.effort = option.value;
-        const tick = document.createElement('span');
-        tick.className = 'tick';
-        tick.textContent = option.value === selectedEffort ? '✓' : '';
-        const label = document.createElement('span');
-        label.className = 'label';
-        label.textContent = option.textContent;
-        row.append(tick, label);
-        row.addEventListener('click', () => setEffort(option.value));
-        effortPop.appendChild(row);
-      });
-    }
-    renderEfforts();
-    function closeEffortPop() {
-      effortPop.classList.add('hidden');
-      effortBtn.setAttribute('aria-expanded', 'false');
+      selectedEffort = activeEffortLevels.includes(saved) ? saved : defaultEffort;
+      effortLabel.textContent = selectedEffort ? selectedEffort[0].toUpperCase() + selectedEffort.slice(1) : t('effortAuto');
+      effortAutoBtn.setAttribute('aria-pressed', String(selectedEffort === defaultEffort));
+      effortSlider.min = '0';
+      effortSlider.max = String(Math.max(0, activeEffortLevels.length - 1));
+      const selectedIndex = activeEffortLevels.indexOf(selectedEffort);
+      effortSlider.value = String(selectedIndex >= 0 ? selectedIndex : Math.floor((activeEffortLevels.length - 1) / 2));
+      effortSlider.disabled = activeEffortLevels.length < 2;
+      effortSlider.setAttribute('aria-valuetext', effortLabel.textContent);
+      effortTicks.innerHTML = '';
+      activeEffortLevels.forEach(() => effortTicks.appendChild(document.createElement('i')));
+      renderModelSummary();
     }
     function setEffort(value) {
       selectedEffort = value;
       localStorage.setItem(effortStorageKey(), value);
       renderEfforts();
-      closeEffortPop();
-      effortBtn.focus();
     }
-    effortBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      historyPanel.classList.add('hidden');
-      settingsPanel.classList.add('hidden');
-      closeModelPop();
-      if (!effortPop.classList.contains('hidden')) { closeEffortPop(); return; }
-      effortPop.classList.remove('hidden');
-      effortBtn.setAttribute('aria-expanded', 'true');
-      effortPop.querySelector(`[data-effort="${CSS.escape(selectedEffort)}"]`)?.focus();
+    effortSlider.addEventListener('input', () => {
+      const level = activeEffortLevels[Number(effortSlider.value)];
+      if (level !== undefined) setEffort(level);
     });
-    effortPop.addEventListener('click', (e) => e.stopPropagation());
-    document.addEventListener('click', (e) => {
-      if (!effortPop.parentElement.contains(e.target)) closeEffortPop();
-    });
-    effortBtn.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        if (effortPop.classList.contains('hidden')) effortBtn.click();
-        else effortPop.querySelector('.effort-row')?.focus();
-      }
-    });
-    effortPop.addEventListener('keydown', (e) => {
-      const rows = [...effortPop.querySelectorAll('.effort-row')];
-      const index = rows.indexOf(document.activeElement);
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        closeEffortPop();
-        effortBtn.focus();
-      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        const next = (index + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length;
-        rows[next]?.focus();
-      } else if (e.key === 'Home' || e.key === 'End') {
-        e.preventDefault();
-        (e.key === 'Home' ? rows[0] : rows[rows.length - 1])?.focus();
-      } else if (e.key === 'Tab') {
-        closeEffortPop();
-      }
-    });
+    effortAutoBtn.addEventListener('click', () => setEffort(defaultEffort));
+    renderEfforts();
 
     const yoloToggle = document.getElementById('yoloToggle');
     const yoloLabel = document.getElementById('yoloLabel');
@@ -3025,13 +3240,14 @@
     // handler (localStorage + POST /api/provider-config + health re-check).
     const modelBtn = document.getElementById('modelBtn');
     const modelPop = document.getElementById('modelPop');
+    const modelCatalog = document.getElementById('modelCatalog');
     const modelListCache = {};
     let modelQuery = '';
     let modelShowAll = false;
     let modelCatalogRequest = 0;
     let modelPreferenceWrites = Promise.resolve();
 
-    function closeModelPop() { modelPop.classList.add('hidden'); }
+    function closeModelPop() { modelPop.classList.add('hidden'); modelBtn.setAttribute('aria-expanded', 'false'); }
 
     // The row container and tab buttons persist across re-renders, so typing in
     // the search box only rebuilds the list below — the controls (and their
@@ -3040,7 +3256,7 @@
     let modelTabEls = null;
 
     function buildModelControls() {
-      modelPop.innerHTML = '';
+      modelCatalog.innerHTML = '';
       const controls = document.createElement('div');
       controls.className = 'model-controls';
       const search = document.createElement('input');
@@ -3069,7 +3285,7 @@
       });
       controls.append(search, tabs);
       modelRowsEl = document.createElement('div');
-      modelPop.append(controls, modelRowsEl);
+      modelCatalog.append(controls, modelRowsEl);
     }
 
     function saveModelPreference(data, id, favorite) {
@@ -3150,6 +3366,11 @@
         for (const id of shown) {
           const row = document.createElement('div');
           row.className = 'model-row';
+          row.tabIndex = 0;
+          row.setAttribute('data-selected', String(id === cur));
+          row.setAttribute('role', 'button');
+          row.setAttribute('aria-pressed', String(id === cur));
+          row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); } });
           const tick = document.createElement('span');
           tick.className = 'tick';
           tick.textContent = id === cur ? '✓' : '';
@@ -3187,7 +3408,7 @@
               cfgInputs.model.dispatchEvent(new Event('change'));
             }
             void saveModelPreference(data, id);
-            closeModelPop();
+            renderModelRows(modelListCache[provider] || data);
           });
           list.appendChild(row);
         }
@@ -3215,11 +3436,11 @@
 
     modelBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      closeEffortPop();
       historyPanel.classList.add('hidden');
       settingsPanel.classList.add('hidden');
       if (!modelPop.classList.contains('hidden')) { closeModelPop(); return; }
       modelPop.classList.remove('hidden');
+      modelBtn.setAttribute('aria-expanded', 'true');
       modelQuery = '';
       modelShowAll = false;
       modelRowsEl = null; // Fresh controls on every open (provider/query may differ).
@@ -3249,9 +3470,19 @@
       });
     });
 
+    modelPop.addEventListener('click', (e) => e.stopPropagation());
+    modelBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (modelPop.classList.contains('hidden')) modelBtn.click();
+        modelPop.querySelector('.model-search')?.focus();
+      }
+    });
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
+      const wasOpen = !modelPop.classList.contains('hidden');
       closeModelPop();
+      if (wasOpen) modelBtn.focus();
       settingsPanel.classList.add('hidden');
       historyPanel.classList.add('hidden');
     });
@@ -3397,6 +3628,9 @@
         ? text + attachments.map(a => `\n[${attIcon(a)} ${a.name}]`).join('')
         : text);
 
+      speedActual = speedEnabled ? 'requested' : null;
+      speedCounts = null;
+      renderSpeed();
       setBusy(true);
       try {
         const res = await fetch('/api/chat', {
@@ -3410,6 +3644,7 @@
             baseUrl: cfgInputs.baseUrl.value || undefined,
             model: cfgInputs.model.value || undefined,
             effort: selectedEffort || undefined,
+            fastMode: speedEnabled && Boolean(speedConfig?.kind) && !speedBtn.disabled,
             yolo: yoloToggle.checked,
             attachments: attachments.length ? attachments : undefined,
             audio: (() => {
