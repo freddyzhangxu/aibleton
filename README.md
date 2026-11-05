@@ -151,6 +151,14 @@ The comparison measures source files before warping, gain, and effects. It does 
 
 Customize AIbleton with local production Skills. Browse the [starter Skills](skills/) and see the [user guide](USER_GUIDE.md) for installation instructions.
 
+### Max for Live (Experimental)
+
+- Read and adjust parameters exposed by loaded devices
+- Create or edit supported Max for Live device files, with static structural checks
+- Experiment with editing a loaded device through a Max bridge
+
+File editing is limited to simple AMXD containers and top-level objects. The bridge has not been validated end to end in a real Live/Max environment; test changes in Live or Max and work on a copy. See the [Max for Live guide](docs/max-for-live.md) for setup and limitations.
+
 ### Ableton Move
 
 For setup, routing, pairing, and troubleshooting, see the [Ableton Move guide](docs/ableton-move.md).

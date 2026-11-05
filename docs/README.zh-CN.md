@@ -151,6 +151,14 @@ AIbleton 可以利用音频分析形成迭代式音乐制作闭环：
 
 浏览仓库中的 [Skills 入门模板](../skills/)，并参阅[用户指南](USER_GUIDE_CN.md)了解安装方法。
 
+### Max for Live（实验性）
+
+- 读取和调整已加载设备暴露的参数
+- 新建或编辑支持的 Max for Live 设备文件，并进行静态结构检查
+- 通过 Max 桥接尝试实时编辑已加载的设备
+
+文件编辑目前仅支持简单 AMXD 容器及顶层对象。桥接功能尚未经过真实 Live/Max 环境的端到端验证；请使用设备副本，并在 Live 或 Max 中测试修改。设置方法和限制详见 [Max for Live 指南](max-for-live.zh-CN.md)。
+
 ### Ableton Move
 
 有关设置、路由、配对和故障排查，请参阅 [Ableton Move 操作手册](ableton-move.zh-CN.md)。
