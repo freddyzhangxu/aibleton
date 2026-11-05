@@ -4,6 +4,14 @@ import test from "node:test";
 import { instrumentPromptFor } from "./instruments.js";
 import { selectWorkflowRules } from "./workflows.js";
 
+test("Max for Live requests retain the device creation workflow when intent selection narrows the prompt", () => {
+  for (const request of ['用max for live做一个失真效果器', '制作一个 Max for Live 失真', 'build an M4L distortion']) {
+    const { prompt } = selectWorkflowRules(request);
+    assert.match(prompt, /inspect_max_template/, request);
+    assert.match(prompt, /Omit paths unless the user specifies them/, request);
+  }
+});
+
 const analysisRequests = [
   ["en", "Analyze the bass and mix."],
   ["zh", "分析低频和混音"],

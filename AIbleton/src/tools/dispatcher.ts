@@ -1,4 +1,6 @@
 import * as path from "node:path";
+import { maxDeviceFileTool } from "./max-device-files.js";
+import { prepareBridge, sendBridgeCommand } from "./max-bridge.js";
 import {
   AudioTrack,
   Device,
@@ -323,6 +325,27 @@ export async function runTool(
   }
 
   switch (name) {
+    case "prepare_max_bridge":
+      return prepareBridge();
+    case "inspect_max_bridge":
+      return sendBridgeCommand(String(input.directory ?? ""), { op: "inspect" });
+    case "edit_max_bridge": {
+      if (!input.command || typeof input.command !== "object" || Array.isArray(input.command)) throw new Error("command is required");
+      const command = input.command as Record<string, unknown>;
+      if (!["add", "remove", "connect", "disconnect", "move"].includes(String(command.op))) throw new Error("Unsupported bridge operation");
+      return sendBridgeCommand(String(input.directory ?? ""), command);
+    }
+    case "create_max_device":
+    case "inspect_max_template":
+    case "inspect_max_device_file":
+    case "validate_max_device_file":
+    case "edit_max_device_file": {
+      try { return await maxDeviceFileTool(name, input); }
+      catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw actionableError(toolState.activeLanguage === 'zh' ? `Max 设备操作失败：\`${detail}\`` : `Max device operation failed: ${detail}`);
+      }
+    }
     case "get_song_overview": {
       return {
         tempo: song.tempo,
