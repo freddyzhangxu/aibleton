@@ -151,7 +151,7 @@ The comparison measures source files before warping, gain, and effects. It does 
 
 Customize AIbleton with local production Skills. Browse the [starter Skills](skills/) and see the [user guide](USER_GUIDE.md) for installation instructions.
 
-### Max for Live (Experimental)
+### Max for Live
 
 - Read and adjust parameters exposed by loaded devices
 - Create or edit supported Max for Live device files, with static structural checks
