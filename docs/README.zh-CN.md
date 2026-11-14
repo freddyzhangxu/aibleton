@@ -274,7 +274,16 @@ npm install
 npm start
 ```
 
-开发和 SDK 配置请参阅项目相关文档。
+先打开目标版本的 Live 并启用扩展开发者模式。`npm start` 会在 macOS 和 Windows 上检测当前运行的 Live，并优先使用它的 Extension Host，无需在 `.env` 中反复切换版本。也可以明确要求使用某一版：
+
+```bash
+npm run start:12
+npm run start:13
+```
+
+开发时一次运行一个 Live 和一个开发进程。Live 12 和 13 共用开发连接通道，`--live` 只选择宿主程序，无法把两个同时运行的 Live 分开连接。切换时先 Ctrl+C 停止开发进程，关闭旧版 Live、打开另一版，再运行 `npm start`。
+
+自定义安装路径可使用 `npm start -- --live "/path/to/Live.app"`（Windows 传入 Live 可执行文件路径）。未检测到运行中的 Live 时，才使用 `.env` 中的 `EXTENSION_HOST_PATH`。这些开发配置不会打入 `.ablx` 安装包。
 
 ## Roadmap
 

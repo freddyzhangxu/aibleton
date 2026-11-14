@@ -262,7 +262,16 @@ npm install
 npm start
 ```
 
-See the repository documentation for development and SDK setup.
+`npm start` detects the running Live app on macOS and Windows and uses its Extension Host, taking precedence over a saved `EXTENSION_HOST_PATH`. Open the target Live version and enable Extensions Developer Mode first. You can also require a specific version:
+
+```bash
+npm run start:12
+npm run start:13
+```
+
+Run one Live app and one developer session at a time. Live 12 and 13 share the developer IPC channel; `--live` selects the host binary but cannot route concurrent Live instances. To switch, stop the session with Ctrl+C, close the old Live version, open the other version, and run `npm start` again.
+
+For a custom installation, use `npm start -- --live "/path/to/Live.app"` (or the Live executable on Windows). `EXTENSION_HOST_PATH` in `.env` remains a fallback when no running Live app is detected. These development settings are not included in the `.ablx` package.
 
 ## Roadmap
 
