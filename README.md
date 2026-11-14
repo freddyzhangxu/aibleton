@@ -243,7 +243,8 @@ The goal is not simply to generate a response, but to **complete a music-product
 
 ### Requirements
 
-- Ableton Live 12.4.5+
+- Ableton Live 12.4.15b1+
+- Ableton Live 13.0b25+
 - Ableton Extensions SDK support
 - An AI provider
 

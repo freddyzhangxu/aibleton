@@ -253,7 +253,8 @@ AIbleton 使用 Agent Runtime 协调：
 
 ### 系统要求
 
-- Ableton Live 12.4.5+
+- Ableton Live 12.4.15b1+
+- Ableton Live 13.0b25+
 - 支持 Ableton Extensions SDK
 - 一个 AI Provider
 
