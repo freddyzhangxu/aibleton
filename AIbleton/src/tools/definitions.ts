@@ -326,7 +326,7 @@ export const TOOLS = [
       properties: {
         placements: {
           type: "array",
-          description: "What to place where (max 128). Pass [] with clear_range_bars to only clear.",
+          description: "What to place where (max 128). Each placement must specify exactly one of clip_index or scene_index. Pass [] with clear_range_bars to only clear.",
           items: {
             type: "object",
             properties: {
@@ -345,10 +345,6 @@ export const TOOLS = [
               name: { type: "string", description: "New clip name (default: source clip's name)" },
             },
             required: ["start_bar", "length_bars"],
-            oneOf: [
-              { required: ["clip_index"], not: { required: ["scene_index"] } },
-              { required: ["scene_index"], not: { required: ["clip_index"] } },
-            ],
           },
         },
         clear_range_bars: {

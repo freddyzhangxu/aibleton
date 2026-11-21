@@ -107,3 +107,10 @@ test("explicit audio generation authorization opens only this turn's tool", () =
   }
   assert.ok(!activeTools().some((tool) => tool.name === "generate_audio"));
 });
+
+test("arrangement tool schema avoids unsupported composition keywords", () => {
+  const tool = TOOLS.find((item) => item.name === "arrange_song");
+  assert.ok(tool);
+  const schema = JSON.stringify(tool.input_schema);
+  assert.doesNotMatch(schema, /"(?:not|oneOf)":/);
+});
